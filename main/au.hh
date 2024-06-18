@@ -24,7 +24,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 492e5bd
+// Version identifier: 221d8f4
 // <iostream> support: INCLUDED
 // List of included units:
 //   amperes
@@ -649,6 +649,136 @@ struct identity {
 };
 
 }  // namespace stdx
+}  // namespace au
+
+
+
+namespace au {
+
+//
+// A type trait that determines if a type is a valid representation type for `Quantity` or
+// `QuantityPoint`.
+//
+template <typename T>
+struct IsValidRep;
+
+//
+// A type trait to indicate whether the product of two types is a valid rep.
+//
+// Will validly return `false` if the product does not exist.
+//
+template <typename T, typename U>
+struct IsProductValidRep;
+
+//
+// A type trait to indicate whether the quotient of two types is a valid rep.
+//
+// Will validly return `false` if the quotient does not exist.
+//
+template <typename T, typename U>
+struct IsQuotientValidRep;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details below.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Forward declarations for main Au container types.
+template <typename U, typename R>
+class Quantity;
+template <typename U, typename R>
+class QuantityPoint;
+template <typename T>
+struct CorrespondingQuantity;
+
+namespace detail {
+template <typename T>
+struct IsAuType : std::false_type {};
+
+template <typename U, typename R>
+struct IsAuType<::au::Quantity<U, R>> : std::true_type {};
+
+template <typename U, typename R>
+struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
+
+template <typename T>
+using CorrespondingUnit = typename CorrespondingQuantity<T>::Unit;
+
+template <typename T>
+using CorrespondingRep = typename CorrespondingQuantity<T>::Rep;
+
+template <typename T>
+struct HasCorrespondingQuantity
+    : stdx::conjunction<stdx::experimental::is_detected<CorrespondingUnit, T>,
+                        stdx::experimental::is_detected<CorrespondingRep, T>> {};
+
+template <typename T>
+using LooksLikeAuOrOtherQuantity = stdx::disjunction<IsAuType<T>, HasCorrespondingQuantity<T>>;
+
+// We need a way to form an "operation on non-quantity types only".  That is: it's some operation,
+// but _if either input is a quantity_, then we _don't even form the type_.
+//
+// The reason this very specific machinery lives in `rep.hh` is because when we're dealing with
+// operations on "types that might be a rep", we know we can exclude quantity types right away.
+// (Note that we're using the term "quantity" in an expansive sense, which includes not just
+// `au::Quantity`, but also `au::QuantityPoint`, and "quantity-like" types from other libraries
+// (which we consider as "anything that has a `CorrespondingQuantity`".
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantity;
+template <template <class...> class Op, typename... Ts>
+using ResultIfNoneAreQuantityT = typename ResultIfNoneAreQuantity<Op, Ts...>::type;
+
+// Default implementation where we know that none are quantities.
+template <bool AreAnyQuantity, template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityImpl : stdx::type_identity<Op<Ts...>> {};
+
+// Implementation if any of the types are quantities.
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityImpl<true, Op, Ts...> : stdx::type_identity<void> {};
+
+// The main implementation.
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantity
+    : ResultIfNoneAreQuantityImpl<stdx::disjunction<LooksLikeAuOrOtherQuantity<Ts>...>::value,
+                                  Op,
+                                  Ts...> {};
+
+// The `std::is_empty` is a good way to catch all of the various unit and other monovalue types in
+// our library, which have little else in common.  It's also just intrinsically true that it
+// wouldn't make much sense to use an empty type as a rep.
+template <typename T>
+struct IsKnownInvalidRep
+    : stdx::disjunction<std::is_empty<T>, LooksLikeAuOrOtherQuantity<T>, std::is_same<void, T>> {};
+
+// The type of the product of two types.
+template <typename T, typename U>
+using ProductType = decltype(std::declval<T>() * std::declval<U>());
+
+template <typename T, typename U>
+using ProductTypeOrVoid = stdx::experimental::detected_or_t<void, ProductType, T, U>;
+
+// The type of the quotient of two types.
+template <typename T, typename U>
+using QuotientType = decltype(std::declval<T>() / std::declval<U>());
+
+template <typename T, typename U>
+using QuotientTypeOrVoid = stdx::experimental::detected_or_t<void, QuotientType, T, U>;
+}  // namespace detail
+
+// Implementation for `IsValidRep`.
+//
+// For now, we'll accept anything that isn't explicitly known to be invalid.  We may tighten this up
+// later, but this seems like a reasonable starting point.
+template <typename T>
+struct IsValidRep : stdx::negation<detail::IsKnownInvalidRep<T>> {};
+
+template <typename T, typename U>
+struct IsProductValidRep
+    : IsValidRep<detail::ResultIfNoneAreQuantityT<detail::ProductTypeOrVoid, T, U>> {};
+
+template <typename T, typename U>
+struct IsQuotientValidRep
+    : IsValidRep<detail::ResultIfNoneAreQuantityT<detail::QuotientTypeOrVoid, T, U>> {};
+
 }  // namespace au
 
 // This file provides drop-in replacements for certain standard library function objects for
@@ -2406,6 +2536,11 @@ struct AssociatedUnit : stdx::type_identity<U> {};
 template <typename U>
 using AssociatedUnitT = typename AssociatedUnit<U>::type;
 
+template <typename U>
+struct AssociatedUnitForPoints : stdx::type_identity<U> {};
+template <typename U>
+using AssociatedUnitForPointsT = typename AssociatedUnitForPoints<U>::type;
+
 // `CommonUnitT`: the largest unit that evenly divides all input units.
 //
 // A specialization will only exist if all input types are units.
@@ -2508,6 +2643,11 @@ constexpr auto origin_displacement(U1, U2) {
 template <typename U>
 constexpr auto associated_unit(U) {
     return AssociatedUnitT<U>{};
+}
+
+template <typename U>
+constexpr auto associated_unit_for_points(U) {
+    return AssociatedUnitForPointsT<U>{};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3711,21 +3851,21 @@ class Quantity {
     }
 
     // Scalar multiplication.
-    template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+    template <typename T, typename = std::enable_if_t<IsProductValidRep<RepT, T>::value>>
     friend constexpr auto operator*(Quantity a, T s) {
         return make_quantity<UnitT>(a.value_ * s);
     }
-    template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+    template <typename T, typename = std::enable_if_t<IsProductValidRep<T, RepT>::value>>
     friend constexpr auto operator*(T s, Quantity a) {
         return make_quantity<UnitT>(s * a.value_);
     }
 
     // Scalar division.
-    template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+    template <typename T, typename = std::enable_if_t<IsQuotientValidRep<RepT, T>::value>>
     friend constexpr auto operator/(Quantity a, T s) {
         return make_quantity<UnitT>(a.value_ / s);
     }
-    template <typename T, typename = std::enable_if_t<std::is_arithmetic<T>::value>>
+    template <typename T, typename = std::enable_if_t<IsQuotientValidRep<T, RepT>::value>>
     friend constexpr auto operator/(T s, Quantity a) {
         warn_if_integer_division<T>();
         return make_quantity<decltype(pow<-1>(unit))>(s / a.value_);
@@ -4357,31 +4497,6 @@ struct CanScaleByMagnitude {
     }
 };
 
-//
-// A mixin to explicitly delete operations that we want to forbid.
-//
-template <template <typename U> class UnitWrapper,
-          typename Unit,
-          template <typename... Us>
-          class OtherWrapper>
-struct ForbidsComposingWith {
-    // (W * O), for wrapper W and wrapper O.
-    template <typename... Us>
-    friend constexpr void operator*(UnitWrapper<Unit>, OtherWrapper<Us...>) = delete;
-
-    // (W / O), for wrapper W and wrapper O.
-    template <typename... Us>
-    friend constexpr void operator/(UnitWrapper<Unit>, OtherWrapper<Us...>) = delete;
-
-    // (O * W), for wrapper W and wrapper O.
-    template <typename... Us>
-    friend constexpr void operator*(OtherWrapper<Us...>, UnitWrapper<Unit>) = delete;
-
-    // (O / W), for wrapper W and wrapper O.
-    template <typename... Us>
-    friend constexpr void operator/(OtherWrapper<Us...>, UnitWrapper<Unit>) = delete;
-};
-
 }  // namespace detail
 }  // namespace au
 
@@ -4420,6 +4535,9 @@ struct AreQuantityPointTypesEquivalent;
 namespace detail {
 template <typename TargetRep, typename U1, typename U2>
 struct OriginDisplacementFitsIn;
+
+template <typename FromRep, typename ToRep>
+struct IntermediateRep;
 }  // namespace detail
 
 // QuantityPoint implementation and API elaboration.
@@ -4486,53 +4604,41 @@ class QuantityPoint {
 
     template <typename NewRep,
               typename NewUnit,
-              typename = std::enable_if_t<IsUnit<NewUnit>::value>>
+              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
     constexpr auto as(NewUnit u) const {
-        return make_quantity_point<NewUnit>(this->template in<NewRep>(u));
+        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(this->template in<NewRep>(u));
     }
 
-    template <typename NewUnit, typename = std::enable_if_t<IsUnit<NewUnit>::value>>
+    template <typename NewUnit,
+              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
     constexpr auto as(NewUnit u) const {
-        return make_quantity_point<NewUnit>(in(u));
+        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(in(u));
     }
 
     template <typename NewRep,
               typename NewUnit,
-              typename = std::enable_if_t<IsUnit<NewUnit>::value>>
+              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
     constexpr NewRep in(NewUnit u) const {
-        return (rep_cast<NewRep>(x_) - rep_cast<NewRep>(OriginDisplacement<Unit, NewUnit>::value()))
-            .template in<NewRep>(u);
+        using CalcRep = typename detail::IntermediateRep<Rep, NewRep>::type;
+        return (rep_cast<CalcRep>(x_) -
+                rep_cast<CalcRep>(
+                    OriginDisplacement<Unit, AssociatedUnitForPointsT<NewUnit>>::value()))
+            .template in<NewRep>(associated_unit_for_points(u));
     }
 
-    template <typename NewUnit, typename = std::enable_if_t<IsUnit<NewUnit>::value>>
+    template <typename NewUnit,
+              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
     constexpr Rep in(NewUnit u) const {
-        static_assert(detail::OriginDisplacementFitsIn<Rep, NewUnit, Unit>::value,
-                      "Cannot represent origin displacement in desired Rep");
+        static_assert(
+            detail::OriginDisplacementFitsIn<Rep, AssociatedUnitForPointsT<NewUnit>, Unit>::value,
+            "Cannot represent origin displacement in desired Rep");
 
         // `rep_cast` is needed because if these are integral types, their difference might become a
         // different type due to integer promotion.
-        return rep_cast<Rep>(x_ + rep_cast<Rep>(OriginDisplacement<NewUnit, Unit>::value())).in(u);
-    }
-
-    // Overloads for passing a QuantityPointMaker.
-    //
-    // This is the "magic" that lets us write things like `position.in(meters_pt)`, instead of just
-    // `position.in(Meters{})`.
-    template <typename NewRep, typename NewUnit>
-    constexpr auto as(QuantityPointMaker<NewUnit>) const {
-        return as<NewRep>(NewUnit{});
-    }
-    template <typename NewUnit>
-    constexpr auto as(QuantityPointMaker<NewUnit>) const {
-        return as(NewUnit{});
-    }
-    template <typename NewRep, typename NewUnit>
-    constexpr NewRep in(QuantityPointMaker<NewUnit>) const {
-        return in<NewRep>(NewUnit{});
-    }
-    template <typename NewUnit>
-    constexpr Rep in(QuantityPointMaker<NewUnit>) const {
-        return in(NewUnit{});
+        return rep_cast<Rep>(
+                   x_ + rep_cast<Rep>(
+                            OriginDisplacement<AssociatedUnitForPointsT<NewUnit>, Unit>::value()))
+            .in(associated_unit_for_points(u));
     }
 
     // "Old-style" overloads with <U, R> template parameters, and no function parameters.
@@ -4675,6 +4781,9 @@ struct QuantityPointMaker {
     }
 };
 
+template <typename U>
+struct AssociatedUnitForPoints<QuantityPointMaker<U>> : stdx::type_identity<U> {};
+
 // Type trait to detect whether two QuantityPoint types are equivalent.
 //
 // In this library, QuantityPoint types are "equivalent" exactly when they use the same Rep, and are
@@ -4803,6 +4912,29 @@ struct OriginDisplacementFitsIn
                          stdx::bool_constant<underlying_value_in_range<TargetRep>(
                              OriginDisplacement<U1, U2>::value())>,
                          std::true_type> {};
+
+// We simply want a version of `std::make_signed_t` that won't choke on non-integral types.
+template <typename T, bool IsInt = std::is_integral<T>::value>
+struct MakeSigned;
+template <typename T>
+struct MakeSigned<T, false> : stdx::type_identity<T> {};
+template <typename T>
+struct MakeSigned<T, true> : stdx::type_identity<std::make_signed_t<T>> {};
+
+// If the destination is a signed integer, we want to ensure we do our
+// computations in a signed type.  Otherwise, just use the common type for our
+// intermediate computations.
+template <typename CommonT, bool IsDestinationSigned>
+struct IntermediateRepImpl
+    : std::conditional_t<stdx::conjunction<std::is_integral<CommonT>,
+                                           stdx::bool_constant<IsDestinationSigned>>::value,
+                         MakeSigned<CommonT>,
+                         stdx::type_identity<CommonT>> {};
+
+template <typename FromRep, typename ToRep>
+struct IntermediateRep
+    : IntermediateRepImpl<std::common_type_t<FromRep, ToRep>, std::is_signed<ToRep>::value> {};
+
 }  // namespace detail
 }  // namespace au
 
@@ -5343,8 +5475,6 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
                   detail::ComposesWith<Constant, Unit, Constant, Constant>,
                   detail::ComposesWith<Constant, Unit, QuantityMaker, QuantityMaker>,
                   detail::ComposesWith<Constant, Unit, SingularNameFor, SingularNameFor>,
-                  detail::ForbidsComposingWith<Constant, Unit, QuantityPointMaker>,
-                  detail::ForbidsComposingWith<Constant, Unit, QuantityPoint>,
                   detail::CanScaleByMagnitude<Constant, Unit> {
     // Convert this constant to a Quantity of the given rep.
     template <typename T>
@@ -5586,6 +5716,9 @@ struct RoundingRep<Quantity<U, R>, RoundingUnits> {
     static_assert(std::is_same<decltype(std::floor(type{})), decltype(std::floor(R{}))>::value, "");
     static_assert(std::is_same<decltype(std::ceil(type{})), decltype(std::ceil(R{}))>::value, "");
 };
+template <typename U, typename R, typename RoundingUnits>
+struct RoundingRep<QuantityPoint<U, R>, RoundingUnits>
+    : RoundingRep<Quantity<U, R>, RoundingUnits> {};
 }  // namespace detail
 
 // The absolute value of a Quantity.
@@ -5785,6 +5918,12 @@ constexpr bool isnan(Quantity<U, R> q) {
     return std::isnan(q.in(U{}));
 }
 
+// Overload of `isnan` for `QuantityPoint`.
+template <typename U, typename R>
+constexpr bool isnan(QuantityPoint<U, R> p) {
+    return std::isnan(p.in(U{}));
+}
+
 // The maximum of two values of the same dimension.
 //
 // Unlike std::max, returns by value rather than by reference, because the types might differ.
@@ -5884,44 +6023,73 @@ auto remainder(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
 }
 
 //
-// Round the value of this Quantity to the nearest integer in the given units.
+// Round the value of this Quantity or QuantityPoint to the nearest integer in the given units.
 //
 // This is the "Unit-only" format (i.e., `round_in(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRepT<Quantity<U, R>, RoundingUnits>;
     return std::round(q.template in<OurRoundingRep>(rounding_units));
 }
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    using OurRoundingRep = detail::RoundingRepT<QuantityPoint<U, R>, RoundingUnits>;
+    return std::round(p.template in<OurRoundingRep>(rounding_units));
+}
 
 //
-// Round the value of this Quantity to the nearest integer in the given units, returning OutputRep.
+// Round the value of this Quantity or QuantityPoint to the nearest integer in the given units,
+// returning OutputRep.
 //
 // This is the "Explicit-Rep" format (e.g., `round_in<int>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(round_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return static_cast<OutputRep>(round_in(rounding_units, p));
+}
 
 //
-// The integral-valued Quantity, in this unit, nearest to the input.
+// The integral-valued Quantity or QuantityPoint, in this unit, nearest to the input.
 //
 // This is the "Unit-only" format (i.e., `round_as(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(round_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(
+        round_in(rounding_units, p));
+}
 
 //
-// The integral-valued Quantity, in this unit, nearest to the input, using the specified OutputRep.
+// The integral-valued Quantity or QuantityPoint, in this unit, nearest to the input, using the
+// specified OutputRep.
 //
 // This is the "Explicit-Rep" format (e.g., `round_as<float>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(round_in<OutputRep>(rounding_units, q));
+}
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(
+        round_in<OutputRep>(rounding_units, p));
 }
 
 //
@@ -5929,10 +6097,17 @@ auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 //
 // This is the "Unit-only" format (i.e., `floor_in(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRepT<Quantity<U, R>, RoundingUnits>;
     return std::floor(q.template in<OurRoundingRep>(rounding_units));
+}
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    using OurRoundingRep = detail::RoundingRepT<QuantityPoint<U, R>, RoundingUnits>;
+    return std::floor(p.template in<OurRoundingRep>(rounding_units));
 }
 
 //
@@ -5940,30 +6115,50 @@ auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
 //
 // This is the "Explicit-Rep" format (e.g., `floor_in<int>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(floor_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return static_cast<OutputRep>(floor_in(rounding_units, p));
+}
 
 //
-// The largest integral-valued Quantity, in this unit, not greater than the input.
+// The largest integral-valued Quantity or QuantityPoint, in this unit, not greater than the input.
 //
 // This is the "Unit-only" format (i.e., `floor_as(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(floor_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(
+        floor_in(rounding_units, p));
+}
 
 //
-// The largest integral-valued Quantity, in this unit, not greater than the input, using the
-// specified `OutputRep`.
+// The largest integral-valued Quantity or QuantityPoint, in this unit, not greater than the input,
+// using the specified `OutputRep`.
 //
 // This is the "Explicit-Rep" format (e.g., `floor_as<float>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(floor_in<OutputRep>(rounding_units, q));
+}
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(
+        floor_in<OutputRep>(rounding_units, p));
 }
 
 //
@@ -5971,10 +6166,17 @@ auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 //
 // This is the "Unit-only" format (i.e., `ceil_in(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRepT<Quantity<U, R>, RoundingUnits>;
     return std::ceil(q.template in<OurRoundingRep>(rounding_units));
+}
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    using OurRoundingRep = detail::RoundingRepT<QuantityPoint<U, R>, RoundingUnits>;
+    return std::ceil(p.template in<OurRoundingRep>(rounding_units));
 }
 
 //
@@ -5982,30 +6184,49 @@ auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
 //
 // This is the "Explicit-Rep" format (e.g., `ceil_in<int>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(ceil_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return static_cast<OutputRep>(ceil_in(rounding_units, p));
+}
 
 //
-// The smallest integral-valued Quantity, in this unit, not less than the input.
+// The smallest integral-valued Quantity or QuantityPoint, in this unit, not less than the input.
 //
 // This is the "Unit-only" format (i.e., `ceil_as(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
 auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(ceil_in(rounding_units, q));
 }
+// b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(ceil_in(rounding_units, p));
+}
 
 //
-// The smallest integral-valued Quantity, in this unit, not less than the input, using the specified
-// `OutputRep`.
+// The smallest integral-valued Quantity or QuantityPoint, in this unit, not less than the input,
+// using the specified `OutputRep`.
 //
 // This is the "Explicit-Rep" format (e.g., `ceil_as<float>(rounding_units, q)`).
 //
+// a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnitT<RoundingUnits>>(ceil_in<OutputRep>(rounding_units, q));
+}
+// b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return make_quantity_point<AssociatedUnitForPointsT<RoundingUnits>>(
+        ceil_in<OutputRep>(rounding_units, p));
 }
 
 // Wrapper for std::sin() which accepts a strongly typed angle quantity.
