@@ -23,61 +23,137 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 221d8f4
+// Version identifier: 122af52
 // <iostream> support: EXCLUDED
 // List of included units:
 //   amperes
+//   amperes_fwd
 //   bars
+//   bars_fwd
 //   becquerel
+//   becquerel_fwd
 //   bits
+//   bits_fwd
 //   bytes
+//   bytes_fwd
 //   candelas
+//   candelas_fwd
 //   celsius
+//   celsius_fwd
 //   coulombs
+//   coulombs_fwd
 //   days
+//   days_fwd
 //   degrees
+//   degrees_fwd
 //   fahrenheit
+//   fahrenheit_fwd
 //   farads
+//   farads_fwd
 //   fathoms
+//   fathoms_fwd
 //   feet
+//   feet_fwd
 //   furlongs
+//   furlongs_fwd
 //   grams
+//   grams_fwd
 //   grays
+//   grays_fwd
 //   henries
+//   henries_fwd
 //   hertz
+//   hertz_fwd
 //   hours
+//   hours_fwd
 //   inches
+//   inches_fwd
 //   joules
+//   joules_fwd
 //   katals
+//   katals_fwd
 //   kelvins
+//   kelvins_fwd
 //   knots
+//   knots_fwd
 //   liters
+//   liters_fwd
 //   lumens
+//   lumens_fwd
 //   lux
+//   lux_fwd
 //   meters
+//   meters_fwd
 //   miles
+//   miles_fwd
 //   minutes
+//   minutes_fwd
 //   moles
+//   moles_fwd
 //   nautical_miles
+//   nautical_miles_fwd
 //   newtons
+//   newtons_fwd
 //   ohms
+//   ohms_fwd
 //   pascals
+//   pascals_fwd
 //   percent
+//   percent_fwd
 //   pounds_force
+//   pounds_force_fwd
 //   pounds_mass
+//   pounds_mass_fwd
 //   radians
+//   radians_fwd
 //   revolutions
+//   revolutions_fwd
 //   seconds
+//   seconds_fwd
 //   siemens
+//   siemens_fwd
 //   slugs
+//   slugs_fwd
 //   standard_gravity
+//   standard_gravity_fwd
 //   steradians
+//   steradians_fwd
 //   tesla
+//   tesla_fwd
 //   unos
+//   unos_fwd
+//   us_gallons
+//   us_gallons_fwd
+//   us_pints
+//   us_pints_fwd
+//   us_quarts
+//   us_quarts_fwd
 //   volts
+//   volts_fwd
 //   watts
+//   watts_fwd
 //   webers
+//   webers_fwd
 //   yards
+//   yards_fwd
+
+namespace au {
+
+struct PoundsForce;
+
+}  // namespace au
+
+namespace au {
+
+struct Unos;
+
+}  // namespace au
+
+namespace au {
+
+struct Candelas;
+
+}  // namespace au
 
 
 namespace au {
@@ -96,18 +172,18 @@ using bool_constant = std::integral_constant<bool, B>;
 // Source: adapted from (https://en.cppreference.com/w/cpp/types/conjunction).
 template <class...>
 struct conjunction : std::true_type {};
-template <class B1>
-struct conjunction<B1> : B1 {};
-template <class B1, class... Bn>
-struct conjunction<B1, Bn...> : std::conditional_t<bool(B1::value), conjunction<Bn...>, B1> {};
+template <class B>
+struct conjunction<B> : B {};
+template <class B, class... Bn>
+struct conjunction<B, Bn...> : std::conditional_t<bool(B::value), conjunction<Bn...>, B> {};
 
 // Source: adapted from (https://en.cppreference.com/w/cpp/types/disjunction).
 template <class...>
 struct disjunction : std::false_type {};
-template <class B1>
-struct disjunction<B1> : B1 {};
-template <class B1, class... Bn>
-struct disjunction<B1, Bn...> : std::conditional_t<bool(B1::value), B1, disjunction<Bn...>> {};
+template <class B>
+struct disjunction<B> : B {};
+template <class B, class... Bn>
+struct disjunction<B, Bn...> : std::conditional_t<bool(B::value), B, disjunction<Bn...>> {};
 
 // Source: adapted from (https://en.cppreference.com/w/cpp/types/negation).
 template <class B>
@@ -131,48 +207,208 @@ using void_t = void;
 
 namespace au {
 
-// A type representing a quantity of "zero" in any units.
-//
-// Zero is special: it's the only number that we can meaningfully compare or assign to a Quantity of
-// _any_ dimension.  Giving it a special type (and a predefined constant of that type, `ZERO`,
-// defined below) lets our code be both concise and readable.
-//
-// For example, we can zero-initialize any arbitrary Quantity, even if it doesn't have a
-// user-defined literal, and even if it's in a header file so we couldn't use the literals anyway:
-//
-//   struct PathPoint {
-//       QuantityD<RadiansPerMeter> curvature = ZERO;
-//   };
-struct Zero {
-    // Implicit conversion to arithmetic types.
-    template <typename T, typename Enable = std::enable_if_t<std::is_arithmetic<T>::value>>
-    constexpr operator T() const {
-        return 0;
-    }
+struct Zero;
 
-    // Implicit conversion to chrono durations.
-    template <typename Rep, typename Period>
-    constexpr operator std::chrono::duration<Rep, Period>() const {
-        return std::chrono::duration<Rep, Period>{0};
-    }
+template <typename... BPs>
+struct Dimension;
+
+template <typename... BPs>
+struct Magnitude;
+
+template <typename UnitT>
+struct QuantityMaker;
+
+template <typename Unit>
+struct SingularNameFor;
+
+template <typename UnitT>
+struct QuantityPointMaker;
+
+template <typename UnitT, typename RepT>
+class Quantity;
+
+//
+// Quantity aliases to set a particular Rep.
+//
+// This presents a less cumbersome interface for end users.
+//
+template <typename UnitT>
+using QuantityD = Quantity<UnitT, double>;
+template <typename UnitT>
+using QuantityF = Quantity<UnitT, float>;
+template <typename UnitT>
+using QuantityI = Quantity<UnitT, int>;
+template <typename UnitT>
+using QuantityU = Quantity<UnitT, unsigned int>;
+template <typename UnitT>
+using QuantityI32 = Quantity<UnitT, int32_t>;
+template <typename UnitT>
+using QuantityU32 = Quantity<UnitT, uint32_t>;
+template <typename UnitT>
+using QuantityI64 = Quantity<UnitT, int64_t>;
+template <typename UnitT>
+using QuantityU64 = Quantity<UnitT, uint64_t>;
+
+template <typename T>
+struct CorrespondingQuantity;
+
+template <typename UnitT, typename RepT>
+class QuantityPoint;
+
+//
+// QuantityPoint aliases to set a particular Rep.
+//
+// This presents a less cumbersome interface for end users.
+//
+template <typename UnitT>
+using QuantityPointD = QuantityPoint<UnitT, double>;
+template <typename UnitT>
+using QuantityPointF = QuantityPoint<UnitT, float>;
+template <typename UnitT>
+using QuantityPointI = QuantityPoint<UnitT, int>;
+template <typename UnitT>
+using QuantityPointU = QuantityPoint<UnitT, unsigned int>;
+template <typename UnitT>
+using QuantityPointI32 = QuantityPoint<UnitT, int32_t>;
+template <typename UnitT>
+using QuantityPointU32 = QuantityPoint<UnitT, uint32_t>;
+template <typename UnitT>
+using QuantityPointI64 = QuantityPoint<UnitT, int64_t>;
+template <typename UnitT>
+using QuantityPointU64 = QuantityPoint<UnitT, uint64_t>;
+
+template <typename Unit>
+struct Constant;
+
+template <typename Unit>
+struct SymbolFor;
+
+template <template <class U> class Prefix>
+struct PrefixApplier;
+
+// SI Prefixes.
+template <typename U>
+struct Quetta;
+template <typename U>
+struct Ronna;
+template <typename U>
+struct Yotta;
+template <typename U>
+struct Zetta;
+template <typename U>
+struct Exa;
+template <typename U>
+struct Peta;
+template <typename U>
+struct Tera;
+template <typename U>
+struct Giga;
+template <typename U>
+struct Mega;
+template <typename U>
+struct Kilo;
+template <typename U>
+struct Hecto;
+template <typename U>
+struct Deka;
+template <typename U>
+struct Deci;
+template <typename U>
+struct Centi;
+template <typename U>
+struct Milli;
+template <typename U>
+struct Micro;
+template <typename U>
+struct Nano;
+template <typename U>
+struct Pico;
+template <typename U>
+struct Femto;
+template <typename U>
+struct Atto;
+template <typename U>
+struct Zepto;
+template <typename U>
+struct Yocto;
+template <typename U>
+struct Ronto;
+template <typename U>
+struct Quecto;
+
+// Binary Prefixes.
+template <typename U>
+struct Yobi;
+template <typename U>
+struct Zebi;
+template <typename U>
+struct Exbi;
+template <typename U>
+struct Pebi;
+template <typename U>
+struct Tebi;
+template <typename U>
+struct Gibi;
+template <typename U>
+struct Mebi;
+template <typename U>
+struct Kibi;
+
+}  // namespace au
+
+
+
+namespace au {
+namespace detail {
+
+template <typename PackT, typename T>
+struct Prepend;
+template <typename PackT, typename T>
+using PrependT = typename Prepend<PackT, T>::type;
+
+template <typename T, typename Pack>
+struct DropAllImpl;
+template <typename T, typename Pack>
+using DropAll = typename DropAllImpl<T, Pack>::type;
+
+template <typename T, typename U>
+struct SameTypeIgnoringCvref : std::is_same<stdx::remove_cvref_t<T>, stdx::remove_cvref_t<U>> {};
+
+template <typename T, typename U>
+constexpr bool same_type_ignoring_cvref(T, U) {
+    return SameTypeIgnoringCvref<T, U>::value;
+}
+
+template <typename... Ts>
+struct AlwaysFalse : std::false_type {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details below.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `Prepend` implementation.
+
+template <template <typename...> class Pack, typename T, typename... Us>
+struct Prepend<Pack<Us...>, T> {
+    using type = Pack<T, Us...>;
 };
 
-// A value of Zero.
-//
-// This exists purely for convenience, so people don't have to call the initializer.  i.e., it lets
-// us write `ZERO` instead of `Zero{}`.
-static constexpr auto ZERO = Zero{};
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DropAll` implementation.
 
-// Addition, subtraction, and comparison of Zero are well defined.
-inline constexpr Zero operator+(Zero, Zero) { return ZERO; }
-inline constexpr Zero operator-(Zero, Zero) { return ZERO; }
-inline constexpr bool operator==(Zero, Zero) { return true; }
-inline constexpr bool operator>=(Zero, Zero) { return true; }
-inline constexpr bool operator<=(Zero, Zero) { return true; }
-inline constexpr bool operator!=(Zero, Zero) { return false; }
-inline constexpr bool operator>(Zero, Zero) { return false; }
-inline constexpr bool operator<(Zero, Zero) { return false; }
+// Base case.
+template <typename T, template <class...> class Pack>
+struct DropAllImpl<T, Pack<>> : stdx::type_identity<Pack<>> {};
 
+// Recursive case:
+template <typename T, template <class...> class Pack, typename H, typename... Ts>
+struct DropAllImpl<T, Pack<H, Ts...>>
+    : std::conditional<std::is_same<T, H>::value,
+                       DropAll<T, Pack<Ts...>>,
+                       detail::PrependT<DropAll<T, Pack<Ts...>>, H>> {};
+
+}  // namespace detail
 }  // namespace au
 
 
@@ -477,59 +713,82 @@ constexpr auto cbrt(T x) -> decltype(root<3>(x)) {
 namespace au {
 namespace detail {
 
-// Find the smallest factor which divides n.
+// (a + b) % n
 //
-// Undefined unless (n > 1).
-constexpr std::uintmax_t find_first_factor(std::uintmax_t n) {
-    if (n % 2u == 0u) {
-        return 2u;
+// Precondition: (a < n).
+// Precondition: (b < n).
+constexpr uint64_t add_mod(uint64_t a, uint64_t b, uint64_t n) {
+    if (a >= n - b) {
+        return a - (n - b);
+    } else {
+        return a + b;
+    }
+}
+
+// (a - b) % n
+//
+// Precondition: (a < n).
+// Precondition: (b < n).
+constexpr uint64_t sub_mod(uint64_t a, uint64_t b, uint64_t n) {
+    if (a >= b) {
+        return a - b;
+    } else {
+        return n - (b - a);
+    }
+}
+
+// (a * b) % n
+//
+// Precondition: (a < n).
+// Precondition: (b < n).
+constexpr uint64_t mul_mod(uint64_t a, uint64_t b, uint64_t n) {
+    // Start by trying the simplest case, where everything "fits".
+    if (b == 0u || a < std::numeric_limits<uint64_t>::max() / b) {
+        return (a * b) % n;
     }
 
-    std::uintmax_t factor = 3u;
-    while (factor * factor <= n) {
-        if (n % factor == 0u) {
-            return factor;
+    // We know the "negative" result is smaller, because we've taken as many copies of `a` as will
+    // fit into `n`.  So, do the reduced calculation in "negative space", and then transform the
+    // result back at the end.
+    uint64_t chunk_size = n / a;
+    uint64_t num_chunks = b / chunk_size;
+    uint64_t negative_chunk = n - (a * chunk_size);  // == n % a  (but this should be cheaper)
+    uint64_t chunk_result = n - mul_mod(negative_chunk, num_chunks, n);
+
+    // Compute the leftover.  (We don't need to recurse, because we know it will fit.)
+    uint64_t leftover = b - num_chunks * chunk_size;
+    uint64_t leftover_result = (a * leftover) % n;
+
+    return add_mod(chunk_result, leftover_result, n);
+}
+
+// (a / 2) % n
+//
+// Precondition: (a < n).
+// Precondition: (n is odd).
+//
+// If `a` is even, this is of course simply `a / 2` (because `(a < n)` as a precondition).
+// Otherwise, we give the result one would obtain by first adding `n` (guaranteeing an even number,
+// since `n` is also odd as a precondition), and _then_ dividing by `2`.
+constexpr uint64_t half_mod_odd(uint64_t a, uint64_t n) {
+    return (a / 2u) + ((a % 2u == 0u) ? 0u : (n / 2u + 1u));
+}
+
+// (base ^ exp) % n
+constexpr uint64_t pow_mod(uint64_t base, uint64_t exp, uint64_t n) {
+    uint64_t result = 1u;
+    base %= n;
+
+    while (exp > 0u) {
+        if (exp % 2u == 1u) {
+            result = mul_mod(result, base, n);
         }
-        factor += 2u;
+
+        exp /= 2u;
+        base = mul_mod(base, base, n);
     }
 
-    return n;
-}
-
-// Check whether a number is prime.
-constexpr bool is_prime(std::uintmax_t n) { return (n > 1) && (find_first_factor(n) == n); }
-
-// Find the largest power of `factor` which divides `n`.
-//
-// Undefined unless n > 0, and factor > 1.
-constexpr std::uintmax_t multiplicity(std::uintmax_t factor, std::uintmax_t n) {
-    std::uintmax_t m = 0u;
-    while (n % factor == 0u) {
-        ++m;
-        n /= factor;
-    }
-    return m;
-}
-
-template <typename T>
-constexpr T square(T n) {
-    return n * n;
-}
-
-// Raise a base to an integer power.
-//
-// Undefined behavior if base^exp overflows T.
-template <typename T>
-constexpr T int_pow(T base, std::uintmax_t exp) {
-    if (exp == 0u) {
-        return T{1};
-    }
-
-    if (exp % 2u == 1u) {
-        return base * int_pow(base, exp - 1u);
-    }
-
-    return square(int_pow(base, exp / 2u));
+    return result;
 }
 
 }  // namespace detail
@@ -630,35 +889,6 @@ struct CmpLessImpl<T, U, std::enable_if_t<!std::is_signed<T>::value && std::is_s
 
 
 namespace au {
-namespace detail {
-
-template <typename PackT, typename T>
-struct Prepend;
-template <typename PackT, typename T>
-using PrependT = typename Prepend<PackT, T>::type;
-
-template <typename T, typename U>
-struct SameTypeIgnoringCvref : std::is_same<stdx::remove_cvref_t<T>, stdx::remove_cvref_t<U>> {};
-
-template <typename T, typename U>
-constexpr bool same_type_ignoring_cvref(T, U) {
-    return SameTypeIgnoringCvref<T, U>::value;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation details below.
-
-template <template <typename...> class Pack, typename T, typename... Us>
-struct Prepend<Pack<Us...>, T> {
-    using type = Pack<T, Us...>;
-};
-
-}  // namespace detail
-}  // namespace au
-
-
-
-namespace au {
 namespace stdx {
 namespace experimental {
 
@@ -751,14 +981,6 @@ struct IsQuotientValidRep;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation details below.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Forward declarations for main Au container types.
-template <typename U, typename R>
-class Quantity;
-template <typename U, typename R>
-class QuantityPoint;
-template <typename T>
-struct CorrespondingQuantity;
 
 namespace detail {
 template <typename T>
@@ -940,6 +1162,699 @@ struct Minus {
     }
 };
 constexpr auto minus = Minus{};
+
+}  // namespace detail
+}  // namespace au
+
+namespace au {
+
+struct Seconds;
+
+}  // namespace au
+
+namespace au {
+
+struct Minutes;
+
+}  // namespace au
+
+namespace au {
+
+struct Hours;
+
+}  // namespace au
+
+namespace au {
+
+struct Feet;
+
+}  // namespace au
+
+namespace au {
+
+struct Joules;
+
+}  // namespace au
+
+namespace au {
+
+struct Degrees;
+
+}  // namespace au
+
+namespace au {
+
+struct Meters;
+
+}  // namespace au
+
+namespace au {
+
+struct Inches;
+
+}  // namespace au
+
+namespace au {
+
+struct Fathoms;
+
+}  // namespace au
+
+namespace au {
+
+struct Newtons;
+
+}  // namespace au
+
+namespace au {
+
+struct Kelvins;
+
+}  // namespace au
+
+namespace au {
+
+struct Fahrenheit;
+
+}  // namespace au
+
+namespace au {
+
+struct Lux;
+
+}  // namespace au
+
+namespace au {
+
+struct Moles;
+
+}  // namespace au
+
+namespace au {
+
+struct Grams;
+
+}  // namespace au
+
+namespace au {
+
+struct Watts;
+
+}  // namespace au
+
+namespace au {
+
+struct Amperes;
+
+}  // namespace au
+
+namespace au {
+
+struct Volts;
+
+}  // namespace au
+
+namespace au {
+
+struct Webers;
+
+}  // namespace au
+
+namespace au {
+
+struct Henries;
+
+}  // namespace au
+
+namespace au {
+
+struct USPints;
+
+}  // namespace au
+
+namespace au {
+
+struct USQuarts;
+
+}  // namespace au
+
+namespace au {
+
+struct Radians;
+
+}  // namespace au
+
+namespace au {
+
+struct Hertz;
+
+}  // namespace au
+
+namespace au {
+
+struct Bits;
+
+}  // namespace au
+
+namespace au {
+
+struct Celsius;
+
+}  // namespace au
+
+namespace au {
+
+struct Yards;
+
+}  // namespace au
+
+namespace au {
+
+struct NauticalMiles;
+
+}  // namespace au
+
+namespace au {
+
+struct Slugs;
+
+}  // namespace au
+
+namespace au {
+
+struct Becquerel;
+
+}  // namespace au
+
+namespace au {
+
+struct Miles;
+
+}  // namespace au
+
+namespace au {
+
+struct Knots;
+
+}  // namespace au
+
+namespace au {
+
+struct Liters;
+
+}  // namespace au
+
+namespace au {
+
+struct Katals;
+
+}  // namespace au
+
+namespace au {
+
+struct Siemens;
+
+}  // namespace au
+
+namespace au {
+
+struct Steradians;
+
+}  // namespace au
+
+namespace au {
+
+struct StandardGravity;
+
+}  // namespace au
+
+namespace au {
+
+struct Tesla;
+
+}  // namespace au
+
+namespace au {
+
+struct Ohms;
+
+}  // namespace au
+
+namespace au {
+
+struct PoundsMass;
+
+}  // namespace au
+
+namespace au {
+
+struct Furlongs;
+
+}  // namespace au
+
+namespace au {
+
+struct Coulombs;
+
+}  // namespace au
+
+namespace au {
+
+struct USGallons;
+
+}  // namespace au
+
+namespace au {
+
+struct Bytes;
+
+}  // namespace au
+
+namespace au {
+
+struct Percent;
+
+}  // namespace au
+
+namespace au {
+
+struct Pascals;
+
+}  // namespace au
+
+namespace au {
+
+struct Bars;
+
+}  // namespace au
+
+namespace au {
+
+struct Days;
+
+}  // namespace au
+
+namespace au {
+
+struct Revolutions;
+
+}  // namespace au
+
+namespace au {
+
+struct Grays;
+
+}  // namespace au
+
+namespace au {
+
+struct Lumens;
+
+}  // namespace au
+
+namespace au {
+
+struct Farads;
+
+}  // namespace au
+
+
+
+namespace au {
+
+// A type representing a quantity of "zero" in any units.
+//
+// Zero is special: it's the only number that we can meaningfully compare or assign to a Quantity of
+// _any_ dimension.  Giving it a special type (and a predefined constant of that type, `ZERO`,
+// defined below) lets our code be both concise and readable.
+//
+// For example, we can zero-initialize any arbitrary Quantity, even if it doesn't have a
+// user-defined literal, and even if it's in a header file so we couldn't use the literals anyway:
+//
+//   struct PathPoint {
+//       QuantityD<RadiansPerMeter> curvature = ZERO;
+//   };
+struct Zero {
+    // Implicit conversion to arithmetic types.
+    template <typename T, typename Enable = std::enable_if_t<std::is_arithmetic<T>::value>>
+    constexpr operator T() const {
+        return 0;
+    }
+
+    // Implicit conversion to chrono durations.
+    template <typename Rep, typename Period>
+    constexpr operator std::chrono::duration<Rep, Period>() const {
+        return std::chrono::duration<Rep, Period>{0};
+    }
+};
+
+// A value of Zero.
+//
+// This exists purely for convenience, so people don't have to call the initializer.  i.e., it lets
+// us write `ZERO` instead of `Zero{}`.
+static constexpr auto ZERO = Zero{};
+
+// Addition, subtraction, and comparison of Zero are well defined.
+inline constexpr Zero operator+(Zero, Zero) { return ZERO; }
+inline constexpr Zero operator-(Zero, Zero) { return ZERO; }
+inline constexpr bool operator==(Zero, Zero) { return true; }
+inline constexpr bool operator>=(Zero, Zero) { return true; }
+inline constexpr bool operator<=(Zero, Zero) { return true; }
+inline constexpr bool operator!=(Zero, Zero) { return false; }
+inline constexpr bool operator>(Zero, Zero) { return false; }
+inline constexpr bool operator<(Zero, Zero) { return false; }
+
+}  // namespace au
+
+
+
+namespace au {
+namespace detail {
+
+//
+// The possible results of a probable prime test.
+//
+enum class PrimeResult {
+    COMPOSITE,
+    PROBABLY_PRIME,
+    BAD_INPUT,
+};
+
+//
+// Decompose a number by factoring out all powers of 2: `n = 2^power_of_two * odd_remainder`.
+//
+struct NumberDecomposition {
+    uint64_t power_of_two;
+    uint64_t odd_remainder;
+};
+
+//
+// Express any positive `n` as `(2^s * d)`, where `d` is odd.
+//
+// Preconditions: `n` is positive.
+constexpr NumberDecomposition decompose(uint64_t n) {
+    NumberDecomposition result{0u, n};
+    while (result.odd_remainder % 2u == 0u) {
+        result.odd_remainder /= 2u;
+        ++result.power_of_two;
+    }
+    return result;
+}
+
+//
+// Perform a Miller-Rabin primality test on `n` using base `a`.
+//
+// Preconditions: `n` is odd, and at least as big as `a + 2`.  Also, `2` is the smallest allowable
+// value for `a`.  We will return `BAD_INPUT` if these preconditions are violated.  Otherwise, we
+// will return `PROBABLY_PRIME` for all prime inputs, and also all composite inputs which are
+// pseudoprime to base `a`, returning `COMPOSITE` for all other inputs (which are definitely known
+// to be composite).
+//
+constexpr PrimeResult miller_rabin(std::size_t a, uint64_t n) {
+    if (a < 2u || n < a + 2u || n % 2u == 0u) {
+        return PrimeResult::BAD_INPUT;
+    }
+
+    const auto params = decompose(n - 1u);
+    const auto &s = params.power_of_two;
+    const auto &d = params.odd_remainder;
+
+    uint64_t x = pow_mod(a, d, n);
+    if (x == 1u) {
+        return PrimeResult::PROBABLY_PRIME;
+    }
+
+    const auto minus_one = n - 1u;
+    for (auto r = 0u; r < s; ++r) {
+        if (x == minus_one) {
+            return PrimeResult::PROBABLY_PRIME;
+        }
+        x = mul_mod(x, x, n);
+    }
+    return PrimeResult::COMPOSITE;
+}
+
+//
+// Test whether the number is a perfect square.
+//
+constexpr bool is_perfect_square(uint64_t n) {
+    if (n < 2u) {
+        return true;
+    }
+
+    uint64_t prev = n / 2u;
+    while (true) {
+        const uint64_t curr = (prev + n / prev) / 2u;
+        if (curr * curr == n) {
+            return true;
+        }
+        if (curr >= prev) {
+            return false;
+        }
+        prev = curr;
+    }
+}
+
+constexpr uint64_t gcd(uint64_t a, uint64_t b) {
+    while (b != 0u) {
+        const auto remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    return a;
+}
+
+// Map `true` onto `1`, and `false` onto `0`.
+//
+// The conversions `true` -> `1` and `false` -> `0` are guaranteed by the standard.  This is a
+// branchless implementation, which should generally be faster.
+constexpr int bool_sign(bool x) { return x - (!x); }
+
+//
+// The Jacobi symbol (a/n) is defined for odd positive `n` and any integer `a` as the product of the
+// Legendre symbols (a/p) for all prime factors `p` of n.  There are several rules that make this
+// easier to calculate, including:
+//
+//  1. (a/n) = (b/n) whenever (a % n) == (b % n).
+//
+//  2. (2a/n) = (a/n) if n is congruent to 1 or 7 (mod 8), and -(a/n) if n is congruent to 3 or 5.
+//
+//  3. (1/n) = 1 for all n.
+//
+//  4. (a/n) = 0 whenever a and n have a nontrivial common factor.
+//
+//  5. (a/n) = (n/a) * (-1)^x if a and n are both odd, positive, and coprime.  Here, x is 0 if
+//     either a or n is congruent to 1 (mod 4), and 1 otherwise.
+//
+constexpr int jacobi_symbol_positive_numerator(uint64_t a, uint64_t n, int start) {
+    int result = start;
+
+    while (a != 0u) {
+        // Handle even numbers in the "numerator".
+        const int sign_for_even = bool_sign(n % 8u == 1u || n % 8u == 7u);
+        while (a % 2u == 0u) {
+            a /= 2u;
+            result *= sign_for_even;
+        }
+
+        // `jacobi_symbol(1, n)` is `1` for all `n`.
+        if (a == 1u) {
+            return result;
+        }
+
+        // `jacobi_symbol(a, n)` is `0` whenever `a` and `n` have a common factor.
+        if (gcd(a, n) != 1u) {
+            return 0;
+        }
+
+        // At this point, `a` and `n` are odd, positive, and coprime.  We can use the reciprocity
+        // relationship to "flip" them, and modular arithmetic to reduce them.
+
+        // First, compute the sign change from the flip.
+        result *= bool_sign((a % 4u == 1u) || (n % 4u == 1u));
+
+        // Now, do the flip-and-reduce.
+        const uint64_t new_a = n % a;
+        n = a;
+        a = new_a;
+    }
+    return 0;
+}
+constexpr int jacobi_symbol(int64_t raw_a, uint64_t n) {
+    // Degenerate case: n = 1.
+    if (n == 1u) {
+        return 1;
+    }
+
+    // Starting conditions: transform `a` to strictly non-negative values, setting `result` to the
+    // sign we pick up from this operation (if any).
+    int result = bool_sign((raw_a >= 0) || (n % 4u == 1u));
+    auto a = static_cast<uint64_t>(raw_a * bool_sign(raw_a >= 0)) % n;
+
+    // Delegate to an implementation which can only handle positive numbers.
+    return jacobi_symbol_positive_numerator(a, n, result);
+}
+
+// The "D" parameter in the Strong Lucas probable prime test.
+//
+// Default construction produces the first value to try according to Selfridge's parameter
+// selection.  Calling `increment()` on this will successively produce the next parameter to try.
+struct LucasDParameter {
+    uint64_t mag = 5u;
+    bool is_positive = true;
+
+    friend constexpr int as_int(const LucasDParameter &D) {
+        return bool_sign(D.is_positive) * static_cast<int>(D.mag);
+    }
+    friend constexpr void increment(LucasDParameter &D) {
+        D.mag += 2u;
+        D.is_positive = !D.is_positive;
+    }
+};
+
+//
+// The first `D` in the infinite sequence {5, -7, 9, -11, ...} whose Jacobi symbol is (-1) is the
+// `D` we want to use for the Strong Lucas Probable Prime test.
+//
+// Requires that `n` is *not* a perfect square.
+//
+constexpr LucasDParameter find_first_D_with_jacobi_symbol_neg_one(uint64_t n) {
+    LucasDParameter D{};
+    while (jacobi_symbol(as_int(D), n) != -1) {
+        increment(D);
+    }
+    return D;
+}
+
+//
+// Elements of the Lucas sequence.
+//
+// The default values give the first element (i.e., k=1) of the sequence.
+//
+struct LucasSequenceElement {
+    uint64_t U = 1u;
+    uint64_t V = 1u;
+};
+
+// Produce the Lucas element whose index is twice the input element's index.
+constexpr LucasSequenceElement double_strong_lucas_index(const LucasSequenceElement &element,
+                                                         uint64_t n,
+                                                         LucasDParameter D) {
+    const auto &U = element.U;
+    const auto &V = element.V;
+
+    uint64_t V_squared = mul_mod(V, V, n);
+    uint64_t D_U_squared = mul_mod(D.mag, mul_mod(U, U, n), n);
+    uint64_t V2 =
+        D.is_positive ? add_mod(V_squared, D_U_squared, n) : sub_mod(V_squared, D_U_squared, n);
+    V2 = half_mod_odd(V2, n);
+
+    return LucasSequenceElement{
+        mul_mod(U, V, n),
+        V2,
+    };
+}
+
+// Find the next element in the Lucas sequence, using parameters for strong Lucas probable primes.
+constexpr LucasSequenceElement increment_strong_lucas_index(const LucasSequenceElement &element,
+                                                            uint64_t n,
+                                                            LucasDParameter D) {
+    const auto &U = element.U;
+    const auto &V = element.V;
+
+    auto U2 = half_mod_odd(add_mod(U, V, n), n);
+
+    const auto D_U = mul_mod(D.mag, U, n);
+    auto V2 = D.is_positive ? add_mod(V, D_U, n) : sub_mod(V, D_U, n);
+    V2 = half_mod_odd(V2, n);
+
+    return LucasSequenceElement{U2, V2};
+}
+
+// Compute the strong Lucas sequence element at index `i`.
+constexpr LucasSequenceElement find_strong_lucas_element(uint64_t i,
+                                                         uint64_t n,
+                                                         LucasDParameter D) {
+    LucasSequenceElement element{};
+
+    bool bits[64] = {};
+    std::size_t n_bits = 0u;
+    while (i > 1u) {
+        bits[n_bits++] = (i & 1u);
+        i >>= 1;
+    }
+
+    for (std::size_t j = n_bits; j > 0u; --j) {
+        element = double_strong_lucas_index(element, n, D);
+        if (bits[j - 1u]) {
+            element = increment_strong_lucas_index(element, n, D);
+        }
+    }
+
+    return element;
+}
+
+//
+// Perform a strong Lucas primality test on `n`.
+//
+constexpr PrimeResult strong_lucas(uint64_t n) {
+    if (n < 2u || n % 2u == 0u) {
+        return PrimeResult::BAD_INPUT;
+    }
+
+    if (is_perfect_square(n)) {
+        return PrimeResult::COMPOSITE;
+    }
+
+    const auto D = find_first_D_with_jacobi_symbol_neg_one(n);
+
+    const auto params = decompose(n + 1u);
+    const auto &s = params.power_of_two;
+    const auto &d = params.odd_remainder;
+
+    auto element = find_strong_lucas_element(d, n, D);
+    if (element.U == 0u) {
+        return PrimeResult::PROBABLY_PRIME;
+    }
+
+    for (std::size_t i = 0u; i < s; ++i) {
+        if (element.V == 0u) {
+            return PrimeResult::PROBABLY_PRIME;
+        }
+        element = double_strong_lucas_index(element, n, D);
+    }
+
+    return PrimeResult::COMPOSITE;
+}
+
+//
+// Perform the Baillie-PSW test for primality.
+//
+// Returns `BAD_INPUT` for any number less than 2, `COMPOSITE` for any larger number that is _known_
+// to be prime, and `PROBABLY_PRIME` for any larger number that is deemed "probably prime", which
+// includes all prime numbers.
+//
+// Actually, the Baillie-PSW test is known to be completely accurate for all 64-bit numbers;
+// therefore, since our input type is `uint64_t`, the output will be `PROBABLY_PRIME` if and only if
+// the input is prime.
+//
+constexpr PrimeResult baillie_psw(uint64_t n) {
+    if (n < 2u) {
+        return PrimeResult::BAD_INPUT;
+    }
+    if (n < 4u) {
+        return PrimeResult::PROBABLY_PRIME;
+    }
+    if (n % 2u == 0u) {
+        return PrimeResult::COMPOSITE;
+    }
+
+    if (miller_rabin(2u, n) == PrimeResult::COMPOSITE) {
+        return PrimeResult::COMPOSITE;
+    }
+
+    return strong_lucas(n);
+}
 
 }  // namespace detail
 }  // namespace au
@@ -1635,6 +2550,145 @@ using LuminousIntensity = Dimension<base_dim::LuminousIntensity>;
 
 
 
+namespace au {
+namespace detail {
+
+// Check whether a number is prime.
+constexpr bool is_prime(std::uintmax_t n) {
+    static_assert(sizeof(std::uintmax_t) <= sizeof(std::uint64_t),
+                  "Baillie-PSW only strictly guaranteed for 64-bit numbers");
+
+    return baillie_psw(n) == PrimeResult::PROBABLY_PRIME;
+}
+
+// Compute the next step for Pollard's rho algorithm factoring `n`, with parameter `t`.
+constexpr std::uintmax_t x_squared_plus_t_mod_n(std::uintmax_t x,
+                                                std::uintmax_t t,
+                                                std::uintmax_t n) {
+    return add_mod(mul_mod(x, x, n), t, n);
+}
+
+constexpr std::uintmax_t absolute_diff(std::uintmax_t a, std::uintmax_t b) {
+    return a > b ? a - b : b - a;
+}
+
+// Pollard's rho algorithm, using Brent's cycle detection method.
+//
+// Precondition: `n` is known to be composite.
+constexpr std::uintmax_t find_pollard_rho_factor(std::uintmax_t n) {
+    // The outer loop tries separate _parameterizations_ of Pollard's rho.  We try a finite number
+    // of them just to guarantee that we terminate.  But in practice, the vast overwhelming majority
+    // will succeed on the first iteration, and we don't expect that any will _ever_ come anywhere
+    // _near_ to hitting this limit.
+    for (std::uintmax_t t = 1u; t < n / 2u; ++t) {
+        std::size_t max_cycle_length = 1u;
+        std::size_t cycle_length = 1u;
+        std::uintmax_t tortoise = 2u;
+        std::uintmax_t hare = x_squared_plus_t_mod_n(tortoise, t, n);
+
+        std::uintmax_t factor = gcd(n, absolute_diff(tortoise, hare));
+        while (factor == 1u) {
+            if (max_cycle_length == cycle_length) {
+                tortoise = hare;
+                max_cycle_length *= 2u;
+                cycle_length = 0u;
+            }
+            hare = x_squared_plus_t_mod_n(hare, t, n);
+            ++cycle_length;
+            factor = gcd(n, absolute_diff(tortoise, hare));
+        }
+        if (factor < n) {
+            return factor;
+        }
+    }
+    // Failure case: we think this should be unreachable (in practice) with any composite `n`.
+    return n;
+}
+
+template <typename T = void>
+struct FirstPrimesImpl {
+    static constexpr uint16_t values[] = {
+        2,   3,   5,   7,   11,  13,  17,  19,  23,  29,  31,  37,  41,  43,  47,  53,  59,
+        61,  67,  71,  73,  79,  83,  89,  97,  101, 103, 107, 109, 113, 127, 131, 137, 139,
+        149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233,
+        239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337,
+        347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439,
+        443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541};
+    static constexpr std::size_t N = sizeof(values) / sizeof(values[0]);
+};
+template <typename T>
+constexpr uint16_t FirstPrimesImpl<T>::values[];
+template <typename T>
+constexpr std::size_t FirstPrimesImpl<T>::N;
+using FirstPrimes = FirstPrimesImpl<>;
+
+// Find the smallest factor which divides n.
+//
+// Undefined unless (n > 1).
+constexpr std::uintmax_t find_prime_factor(std::uintmax_t n) {
+    const auto &first_primes = FirstPrimes::values;
+
+    // First, do trial division against the first N primes.
+    for (const auto &p : first_primes) {
+        if (n % p == 0u) {
+            return p;
+        }
+
+        if (p * p > n) {
+            return n;
+        }
+    }
+
+    // If we got this far, and haven't found a factor nor terminated, do a fast primality check.
+    if (is_prime(n)) {
+        return n;
+    }
+
+    auto factor = find_pollard_rho_factor(n);
+    while (!is_prime(factor)) {
+        factor = find_pollard_rho_factor(factor);
+    }
+    return factor;
+}
+
+// Find the largest power of `factor` which divides `n`.
+//
+// Undefined unless n > 0, and factor > 1.
+constexpr std::uintmax_t multiplicity(std::uintmax_t factor, std::uintmax_t n) {
+    std::uintmax_t m = 0u;
+    while (n % factor == 0u) {
+        ++m;
+        n /= factor;
+    }
+    return m;
+}
+
+template <typename T>
+constexpr T square(T n) {
+    return n * n;
+}
+
+// Raise a base to an integer power.
+//
+// Undefined behavior if base^exp overflows T.
+template <typename T>
+constexpr T int_pow(T base, std::uintmax_t exp) {
+    if (exp == 0u) {
+        return T{1};
+    }
+
+    if (exp % 2u == 1u) {
+        return base * int_pow(base, exp - 1u);
+    }
+
+    return square(int_pow(base, exp / 2u));
+}
+
+}  // namespace detail
+}  // namespace au
+
+
+
 // "Magnitude" is a collection of templated types, representing positive real numbers.
 //
 // The key design goal is to support products and rational powers _exactly_, including for many
@@ -1744,7 +2798,18 @@ using CommonMagnitudeT = typename CommonMagnitude<Ms...>::type;
 // Value based interface for Magnitude.
 
 static constexpr auto ONE = Magnitude<>{};
-static constexpr auto PI = Magnitude<Pi>{};
+
+#ifndef PI
+// Some users must work with frameworks that define `PI` as a macro.  Having a macro with this
+// easily collidable name is exceedingly unwise.  Nevertheless, that's not the users' fault, so we
+// accommodate those frameworks by omitting the definition of `PI` in this case.
+//
+// If you are stuck with such a framework, you can choose a different name that does not collide,
+// and reproduce the following line in your own system.
+[[deprecated(
+    "If you need a magnitude instance for pi, define your own as `constexpr auto PI = "
+    "Magnitude<Pi>{};`")]] static constexpr auto PI = Magnitude<Pi>{};
+#endif
 
 template <typename... BP1s, typename... BP2s>
 constexpr auto operator*(Magnitude<BP1s...>, Magnitude<BP2s...>) {
@@ -1836,12 +2901,11 @@ template <std::uintmax_t N>
 struct PrimeFactorization {
     static_assert(N > 0, "Can only factor positive integers");
 
-    static constexpr std::uintmax_t first_base = find_first_factor(N);
-    static constexpr std::uintmax_t first_power = multiplicity(first_base, N);
-    static constexpr std::uintmax_t remainder = N / int_pow(first_base, first_power);
+    static constexpr std::uintmax_t base = find_prime_factor(N);
+    static constexpr std::uintmax_t power = multiplicity(base, N);
+    static constexpr std::uintmax_t remainder = N / int_pow(base, power);
 
-    using type =
-        MagProductT<Magnitude<Pow<Prime<first_base>, first_power>>, PrimeFactorizationT<remainder>>;
+    using type = MagProductT<Magnitude<Pow<Prime<base>, power>>, PrimeFactorizationT<remainder>>;
 };
 
 }  // namespace detail
@@ -1980,7 +3044,7 @@ constexpr MagRepresentationOrError<T> root(T x, std::uintmax_t n) {
     // Always use `long double` for intermediate computations.  We don't ever expect people to be
     // calling this at runtime, so we want maximum accuracy.
     long double lo = 1.0;
-    long double hi = x;
+    long double hi = static_cast<long double>(x);
 
     // Do a binary search to find the closest value such that `checked_int_pow` recovers the input.
     //
@@ -2069,12 +3133,26 @@ constexpr bool all(const bool (&values)[N]) {
     return true;
 }
 
+// `RealPart<T>` is `T` itself, unless that type has a `.real()` member.
+template <typename T>
+using TypeOfRealMember = decltype(std::declval<T>().real());
+template <typename T>
+// `RealPartImpl` is basically equivalent to the `detected_or<T, TypeOfRealMember, T>` part at the
+// end.  But we special-case `is_arithmetic` to get a fast short-circuit for the overwhelmingly most
+// common case.
+struct RealPartImpl : std::conditional<std::is_arithmetic<T>::value,
+                                       T,
+                                       stdx::experimental::detected_or_t<T, TypeOfRealMember, T>> {
+};
+template <typename T>
+using RealPart = typename RealPartImpl<T>::type;
+
 template <typename Target, typename Enable = void>
 struct SafeCastingChecker {
     template <typename T>
     constexpr bool operator()(T x) {
-        return stdx::cmp_less_equal(std::numeric_limits<Target>::lowest(), x) &&
-               stdx::cmp_greater_equal(std::numeric_limits<Target>::max(), x);
+        return stdx::cmp_less_equal(std::numeric_limits<RealPart<Target>>::lowest(), x) &&
+               stdx::cmp_greater_equal(std::numeric_limits<RealPart<Target>>::max(), x);
     }
 };
 
@@ -2083,8 +3161,8 @@ struct SafeCastingChecker<Target, std::enable_if_t<std::is_integral<Target>::val
     template <typename T>
     constexpr bool operator()(T x) {
         return std::is_integral<T>::value &&
-               stdx::cmp_less_equal(std::numeric_limits<Target>::lowest(), x) &&
-               stdx::cmp_greater_equal(std::numeric_limits<Target>::max(), x);
+               stdx::cmp_less_equal(std::numeric_limits<RealPart<Target>>::lowest(), x) &&
+               stdx::cmp_greater_equal(std::numeric_limits<RealPart<Target>>::max(), x);
     }
 };
 
@@ -2103,8 +3181,8 @@ constexpr MagRepresentationOrError<T> get_value_result(Magnitude<BPs...>) {
     }
 
     // Force the expression to be evaluated in a constexpr context.
-    constexpr auto widened_result =
-        product({base_power_value<T, ExpT<BPs>::num, static_cast<std::uintmax_t>(ExpT<BPs>::den)>(
+    constexpr auto widened_result = product(
+        {base_power_value<RealPart<T>, ExpT<BPs>::num, static_cast<std::uintmax_t>(ExpT<BPs>::den)>(
             BaseT<BPs>::value())...});
 
     if ((widened_result.outcome != MagRepresentationOutcome::OK) ||
@@ -2965,10 +4043,59 @@ struct FirstMatchingUnit<Matcher, TargetUnit, List<H, Ts...>>
                          stdx::type_identity<H>,
                          FirstMatchingUnit<Matcher, TargetUnit, List<Ts...>>> {};
 
+// A "redundant" unit, among a list of units, is one that is an exact integer multiple of another.
+//
+// If two units are identical, then each is redundant with the other.
+//
+// If two units are distinct, but quantity-equivalent, then the unit that comes later in the
+// standard unit ordering (i.e., `InOrderFor<Pack, ...>`) is the redundant one.
+template <typename Pack>
+struct EliminateRedundantUnitsImpl;
+template <typename Pack>
+using EliminateRedundantUnits = typename EliminateRedundantUnitsImpl<Pack>::type;
+
+// Base case: no units to eliminate.
+template <template <class...> class Pack>
+struct EliminateRedundantUnitsImpl<Pack<>> : stdx::type_identity<Pack<>> {};
+
+// Helper for recursive case.
+template <template <class...> class Pack, typename U1, typename U2>
+struct IsFirstUnitRedundant
+    : std::conditional_t<std::is_same<U1, U2>::value,
+                         std::true_type,
+                         std::conditional_t<AreUnitsQuantityEquivalent<U1, U2>::value,
+                                            InOrderFor<Pack, U2, U1>,
+                                            IsInteger<UnitRatioT<U1, U2>>>> {};
+
+// Recursive case: eliminate first unit if it is redundant; else, keep it and eliminate any later
+// units that are redundant with it.
+template <template <class...> class Pack, typename H, typename... Ts>
+struct EliminateRedundantUnitsImpl<Pack<H, Ts...>>
+    : std::conditional<
+
+          // If `H` is redundant with _any later unit_, simply omit it.
+          stdx::disjunction<IsFirstUnitRedundant<Pack, H, Ts>...>::value,
+          EliminateRedundantUnits<Pack<Ts...>>,
+
+          // Otherwise, we know we'll need to keep `H`, so we prepend it to the remaining result.
+          //
+          // To get that result, we first replace any units _that `H` makes redundant_ with `void`.
+          // Then, we drop all `void`, before finally recursively eliminating any units that are
+          // redundant among those that remain.
+          PrependT<
+              EliminateRedundantUnits<DropAll<
+                  void,
+
+                  // `Pack<Ts...>`, but with redundant-with-`H` units replaced by `void`:
+                  Pack<std::conditional_t<IsFirstUnitRedundant<Pack, Ts, H>::value, void, Ts>...>>>,
+
+              H>> {};
+
 }  // namespace detail
 
 template <typename... Us>
-using ComputeCommonUnitImpl = FlatDedupedTypeListT<CommonUnit, Us...>;
+using ComputeCommonUnitImpl =
+    detail::EliminateRedundantUnits<FlatDedupedTypeListT<CommonUnit, Us...>>;
 
 template <typename... Us>
 struct ComputeCommonUnit
@@ -3342,7 +4469,7 @@ template <typename U1, typename U2>
 struct SameDimension : stdx::bool_constant<U1::dim_ == U2::dim_> {};
 
 template <typename Rep, typename ScaleFactor, typename SourceRep>
-struct CoreImplicitConversionPolicyImpl
+struct CoreImplicitConversionPolicyImplAssumingReal
     : stdx::disjunction<
           std::is_floating_point<Rep>,
           stdx::conjunction<std::is_integral<SourceRep>,
@@ -3351,7 +4478,24 @@ struct CoreImplicitConversionPolicyImpl
 
 // Always permit the identity scaling.
 template <typename Rep>
-struct CoreImplicitConversionPolicyImpl<Rep, Magnitude<>, Rep> : std::true_type {};
+struct CoreImplicitConversionPolicyImplAssumingReal<Rep, Magnitude<>, Rep> : std::true_type {};
+
+// `SettingPureRealFromMixedReal<A, B>` tests whether `A` is a pure real type, _and_ `B` is a type
+// that has a real _part_, but is not purely real (call it a "mixed-real" type).
+//
+// The point is to guard against situations where we're _implicitly_ converting a "mixed-real" type
+// (i.e., typically a complex number) to a pure real type.
+template <typename Rep, typename SourceRep>
+struct SettingPureRealFromMixedReal
+    : stdx::conjunction<stdx::negation<std::is_same<SourceRep, RealPart<SourceRep>>>,
+                        std::is_same<Rep, RealPart<Rep>>> {};
+
+template <typename Rep, typename ScaleFactor, typename SourceRep>
+struct CoreImplicitConversionPolicyImpl
+    : stdx::conjunction<stdx::negation<SettingPureRealFromMixedReal<Rep, SourceRep>>,
+                        CoreImplicitConversionPolicyImplAssumingReal<RealPart<Rep>,
+                                                                     ScaleFactor,
+                                                                     RealPart<SourceRep>>> {};
 
 template <typename Rep, typename ScaleFactor, typename SourceRep>
 using CoreImplicitConversionPolicy = CoreImplicitConversionPolicyImpl<Rep, ScaleFactor, SourceRep>;
@@ -3484,7 +4628,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_MULTIPLY, T, is_T_integral> {
     static_assert(is_T_integral == std::is_integral<T>::value,
                   "Mismatched instantiation (should never be done manually)");
 
-    constexpr T operator()(const T &x) { return x * get_value<T>(Mag{}); }
+    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
@@ -3503,7 +4647,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_DIVIDE, T, is_T_integral> {
     static_assert(is_T_integral == std::is_integral<T>::value,
                   "Mismatched instantiation (should never be done manually)");
 
-    constexpr T operator()(const T &x) { return x / get_value<T>(MagInverseT<Mag>{}); }
+    constexpr T operator()(const T &x) { return x / get_value<RealPart<T>>(MagInverseT<Mag>{}); }
 
     static constexpr bool would_overflow(const T &) { return false; }
 
@@ -3546,8 +4690,8 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, true> {
 
     constexpr T operator()(const T &x) {
         using P = PromotedType<T>;
-        return static_cast<T>(x * get_value<P>(numerator(Mag{})) /
-                              get_value<P>(denominator(Mag{})));
+        return static_cast<T>(x * get_value<RealPart<P>>(numerator(Mag{})) /
+                              get_value<RealPart<P>>(denominator(Mag{})));
     }
 
     static constexpr bool would_overflow(const T &x) {
@@ -3569,7 +4713,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, false> {
     static_assert(!std::is_integral<T>::value,
                   "Mismatched instantiation (should never be done manually)");
 
-    constexpr T operator()(const T &x) { return x * get_value<T>(Mag{}); }
+    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
@@ -3590,7 +4734,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::IRRATIONAL_MULTIPLY, T, is_T_integral> {
     static_assert(is_T_integral == std::is_integral<T>::value,
                   "Mismatched instantiation (should never be done manually)");
 
-    constexpr T operator()(const T &x) { return x * get_value<T>(Mag{}); }
+    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
@@ -3623,12 +4767,6 @@ constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
 
 
 namespace au {
-
-template <typename UnitT>
-struct QuantityMaker;
-
-template <typename UnitT, typename RepT>
-class Quantity;
 
 //
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
@@ -3712,6 +4850,8 @@ class Quantity {
     using Rep = RepT;
     using Unit = UnitT;
     static constexpr auto unit = Unit{};
+
+    static_assert(IsValidRep<Rep>::value, "Rep must meet our requirements for a rep");
 
     // IMPLICIT constructor for another Quantity of the same Dimension.
     template <typename OtherUnit,
@@ -3908,7 +5048,7 @@ class Quantity {
     }
     template <typename T, typename = std::enable_if_t<IsQuotientValidRep<T, RepT>::value>>
     friend constexpr auto operator/(T s, Quantity a) {
-        warn_if_integer_division<T>();
+        warn_if_integer_division<UnitProductT<>, T>();
         return make_quantity<decltype(pow<-1>(unit))>(s / a.value_);
     }
 
@@ -3922,7 +5062,7 @@ class Quantity {
     // Division for dimensioned quantities.
     template <typename OtherUnit, typename OtherRep>
     constexpr auto operator/(Quantity<OtherUnit, OtherRep> q) const {
-        warn_if_integer_division<OtherRep>();
+        warn_if_integer_division<OtherUnit, OtherRep>();
         return make_quantity_unless_unitless<UnitQuotientT<Unit, OtherUnit>>(value_ /
                                                                              q.in(OtherUnit{}));
     }
@@ -3937,16 +5077,21 @@ class Quantity {
         return *this;
     }
 
+    template <typename T>
+    constexpr void perform_shorthand_checks() {
+        static_assert(
+            IsValidRep<T>::value,
+            "This overload is only for scalar mult/div-assignment with raw numeric types");
+
+        static_assert((!std::is_integral<detail::RealPart<Rep>>::value) ||
+                          std::is_integral<detail::RealPart<T>>::value,
+                      "We don't support compound mult/div of integral types by floating point");
+    }
+
     // Short-hand multiplication assignment.
     template <typename T>
     constexpr Quantity &operator*=(T s) {
-        static_assert(
-            std::is_arithmetic<T>::value,
-            "This overload is only for scalar multiplication-assignment with arithmetic types");
-
-        static_assert(
-            std::is_floating_point<Rep>::value || std::is_integral<T>::value,
-            "We don't support compound multiplication of integral types by floating point");
+        perform_shorthand_checks<T>();
 
         value_ *= s;
         return *this;
@@ -3955,11 +5100,7 @@ class Quantity {
     // Short-hand division assignment.
     template <typename T>
     constexpr Quantity &operator/=(T s) {
-        static_assert(std::is_arithmetic<T>::value,
-                      "This overload is only for scalar division-assignment with arithmetic types");
-
-        static_assert(std::is_floating_point<Rep>::value || std::is_integral<T>::value,
-                      "We don't support compound division of integral types by floating point");
+        perform_shorthand_checks<T>();
 
         value_ /= s;
         return *this;
@@ -3984,23 +5125,101 @@ class Quantity {
             CorrespondingQuantityT<T>{*this}.in(typename CorrespondingQuantity<T>::Unit{}));
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Pre-C++20 Non-Type Template Parameter (NTTP) functionality.
+    //
+    // If `Rep` is a built in integral type, then `Quantity::NTTP` can be used as a template
+    // parameter.
+
+    enum class NTTP : std::conditional_t<std::is_integral<Rep>::value, Rep, bool> {
+        ENUM_VALUES_ARE_UNUSED
+    };
+
+    constexpr Quantity(NTTP val) : value_{static_cast<Rep>(val)} {
+        static_assert(std::is_integral<Rep>::value,
+                      "NTTP functionality only works when rep is built-in integral type");
+    }
+
+    constexpr operator NTTP() const {
+        static_assert(std::is_integral<Rep>::value,
+                      "NTTP functionality only works when rep is built-in integral type");
+        return static_cast<NTTP>(value_);
+    }
+
+    template <typename C, C x = C::ENUM_VALUES_ARE_UNUSED>
+    constexpr operator C() const = delete;
+    // If you got here ^^^, then you need to do your unit conversion **manually**.  Check the type
+    // of the template parameter, and convert it to that same unit and rep.
+
+    friend constexpr Quantity from_nttp(NTTP val) { return val; }
+
  private:
-    template <typename OtherRep>
+    template <typename OtherUnit, typename OtherRep>
     static constexpr void warn_if_integer_division() {
         constexpr bool uses_integer_division =
             (std::is_integral<Rep>::value && std::is_integral<OtherRep>::value);
-        static_assert(!uses_integer_division,
-                      "Integer division forbidden: use integer_quotient() if you really want it");
+        constexpr bool are_units_quantity_equivalent =
+            AreUnitsQuantityEquivalent<UnitT, OtherUnit>::value;
+        static_assert(are_units_quantity_equivalent || !uses_integer_division,
+                      "Integer division forbidden: wrap denominator in `unblock_int_div()` if you "
+                      "really want it");
     }
 
     constexpr Quantity(Rep value) : value_{value} {}
 
-    Rep value_{0};
+    Rep value_{};
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Machinery to explicitly unblock integer division.
+//
+// Dividing by `unblock_int_div(x)` will allow integer division for any `x`.  If the division would
+// have been allowed anyway, then `unblock_int_div` is a no-op: this enables us to write templated
+// code to handle template parameters that may or may not be integral.
+
+template <typename U, typename R>
+class AlwaysDivisibleQuantity;
+
+// Unblock integer divisoin for a `Quantity`.
+template <typename U, typename R>
+constexpr AlwaysDivisibleQuantity<U, R> unblock_int_div(Quantity<U, R> q) {
+    return AlwaysDivisibleQuantity<U, R>{q};
+}
+
+// Unblock integer division for any non-`Quantity` type.
+template <typename R>
+constexpr AlwaysDivisibleQuantity<UnitProductT<>, R> unblock_int_div(R x) {
+    return AlwaysDivisibleQuantity<UnitProductT<>, R>{make_quantity<UnitProductT<>>(x)};
+}
+
+template <typename U, typename R>
+class AlwaysDivisibleQuantity {
+ public:
+    // Divide a `Quantity` by this always-divisible quantity type.
+    template <typename U2, typename R2>
+    friend constexpr auto operator/(Quantity<U2, R2> q2, AlwaysDivisibleQuantity q) {
+        return make_quantity<UnitQuotientT<U2, U>>(q2.in(U2{}) / q.q_.in(U{}));
+    }
+
+    // Divide any non-`Quantity` by this always-divisible quantity type.
+    template <typename T>
+    friend constexpr auto operator/(T x, AlwaysDivisibleQuantity q) {
+        return make_quantity<UnitInverseT<U>>(x / q.q_.in(U{}));
+    }
+
+    friend constexpr AlwaysDivisibleQuantity<U, R> unblock_int_div<U, R>(Quantity<U, R> q);
+    friend constexpr AlwaysDivisibleQuantity<UnitProductT<>, R> unblock_int_div<R>(R x);
+
+ private:
+    constexpr AlwaysDivisibleQuantity(Quantity<U, R> q) : q_{q} {}
+
+    Quantity<U, R> q_;
 };
 
 // Force integer division beteween two integer Quantities, in a callsite-obvious way.
 template <typename U1, typename R1, typename U2, typename R2>
-constexpr auto integer_quotient(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
+integer_quotient(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
     static_assert(std::is_integral<R1>::value && std::is_integral<R2>::value,
                   "integer_quotient() can only be called with integral Rep");
     return make_quantity<UnitQuotientT<U1, U2>>(q1.in(U1{}) / q2.in(U2{}));
@@ -4008,7 +5227,8 @@ constexpr auto integer_quotient(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
 
 // Force integer division beteween an integer Quantity and a raw number.
 template <typename U, typename R, typename T>
-constexpr auto integer_quotient(Quantity<U, R> q, T x) {
+[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
+integer_quotient(Quantity<U, R> q, T x) {
     static_assert(std::is_integral<R>::value && std::is_integral<T>::value,
                   "integer_quotient() can only be called with integral Rep");
     return make_quantity<U>(q.in(U{}) / x);
@@ -4016,7 +5236,8 @@ constexpr auto integer_quotient(Quantity<U, R> q, T x) {
 
 // Force integer division beteween a raw number and an integer Quantity.
 template <typename T, typename U, typename R>
-constexpr auto integer_quotient(T x, Quantity<U, R> q) {
+[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
+integer_quotient(T x, Quantity<U, R> q) {
     static_assert(std::is_integral<T>::value && std::is_integral<R>::value,
                   "integer_quotient() can only be called with integral Rep");
     return make_quantity<UnitInverseT<U>>(x / q.in(U{}));
@@ -4054,28 +5275,6 @@ constexpr auto rep_cast(Zero z) {
     return z;
 }
 
-//
-// Quantity aliases to set a particular Rep.
-//
-// This presents a less cumbersome interface for end users.
-//
-template <typename UnitT>
-using QuantityD = Quantity<UnitT, double>;
-template <typename UnitT>
-using QuantityF = Quantity<UnitT, float>;
-template <typename UnitT>
-using QuantityI = Quantity<UnitT, int>;
-template <typename UnitT>
-using QuantityU = Quantity<UnitT, unsigned int>;
-template <typename UnitT>
-using QuantityI32 = Quantity<UnitT, int32_t>;
-template <typename UnitT>
-using QuantityU32 = Quantity<UnitT, uint32_t>;
-template <typename UnitT>
-using QuantityI64 = Quantity<UnitT, int64_t>;
-template <typename UnitT>
-using QuantityU64 = Quantity<UnitT, uint64_t>;
-
 template <typename UnitT>
 struct QuantityMaker {
     using Unit = UnitT;
@@ -4084,6 +5283,18 @@ struct QuantityMaker {
     template <typename T>
     constexpr Quantity<Unit, T> operator()(T value) const {
         return {value};
+    }
+
+    template <typename U, typename R>
+    constexpr void operator()(Quantity<U, R>) const {
+        constexpr bool is_not_already_a_quantity = detail::AlwaysFalse<U, R>::value;
+        static_assert(is_not_already_a_quantity, "Input to QuantityMaker is already a Quantity");
+    }
+
+    template <typename U, typename R>
+    constexpr void operator()(QuantityPoint<U, R>) const {
+        constexpr bool is_not_a_quantity_point = detail::AlwaysFalse<U, R>::value;
+        static_assert(is_not_a_quantity_point, "Input to QuantityMaker is a QuantityPoint");
     }
 
     template <typename... BPs>
@@ -4335,11 +5546,6 @@ namespace au {
 // _absolute temperature measurements_ (e.g., `QuantityPoint<Celsius, T>`).  This type is also
 // analogous to `std::chrono::time_point`, in the same way that `Quantity` is analogous to
 // `std::chrono::duration`.
-template <typename UnitT, typename RepT>
-class QuantityPoint;
-
-template <typename UnitT>
-struct QuantityPointMaker;
 
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
 template <typename UnitT, typename T>
@@ -4589,6 +5795,19 @@ struct QuantityPointMaker {
         return QuantityPoint<Unit, T>{make_quantity<Unit>(value)};
     }
 
+    template <typename U, typename R>
+    constexpr void operator()(Quantity<U, R>) const {
+        constexpr bool is_not_a_quantity = detail::AlwaysFalse<U, R>::value;
+        static_assert(is_not_a_quantity, "Input to QuantityPointMaker is a Quantity");
+    }
+
+    template <typename U, typename R>
+    constexpr void operator()(QuantityPoint<U, R>) const {
+        constexpr bool is_not_already_a_quantity_point = detail::AlwaysFalse<U, R>::value;
+        static_assert(is_not_already_a_quantity_point,
+                      "Input to QuantityPointMaker is already a QuantityPoint");
+    }
+
     template <typename... BPs>
     constexpr auto operator*(Magnitude<BPs...> m) const {
         return QuantityPointMaker<decltype(unit * m)>{};
@@ -4616,28 +5835,6 @@ template <typename NewRep, typename Unit, typename Rep>
 constexpr auto rep_cast(QuantityPoint<Unit, Rep> q) {
     return q.template as<NewRep>(Unit{});
 }
-
-//
-// QuantityPoint aliases to set a particular Rep.
-//
-// This presents a less cumbersome interface for end users.
-//
-template <typename UnitT>
-using QuantityPointD = QuantityPoint<UnitT, double>;
-template <typename UnitT>
-using QuantityPointF = QuantityPoint<UnitT, float>;
-template <typename UnitT>
-using QuantityPointI = QuantityPoint<UnitT, int>;
-template <typename UnitT>
-using QuantityPointU = QuantityPoint<UnitT, unsigned int>;
-template <typename UnitT>
-using QuantityPointI32 = QuantityPoint<UnitT, int32_t>;
-template <typename UnitT>
-using QuantityPointU32 = QuantityPoint<UnitT, uint32_t>;
-template <typename UnitT>
-using QuantityPointI64 = QuantityPoint<UnitT, int64_t>;
-template <typename UnitT>
-using QuantityPointU64 = QuantityPoint<UnitT, uint64_t>;
 
 namespace detail {
 template <typename X, typename Y, typename Func>
@@ -4756,6 +5953,8 @@ struct IntermediateRep
 
 }  // namespace detail
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5107,27 +6306,7 @@ struct AssociatedUnit<SymbolFor<U>> : stdx::type_identity<U> {};
 
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SecondsLabel {
-    static constexpr const char label[] = "s";
-};
-template <typename T>
-constexpr const char SecondsLabel<T>::label[];
-struct Seconds : UnitImpl<Time>, SecondsLabel<void> {
-    using SecondsLabel<void>::label;
-};
-constexpr auto second = SingularNameFor<Seconds>{};
-constexpr auto seconds = QuantityMaker<Seconds>{};
-
-namespace symbols {
-constexpr auto s = SymbolFor<Seconds>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5149,28 +6328,6 @@ constexpr auto meters_pt = QuantityPointMaker<Meters>{};
 
 namespace symbols {
 constexpr auto m = SymbolFor<Meters>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct GramsLabel {
-    static constexpr const char label[] = "g";
-};
-template <typename T>
-constexpr const char GramsLabel<T>::label[];
-struct Grams : UnitImpl<Mass>, GramsLabel<void> {
-    using GramsLabel<void>::label;
-};
-constexpr auto gram = SingularNameFor<Grams>{};
-constexpr auto grams = QuantityMaker<Grams>{};
-
-namespace symbols {
-constexpr auto g = SymbolFor<Grams>{};
 }
 }  // namespace au
 
@@ -5476,73 +6633,7 @@ constexpr auto kibi = PrefixApplier<Kibi>{};
 
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct StandardGravityLabel {
-    static constexpr const char label[] = "g_0";
-};
-template <typename T>
-constexpr const char StandardGravityLabel<T>::label[];
-struct StandardGravity
-    : decltype((Meters{} / squared(Seconds{})) * (mag<980'665>() / mag<100'000>())),
-      StandardGravityLabel<void> {
-    using StandardGravityLabel<void>::label;
-};
-constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
-
-namespace symbols {
-constexpr auto g_0 = SymbolFor<StandardGravity>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct AmperesLabel {
-    static constexpr const char label[] = "A";
-};
-template <typename T>
-constexpr const char AmperesLabel<T>::label[];
-struct Amperes : UnitImpl<Current>, AmperesLabel<void> {
-    using AmperesLabel<void>::label;
-};
-constexpr auto ampere = SingularNameFor<Amperes>{};
-constexpr auto amperes = QuantityMaker<Amperes>{};
-
-namespace symbols {
-constexpr auto A = SymbolFor<Amperes>{};
-}
-
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct MolesLabel {
-    static constexpr const char label[] = "mol";
-};
-template <typename T>
-constexpr const char MolesLabel<T>::label[];
-struct Moles : UnitImpl<AmountOfSubstance>, MolesLabel<void> {
-    using MolesLabel<void>::label;
-};
-constexpr auto mole = SingularNameFor<Moles>{};
-constexpr auto moles = QuantityMaker<Moles>{};
-
-namespace symbols {
-constexpr auto mol = SymbolFor<Moles>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5567,27 +6658,200 @@ constexpr auto K = SymbolFor<Kelvins>{};
 }
 }  // namespace au
 
+// Keep corresponding `_fwd.hh` file on top.
+
 
 namespace au {
 
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct CoulombsLabel {
-    static constexpr const char label[] = "C";
+struct GramsLabel {
+    static constexpr const char label[] = "g";
 };
 template <typename T>
-constexpr const char CoulombsLabel<T>::label[];
-struct Coulombs : decltype(Amperes{} * Seconds{}), CoulombsLabel<void> {
-    using CoulombsLabel<void>::label;
+constexpr const char GramsLabel<T>::label[];
+struct Grams : UnitImpl<Mass>, GramsLabel<void> {
+    using GramsLabel<void>::label;
 };
-constexpr auto coulomb = SingularNameFor<Coulombs>{};
-constexpr auto coulombs = QuantityMaker<Coulombs>{};
+constexpr auto gram = SingularNameFor<Grams>{};
+constexpr auto grams = QuantityMaker<Grams>{};
 
 namespace symbols {
-constexpr auto C = SymbolFor<Coulombs>{};
+constexpr auto g = SymbolFor<Grams>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct AmperesLabel {
+    static constexpr const char label[] = "A";
+};
+template <typename T>
+constexpr const char AmperesLabel<T>::label[];
+struct Amperes : UnitImpl<Current>, AmperesLabel<void> {
+    using AmperesLabel<void>::label;
+};
+constexpr auto ampere = SingularNameFor<Amperes>{};
+constexpr auto amperes = QuantityMaker<Amperes>{};
+
+namespace symbols {
+constexpr auto A = SymbolFor<Amperes>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct RadiansLabel {
+    static constexpr const char label[] = "rad";
+};
+template <typename T>
+constexpr const char RadiansLabel<T>::label[];
+struct Radians : UnitImpl<Angle>, RadiansLabel<void> {
+    using RadiansLabel<void>::label;
+};
+constexpr auto radian = SingularNameFor<Radians>{};
+constexpr auto radians = QuantityMaker<Radians>{};
+
+namespace symbols {
+constexpr auto rad = SymbolFor<Radians>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BitsLabel {
+    static constexpr const char label[] = "b";
+};
+template <typename T>
+constexpr const char BitsLabel<T>::label[];
+struct Bits : UnitImpl<Information>, BitsLabel<void> {
+    using BitsLabel<void>::label;
+};
+constexpr auto bit = SingularNameFor<Bits>{};
+constexpr auto bits = QuantityMaker<Bits>{};
+
+namespace symbols {
+constexpr auto b = SymbolFor<Bits>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct NauticalMilesLabel {
+    static constexpr const char label[] = "nmi";
+};
+template <typename T>
+constexpr const char NauticalMilesLabel<T>::label[];
+struct NauticalMiles : decltype(Meters{} * mag<1'852>()), NauticalMilesLabel<void> {
+    using NauticalMilesLabel<void>::label;
+};
+constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
+constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
+
+namespace symbols {
+constexpr auto nmi = SymbolFor<NauticalMiles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MolesLabel {
+    static constexpr const char label[] = "mol";
+};
+template <typename T>
+constexpr const char MolesLabel<T>::label[];
+struct Moles : UnitImpl<AmountOfSubstance>, MolesLabel<void> {
+    using MolesLabel<void>::label;
+};
+constexpr auto mole = SingularNameFor<Moles>{};
+constexpr auto moles = QuantityMaker<Moles>{};
+
+namespace symbols {
+constexpr auto mol = SymbolFor<Moles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SteradiansLabel {
+    static constexpr const char label[] = "sr";
+};
+template <typename T>
+constexpr const char SteradiansLabel<T>::label[];
+struct Steradians : decltype(squared(Radians{})), SteradiansLabel<void> {
+    using SteradiansLabel<void>::label;
+};
+constexpr auto steradian = SingularNameFor<Steradians>{};
+constexpr auto steradians = QuantityMaker<Steradians>{};
+
+namespace symbols {
+constexpr auto sr = SymbolFor<Steradians>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct PoundsMassLabel {
+    static constexpr const char label[] = "lb";
+};
+template <typename T>
+constexpr const char PoundsMassLabel<T>::label[];
+struct PoundsMass : decltype(Micro<Grams>{} * mag<453'592'370>()), PoundsMassLabel<void> {
+    using PoundsMassLabel<void>::label;
+};
+constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
+constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
+
+namespace symbols {
+constexpr auto lb = SymbolFor<PoundsMass>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5611,27 +6875,7 @@ constexpr auto L = SymbolFor<Liters>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PoundsMassLabel {
-    static constexpr const char label[] = "lb";
-};
-template <typename T>
-constexpr const char PoundsMassLabel<T>::label[];
-struct PoundsMass : decltype(Micro<Grams>{} * mag<453'592'370>()), PoundsMassLabel<void> {
-    using PoundsMassLabel<void>::label;
-};
-constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
-constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
-
-namespace symbols {
-constexpr auto lb = SymbolFor<PoundsMass>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5660,27 +6904,7 @@ constexpr auto degC_qty = SymbolFor<Celsius>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct InchesLabel {
-    static constexpr const char label[] = "in";
-};
-template <typename T>
-constexpr const char InchesLabel<T>::label[];
-struct Inches : decltype(Centi<Meters>{} * mag<254>() / mag<100>()), InchesLabel<void> {
-    using InchesLabel<void>::label;
-};
-constexpr auto inch = SingularNameFor<Inches>{};
-constexpr auto inches = QuantityMaker<Inches>{};
-
-namespace symbols {
-constexpr auto in = SymbolFor<Inches>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5688,21 +6912,23 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct KatalsLabel {
-    static constexpr const char label[] = "kat";
+struct BytesLabel {
+    static constexpr const char label[] = "B";
 };
 template <typename T>
-constexpr const char KatalsLabel<T>::label[];
-struct Katals : decltype(Moles{} / Seconds{}), KatalsLabel<void> {
-    using KatalsLabel<void>::label;
+constexpr const char BytesLabel<T>::label[];
+struct Bytes : decltype(Bits{} * mag<8>()), BytesLabel<void> {
+    using BytesLabel<void>::label;
 };
-constexpr auto katal = SingularNameFor<Katals>{};
-constexpr auto katals = QuantityMaker<Katals>{};
+constexpr auto byte = SingularNameFor<Bytes>{};
+constexpr auto bytes = QuantityMaker<Bytes>{};
 
 namespace symbols {
-constexpr auto kat = SymbolFor<Katals>{};
+constexpr auto B = SymbolFor<Bytes>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5710,64 +6936,23 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct RadiansLabel {
-    static constexpr const char label[] = "rad";
+struct DegreesLabel {
+    static constexpr const char label[] = "deg";
 };
 template <typename T>
-constexpr const char RadiansLabel<T>::label[];
-struct Radians : UnitImpl<Angle>, RadiansLabel<void> {
-    using RadiansLabel<void>::label;
+constexpr const char DegreesLabel<T>::label[];
+struct Degrees : decltype(Radians{} * Magnitude<Pi>{} / mag<180>()), DegreesLabel<void> {
+    using DegreesLabel<void>::label;
 };
-constexpr auto radian = SingularNameFor<Radians>{};
-constexpr auto radians = QuantityMaker<Radians>{};
+constexpr auto degree = SingularNameFor<Degrees>{};
+constexpr auto degrees = QuantityMaker<Degrees>{};
 
 namespace symbols {
-constexpr auto rad = SymbolFor<Radians>{};
+constexpr auto deg = SymbolFor<Degrees>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HertzLabel {
-    static constexpr const char label[] = "Hz";
-};
-template <typename T>
-constexpr const char HertzLabel<T>::label[];
-struct Hertz : UnitInverseT<Seconds>, HertzLabel<void> {
-    using HertzLabel<void>::label;
-};
-constexpr auto hertz = QuantityMaker<Hertz>{};
-
-namespace symbols {
-constexpr auto Hz = SymbolFor<Hertz>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SteradiansLabel {
-    static constexpr const char label[] = "sr";
-};
-template <typename T>
-constexpr const char SteradiansLabel<T>::label[];
-struct Steradians : decltype(squared(Radians{})), SteradiansLabel<void> {
-    using SteradiansLabel<void>::label;
-};
-constexpr auto steradian = SingularNameFor<Steradians>{};
-constexpr auto steradians = QuantityMaker<Steradians>{};
-
-namespace symbols {
-constexpr auto sr = SymbolFor<Steradians>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -5791,6 +6976,32 @@ constexpr auto cd = SymbolFor<Candelas>{};
 }
 }  // namespace au
 
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct RevolutionsLabel {
+    static constexpr const char label[] = "rev";
+};
+template <typename T>
+constexpr const char RevolutionsLabel<T>::label[];
+struct Revolutions : decltype(Degrees{} * mag<360>()), RevolutionsLabel<void> {
+    using RevolutionsLabel<void>::label;
+};
+constexpr auto revolution = SingularNameFor<Revolutions>{};
+constexpr auto revolutions = QuantityMaker<Revolutions>{};
+
+namespace symbols {
+constexpr auto rev = SymbolFor<Revolutions>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
 
 namespace au {
 
@@ -5809,78 +7020,6 @@ constexpr auto percent = QuantityMaker<Percent>{};
 
 namespace symbols {
 constexpr auto pct = SymbolFor<Percent>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BecquerelLabel {
-    static constexpr const char label[] = "Bq";
-};
-template <typename T>
-constexpr const char BecquerelLabel<T>::label[];
-struct Becquerel : UnitInverseT<Seconds>, BecquerelLabel<void> {
-    using BecquerelLabel<void>::label;
-};
-constexpr auto becquerel = QuantityMaker<Becquerel>{};
-
-namespace symbols {
-constexpr auto Bq = SymbolFor<Becquerel>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct NauticalMilesLabel {
-    static constexpr const char label[] = "nmi";
-};
-template <typename T>
-constexpr const char NauticalMilesLabel<T>::label[];
-struct NauticalMiles : decltype(Meters{} * mag<1'852>()), NauticalMilesLabel<void> {
-    using NauticalMilesLabel<void>::label;
-};
-constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
-constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
-
-namespace symbols {
-constexpr auto nmi = SymbolFor<NauticalMiles>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FahrenheitLabel {
-    static constexpr const char label[] = "degF";
-};
-template <typename T>
-constexpr const char FahrenheitLabel<T>::label[];
-struct Rankines : decltype(Kelvins{} * mag<5>() / mag<9>()) {};
-constexpr auto rankines = QuantityMaker<Rankines>{};
-struct Fahrenheit : Rankines, FahrenheitLabel<void> {
-    using FahrenheitLabel<void>::label;
-    static constexpr auto origin() { return centi(rankines)(459'67); }
-};
-constexpr auto fahrenheit_qty = QuantityMaker<Fahrenheit>{};
-constexpr auto fahrenheit_pt = QuantityPointMaker<Fahrenheit>{};
-
-[[deprecated(
-    "`fahrenheit()` is ambiguous.  Use `fahrenheit_pt()` for _points_, or `fahrenheit_qty()` for "
-    "_quantities_")]] constexpr auto fahrenheit = QuantityMaker<Fahrenheit>{};
-
-namespace symbols {
-constexpr auto degF_qty = SymbolFor<Fahrenheit>{};
 }
 }  // namespace au
 
@@ -6180,17 +7319,27 @@ constexpr bool isnan(QuantityPoint<U, R> p) {
     return std::isnan(p.in(U{}));
 }
 
+namespace detail {
+// We can't use lambdas in `constexpr` contexts until C++17, so we make a manual function object.
+struct StdMaxByValue {
+    template <typename T>
+    constexpr auto operator()(T a, T b) const {
+        return std::max(a, b);
+    }
+};
+}  // namespace detail
+
 // The maximum of two values of the same dimension.
 //
 // Unlike std::max, returns by value rather than by reference, because the types might differ.
 template <typename U1, typename U2, typename R1, typename R2>
-auto max(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, [](auto a, auto b) { return std::max(a, b); });
+constexpr auto max(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+    return detail::using_common_type(q1, q2, detail::StdMaxByValue{});
 }
 
 // Overload to resolve ambiguity with `std::max` for identical `Quantity` types.
 template <typename U, typename R>
-auto max(Quantity<U, R> a, Quantity<U, R> b) {
+constexpr auto max(Quantity<U, R> a, Quantity<U, R> b) {
     return std::max(a, b);
 }
 
@@ -6198,13 +7347,13 @@ auto max(Quantity<U, R> a, Quantity<U, R> b) {
 //
 // Unlike std::max, returns by value rather than by reference, because the types might differ.
 template <typename U1, typename U2, typename R1, typename R2>
-auto max(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, [](auto a, auto b) { return std::max(a, b); });
+constexpr auto max(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
+    return detail::using_common_point_unit(p1, p2, detail::StdMaxByValue{});
 }
 
 // Overload to resolve ambiguity with `std::max` for identical `QuantityPoint` types.
 template <typename U, typename R>
-auto max(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
+constexpr auto max(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
     return std::max(a, b);
 }
 
@@ -6213,29 +7362,39 @@ auto max(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
 // NOTE: these will not work if _both_ arguments are `Zero`, but we don't plan to support this
 // unless we find a compelling use case.
 template <typename T>
-auto max(Zero z, T x) {
+constexpr auto max(Zero z, T x) {
     static_assert(std::is_convertible<Zero, T>::value,
                   "Cannot compare type to abstract notion Zero");
     return std::max(T{z}, x);
 }
 template <typename T>
-auto max(T x, Zero z) {
+constexpr auto max(T x, Zero z) {
     static_assert(std::is_convertible<Zero, T>::value,
                   "Cannot compare type to abstract notion Zero");
     return std::max(x, T{z});
 }
 
+namespace detail {
+// We can't use lambdas in `constexpr` contexts until C++17, so we make a manual function object.
+struct StdMinByValue {
+    template <typename T>
+    constexpr auto operator()(T a, T b) const {
+        return std::min(a, b);
+    }
+};
+}  // namespace detail
+
 // The minimum of two values of the same dimension.
 //
 // Unlike std::min, returns by value rather than by reference, because the types might differ.
 template <typename U1, typename U2, typename R1, typename R2>
-auto min(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, [](auto a, auto b) { return std::min(a, b); });
+constexpr auto min(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+    return detail::using_common_type(q1, q2, detail::StdMinByValue{});
 }
 
 // Overload to resolve ambiguity with `std::min` for identical `Quantity` types.
 template <typename U, typename R>
-auto min(Quantity<U, R> a, Quantity<U, R> b) {
+constexpr auto min(Quantity<U, R> a, Quantity<U, R> b) {
     return std::min(a, b);
 }
 
@@ -6243,13 +7402,13 @@ auto min(Quantity<U, R> a, Quantity<U, R> b) {
 //
 // Unlike std::min, returns by value rather than by reference, because the types might differ.
 template <typename U1, typename U2, typename R1, typename R2>
-auto min(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, [](auto a, auto b) { return std::min(a, b); });
+constexpr auto min(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
+    return detail::using_common_point_unit(p1, p2, detail::StdMinByValue{});
 }
 
 // Overload to resolve ambiguity with `std::min` for identical `QuantityPoint` types.
 template <typename U, typename R>
-auto min(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
+constexpr auto min(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
     return std::min(a, b);
 }
 
@@ -6258,13 +7417,13 @@ auto min(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
 // NOTE: these will not work if _both_ arguments are `Zero`, but we don't plan to support this
 // unless we find a compelling use case.
 template <typename T>
-auto min(Zero z, T x) {
+constexpr auto min(Zero z, T x) {
     static_assert(std::is_convertible<Zero, T>::value,
                   "Cannot compare type to abstract notion Zero");
     return std::min(T{z}, x);
 }
 template <typename T>
-auto min(T x, Zero z) {
+constexpr auto min(T x, Zero z) {
     static_assert(std::is_convertible<Zero, T>::value,
                   "Cannot compare type to abstract notion Zero");
     return std::min(x, T{z});
@@ -6662,33 +7821,7 @@ constexpr bool numeric_limits<au::Quantity<U, R>>::tinyness_before;
 
 }  // namespace std
 
-
-
-namespace au {
-
-// Define 1:1 mapping between duration types of chrono library and our library.
-template <typename RepT, typename Period>
-struct CorrespondingQuantity<std::chrono::duration<RepT, Period>> {
-    using Unit = decltype(Seconds{} * (mag<Period::num>() / mag<Period::den>()));
-    using Rep = RepT;
-
-    using ChronoDuration = std::chrono::duration<Rep, Period>;
-
-    static constexpr Rep extract_value(ChronoDuration d) { return d.count(); }
-    static constexpr ChronoDuration construct_from_value(Rep x) { return ChronoDuration{x}; }
-};
-
-// Convert any Au duration quantity to an equivalent `std::chrono::duration`.
-template <typename U, typename R>
-constexpr auto as_chrono_duration(Quantity<U, R> dt) {
-    constexpr auto ratio = unit_ratio(U{}, seconds);
-    static_assert(is_rational(ratio), "Cannot convert to chrono::duration with non-rational ratio");
-    return std::chrono::duration<R,
-                                 std::ratio<get_value<std::intmax_t>(numerator(ratio)),
-                                            get_value<std::intmax_t>(denominator(ratio))>>{dt};
-}
-
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6696,21 +7829,23 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct BitsLabel {
-    static constexpr const char label[] = "b";
+struct SecondsLabel {
+    static constexpr const char label[] = "s";
 };
 template <typename T>
-constexpr const char BitsLabel<T>::label[];
-struct Bits : UnitImpl<Information>, BitsLabel<void> {
-    using BitsLabel<void>::label;
+constexpr const char SecondsLabel<T>::label[];
+struct Seconds : UnitImpl<Time>, SecondsLabel<void> {
+    using SecondsLabel<void>::label;
 };
-constexpr auto bit = SingularNameFor<Bits>{};
-constexpr auto bits = QuantityMaker<Bits>{};
+constexpr auto second = SingularNameFor<Seconds>{};
+constexpr auto seconds = QuantityMaker<Seconds>{};
 
 namespace symbols {
-constexpr auto b = SymbolFor<Bits>{};
+constexpr auto s = SymbolFor<Seconds>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6718,21 +7853,54 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct MinutesLabel {
-    static constexpr const char label[] = "min";
+struct InchesLabel {
+    static constexpr const char label[] = "in";
 };
 template <typename T>
-constexpr const char MinutesLabel<T>::label[];
-struct Minutes : decltype(Seconds{} * mag<60>()), MinutesLabel<void> {
-    using MinutesLabel<void>::label;
+constexpr const char InchesLabel<T>::label[];
+struct Inches : decltype(Centi<Meters>{} * mag<254>() / mag<100>()), InchesLabel<void> {
+    using InchesLabel<void>::label;
 };
-constexpr auto minute = SingularNameFor<Minutes>{};
-constexpr auto minutes = QuantityMaker<Minutes>{};
+constexpr auto inch = SingularNameFor<Inches>{};
+constexpr auto inches = QuantityMaker<Inches>{};
 
 namespace symbols {
-constexpr auto min = SymbolFor<Minutes>{};
+constexpr auto in = SymbolFor<Inches>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FahrenheitLabel {
+    static constexpr const char label[] = "degF";
+};
+template <typename T>
+constexpr const char FahrenheitLabel<T>::label[];
+struct Rankines : decltype(Kelvins{} * mag<5>() / mag<9>()) {};
+constexpr auto rankines = QuantityMaker<Rankines>{};
+struct Fahrenheit : Rankines, FahrenheitLabel<void> {
+    using FahrenheitLabel<void>::label;
+    static constexpr auto origin() { return centi(rankines)(459'67); }
+};
+constexpr auto fahrenheit_qty = QuantityMaker<Fahrenheit>{};
+constexpr auto fahrenheit_pt = QuantityPointMaker<Fahrenheit>{};
+
+[[deprecated(
+    "`fahrenheit()` is ambiguous.  Use `fahrenheit_pt()` for _points_, or `fahrenheit_qty()` for "
+    "_quantities_")]] constexpr auto fahrenheit = QuantityMaker<Fahrenheit>{};
+
+namespace symbols {
+constexpr auto degF_qty = SymbolFor<Fahrenheit>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6756,27 +7924,7 @@ constexpr auto N = SymbolFor<Newtons>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct JoulesLabel {
-    static constexpr const char label[] = "J";
-};
-template <typename T>
-constexpr const char JoulesLabel<T>::label[];
-struct Joules : decltype(Newtons{} * Meters{}), JoulesLabel<void> {
-    using JoulesLabel<void>::label;
-};
-constexpr auto joule = SingularNameFor<Joules>{};
-constexpr auto joules = QuantityMaker<Joules>{};
-
-namespace symbols {
-constexpr auto J = SymbolFor<Joules>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6784,21 +7932,24 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct WattsLabel {
-    static constexpr const char label[] = "W";
+struct USQuartsLabel {
+    static constexpr const char label[] = "US_qt";
 };
 template <typename T>
-constexpr const char WattsLabel<T>::label[];
-struct Watts : decltype(Joules{} / Seconds{}), WattsLabel<void> {
-    using WattsLabel<void>::label;
+constexpr const char USQuartsLabel<T>::label[];
+struct USQuarts : decltype(cubed(Inches{}) * (mag<231>() / mag<4>())), USQuartsLabel<void> {
+    using USQuartsLabel<void>::label;
 };
-constexpr auto watt = SingularNameFor<Watts>{};
-constexpr auto watts = QuantityMaker<Watts>{};
+constexpr auto us_quart = SingularNameFor<USQuarts>{};
+constexpr auto us_quarts = QuantityMaker<USQuarts>{};
 
 namespace symbols {
-constexpr auto W = SymbolFor<Watts>{};
+constexpr auto US_qt = SymbolFor<USQuarts>{};
 }
+
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6806,21 +7957,119 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct HoursLabel {
-    static constexpr const char label[] = "h";
+struct BecquerelLabel {
+    static constexpr const char label[] = "Bq";
 };
 template <typename T>
-constexpr const char HoursLabel<T>::label[];
-struct Hours : decltype(Minutes{} * mag<60>()), HoursLabel<void> {
-    using HoursLabel<void>::label;
+constexpr const char BecquerelLabel<T>::label[];
+struct Becquerel : UnitInverseT<Seconds>, BecquerelLabel<void> {
+    using BecquerelLabel<void>::label;
 };
-constexpr auto hour = SingularNameFor<Hours>{};
-constexpr auto hours = QuantityMaker<Hours>{};
+constexpr auto becquerel = QuantityMaker<Becquerel>{};
 
 namespace symbols {
-constexpr auto h = SymbolFor<Hours>{};
+constexpr auto Bq = SymbolFor<Becquerel>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct USPintsLabel {
+    static constexpr const char label[] = "US_pt";
+};
+template <typename T>
+constexpr const char USPintsLabel<T>::label[];
+struct USPints : decltype(cubed(Inches{}) * (mag<231>() / mag<8>())), USPintsLabel<void> {
+    using USPintsLabel<void>::label;
+};
+constexpr auto us_pint = SingularNameFor<USPints>{};
+constexpr auto us_pints = QuantityMaker<USPints>{};
+
+namespace symbols {
+constexpr auto US_pt = SymbolFor<USPints>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct HertzLabel {
+    static constexpr const char label[] = "Hz";
+};
+template <typename T>
+constexpr const char HertzLabel<T>::label[];
+struct Hertz : UnitInverseT<Seconds>, HertzLabel<void> {
+    using HertzLabel<void>::label;
+};
+constexpr auto hertz = QuantityMaker<Hertz>{};
+
+namespace symbols {
+constexpr auto Hz = SymbolFor<Hertz>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct KatalsLabel {
+    static constexpr const char label[] = "kat";
+};
+template <typename T>
+constexpr const char KatalsLabel<T>::label[];
+struct Katals : decltype(Moles{} / Seconds{}), KatalsLabel<void> {
+    using KatalsLabel<void>::label;
+};
+constexpr auto katal = SingularNameFor<Katals>{};
+constexpr auto katals = QuantityMaker<Katals>{};
+
+namespace symbols {
+constexpr auto kat = SymbolFor<Katals>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct StandardGravityLabel {
+    static constexpr const char label[] = "g_0";
+};
+template <typename T>
+constexpr const char StandardGravityLabel<T>::label[];
+struct StandardGravity
+    : decltype((Meters{} / squared(Seconds{})) * (mag<980'665>() / mag<100'000>())),
+      StandardGravityLabel<void> {
+    using StandardGravityLabel<void>::label;
+};
+constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
+
+namespace symbols {
+constexpr auto g_0 = SymbolFor<StandardGravity>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6844,27 +8093,7 @@ constexpr auto lbf = SymbolFor<PoundsForce>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FeetLabel {
-    static constexpr const char label[] = "ft";
-};
-template <typename T>
-constexpr const char FeetLabel<T>::label[];
-struct Feet : decltype(Inches{} * mag<12>()), FeetLabel<void> {
-    using FeetLabel<void>::label;
-};
-constexpr auto foot = SingularNameFor<Feet>{};
-constexpr auto feet = QuantityMaker<Feet>{};
-
-namespace symbols {
-constexpr auto ft = SymbolFor<Feet>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6872,21 +8101,24 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct DegreesLabel {
-    static constexpr const char label[] = "deg";
+struct USGallonsLabel {
+    static constexpr const char label[] = "US_gal";
 };
 template <typename T>
-constexpr const char DegreesLabel<T>::label[];
-struct Degrees : decltype(Radians{} * PI / mag<180>()), DegreesLabel<void> {
-    using DegreesLabel<void>::label;
+constexpr const char USGallonsLabel<T>::label[];
+struct USGallons : decltype(cubed(Inches{}) * mag<231>()), USGallonsLabel<void> {
+    using USGallonsLabel<void>::label;
 };
-constexpr auto degree = SingularNameFor<Degrees>{};
-constexpr auto degrees = QuantityMaker<Degrees>{};
+constexpr auto us_gallon = SingularNameFor<USGallons>{};
+constexpr auto us_gallons = QuantityMaker<USGallons>{};
 
 namespace symbols {
-constexpr auto deg = SymbolFor<Degrees>{};
+constexpr auto US_gal = SymbolFor<USGallons>{};
 }
+
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6894,21 +8126,30 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct MilesLabel {
-    static constexpr const char label[] = "mi";
+struct PascalsLabel {
+    static constexpr const char label[] = "Pa";
 };
 template <typename T>
-constexpr const char MilesLabel<T>::label[];
-struct Miles : decltype(Feet{} * mag<5'280>()), MilesLabel<void> {
-    using MilesLabel<void>::label;
+constexpr const char PascalsLabel<T>::label[];
+struct Pascals : decltype(Newtons{} / squared(Meters{})), PascalsLabel<void> {
+    using PascalsLabel<void>::label;
 };
-constexpr auto mile = SingularNameFor<Miles>{};
-constexpr auto miles = QuantityMaker<Miles>{};
+
+#ifndef pascal
+[[deprecated(
+    "Conflicts with the `pascal` macro from <Windows.h>; declare manually "
+    "instead.")]] constexpr auto pascal = SingularNameFor<Pascals>{};
+#endif
+
+constexpr auto pascals = QuantityMaker<Pascals>{};
+constexpr QuantityPointMaker<Pascals> pascals_pt{};
 
 namespace symbols {
-constexpr auto mi = SymbolFor<Miles>{};
+constexpr auto Pa = SymbolFor<Pascals>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6916,21 +8157,23 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct RevolutionsLabel {
-    static constexpr const char label[] = "rev";
+struct BarsLabel {
+    static constexpr const char label[] = "bar";
 };
 template <typename T>
-constexpr const char RevolutionsLabel<T>::label[];
-struct Revolutions : decltype(Degrees{} * mag<360>()), RevolutionsLabel<void> {
-    using RevolutionsLabel<void>::label;
+constexpr const char BarsLabel<T>::label[];
+struct Bars : decltype(Kilo<Pascals>{} * mag<100>()), BarsLabel<void> {
+    using BarsLabel<void>::label;
 };
-constexpr auto revolution = SingularNameFor<Revolutions>{};
-constexpr auto revolutions = QuantityMaker<Revolutions>{};
+constexpr auto bar = SingularNameFor<Bars>{};
+constexpr auto bars = QuantityMaker<Bars>{};
 
 namespace symbols {
-constexpr auto rev = SymbolFor<Revolutions>{};
-}
+constexpr auto bar = SymbolFor<Bars>{};
+}  // namespace symbols
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6954,27 +8197,174 @@ constexpr auto lm = SymbolFor<Lumens>{};
 }
 }  // namespace au
 
+// Keep corresponding `_fwd.hh` file on top.
+
 
 namespace au {
 
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct KnotsLabel {
-    static constexpr const char label[] = "kn";
+struct CoulombsLabel {
+    static constexpr const char label[] = "C";
 };
 template <typename T>
-constexpr const char KnotsLabel<T>::label[];
-struct Knots : decltype(NauticalMiles{} / Hours{}), KnotsLabel<void> {
-    using KnotsLabel<void>::label;
+constexpr const char CoulombsLabel<T>::label[];
+struct Coulombs : decltype(Amperes{} * Seconds{}), CoulombsLabel<void> {
+    using CoulombsLabel<void>::label;
 };
-constexpr auto knot = SingularNameFor<Knots>{};
-constexpr auto knots = QuantityMaker<Knots>{};
+constexpr auto coulomb = SingularNameFor<Coulombs>{};
+constexpr auto coulombs = QuantityMaker<Coulombs>{};
 
 namespace symbols {
-constexpr auto kn = SymbolFor<Knots>{};
+constexpr auto C = SymbolFor<Coulombs>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LuxLabel {
+    static constexpr const char label[] = "lx";
+};
+template <typename T>
+constexpr const char LuxLabel<T>::label[];
+struct Lux : decltype(Lumens{} / squared(Meters{})), LuxLabel<void> {
+    using LuxLabel<void>::label;
+};
+constexpr auto lux = QuantityMaker<Lux>{};
+
+namespace symbols {
+constexpr auto lx = SymbolFor<Lux>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MinutesLabel {
+    static constexpr const char label[] = "min";
+};
+template <typename T>
+constexpr const char MinutesLabel<T>::label[];
+struct Minutes : decltype(Seconds{} * mag<60>()), MinutesLabel<void> {
+    using MinutesLabel<void>::label;
+};
+constexpr auto minute = SingularNameFor<Minutes>{};
+constexpr auto minutes = QuantityMaker<Minutes>{};
+
+namespace symbols {
+constexpr auto min = SymbolFor<Minutes>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FeetLabel {
+    static constexpr const char label[] = "ft";
+};
+template <typename T>
+constexpr const char FeetLabel<T>::label[];
+struct Feet : decltype(Inches{} * mag<12>()), FeetLabel<void> {
+    using FeetLabel<void>::label;
+};
+constexpr auto foot = SingularNameFor<Feet>{};
+constexpr auto feet = QuantityMaker<Feet>{};
+
+namespace symbols {
+constexpr auto ft = SymbolFor<Feet>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct JoulesLabel {
+    static constexpr const char label[] = "J";
+};
+template <typename T>
+constexpr const char JoulesLabel<T>::label[];
+struct Joules : decltype(Newtons{} * Meters{}), JoulesLabel<void> {
+    using JoulesLabel<void>::label;
+};
+constexpr auto joule = SingularNameFor<Joules>{};
+constexpr auto joules = QuantityMaker<Joules>{};
+
+namespace symbols {
+constexpr auto J = SymbolFor<Joules>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MilesLabel {
+    static constexpr const char label[] = "mi";
+};
+template <typename T>
+constexpr const char MilesLabel<T>::label[];
+struct Miles : decltype(Feet{} * mag<5'280>()), MilesLabel<void> {
+    using MilesLabel<void>::label;
+};
+constexpr auto mile = SingularNameFor<Miles>{};
+constexpr auto miles = QuantityMaker<Miles>{};
+
+namespace symbols {
+constexpr auto mi = SymbolFor<Miles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct YardsLabel {
+    static constexpr const char label[] = "yd";
+};
+template <typename T>
+constexpr const char YardsLabel<T>::label[];
+struct Yards : decltype(Feet{} * mag<3>()), YardsLabel<void> {
+    using YardsLabel<void>::label;
+};
+constexpr auto yard = SingularNameFor<Yards>{};
+constexpr auto yards = QuantityMaker<Yards>{};
+
+namespace symbols {
+constexpr auto yd = SymbolFor<Yards>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -6998,73 +8388,7 @@ constexpr auto slug = SymbolFor<Slugs>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FathomsLabel {
-    static constexpr const char label[] = "ftm";
-};
-template <typename T>
-constexpr const char FathomsLabel<T>::label[];
-struct Fathoms : decltype(Feet{} * mag<6>()), FathomsLabel<void> {
-    using FathomsLabel<void>::label;
-};
-constexpr auto fathom = SingularNameFor<Fathoms>{};
-constexpr auto fathoms = QuantityMaker<Fathoms>{};
-
-namespace symbols {
-constexpr auto ftm = SymbolFor<Fathoms>{};
-}
-}  // namespace au
-
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BytesLabel {
-    static constexpr const char label[] = "B";
-};
-template <typename T>
-constexpr const char BytesLabel<T>::label[];
-struct Bytes : decltype(Bits{} * mag<8>()), BytesLabel<void> {
-    using BytesLabel<void>::label;
-};
-constexpr auto byte = SingularNameFor<Bytes>{};
-constexpr auto bytes = QuantityMaker<Bytes>{};
-
-namespace symbols {
-constexpr auto B = SymbolFor<Bytes>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PascalsLabel {
-    static constexpr const char label[] = "Pa";
-};
-template <typename T>
-constexpr const char PascalsLabel<T>::label[];
-struct Pascals : decltype(Newtons{} / squared(Meters{})), PascalsLabel<void> {
-    using PascalsLabel<void>::label;
-};
-constexpr auto pascal = SingularNameFor<Pascals>{};
-constexpr auto pascals = QuantityMaker<Pascals>{};
-constexpr QuantityPointMaker<Pascals> pascals_pt{};
-
-namespace symbols {
-constexpr auto Pa = SymbolFor<Pascals>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -7088,27 +8412,127 @@ constexpr auto Gy = SymbolFor<Grays>{};
 }
 }  // namespace au
 
+// Keep corresponding `_fwd.hh` file on top.
+
 
 namespace au {
 
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct VoltsLabel {
-    static constexpr const char label[] = "V";
+struct HoursLabel {
+    static constexpr const char label[] = "h";
 };
 template <typename T>
-constexpr const char VoltsLabel<T>::label[];
-struct Volts : decltype(Watts{} / Amperes{}), VoltsLabel<void> {
-    using VoltsLabel<void>::label;
+constexpr const char HoursLabel<T>::label[];
+struct Hours : decltype(Minutes{} * mag<60>()), HoursLabel<void> {
+    using HoursLabel<void>::label;
 };
-constexpr auto volt = SingularNameFor<Volts>{};
-constexpr auto volts = QuantityMaker<Volts>{};
+constexpr auto hour = SingularNameFor<Hours>{};
+constexpr auto hours = QuantityMaker<Hours>{};
 
 namespace symbols {
-constexpr auto V = SymbolFor<Volts>{};
+constexpr auto h = SymbolFor<Hours>{};
 }
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FathomsLabel {
+    static constexpr const char label[] = "ftm";
+};
+template <typename T>
+constexpr const char FathomsLabel<T>::label[];
+struct Fathoms : decltype(Feet{} * mag<6>()), FathomsLabel<void> {
+    using FathomsLabel<void>::label;
+};
+constexpr auto fathom = SingularNameFor<Fathoms>{};
+constexpr auto fathoms = QuantityMaker<Fathoms>{};
+
+namespace symbols {
+constexpr auto ftm = SymbolFor<Fathoms>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct WattsLabel {
+    static constexpr const char label[] = "W";
+};
+template <typename T>
+constexpr const char WattsLabel<T>::label[];
+struct Watts : decltype(Joules{} / Seconds{}), WattsLabel<void> {
+    using WattsLabel<void>::label;
+};
+constexpr auto watt = SingularNameFor<Watts>{};
+constexpr auto watts = QuantityMaker<Watts>{};
+
+namespace symbols {
+constexpr auto W = SymbolFor<Watts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct KnotsLabel {
+    static constexpr const char label[] = "kn";
+};
+template <typename T>
+constexpr const char KnotsLabel<T>::label[];
+struct Knots : decltype(NauticalMiles{} / Hours{}), KnotsLabel<void> {
+    using KnotsLabel<void>::label;
+};
+constexpr auto knot = SingularNameFor<Knots>{};
+constexpr auto knots = QuantityMaker<Knots>{};
+
+namespace symbols {
+constexpr auto kn = SymbolFor<Knots>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FurlongsLabel {
+    static constexpr const char label[] = "fur";
+};
+template <typename T>
+constexpr const char FurlongsLabel<T>::label[];
+struct Furlongs : decltype(Miles{} / mag<8>()), FurlongsLabel<void> {
+    using FurlongsLabel<void>::label;
+};
+constexpr auto furlong = SingularNameFor<Furlongs>{};
+constexpr auto furlongs = QuantityMaker<Furlongs>{};
+
+namespace symbols {
+constexpr auto fur = SymbolFor<Furlongs>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -7133,6 +8557,94 @@ constexpr auto d = SymbolFor<Days>{};
 }  // namespace au
 
 
+
+namespace au {
+
+// Define 1:1 mapping between duration types of chrono library and our library.
+template <typename RepT, typename Period>
+struct CorrespondingQuantity<std::chrono::duration<RepT, Period>> {
+    using Unit = decltype(Seconds{} * (mag<Period::num>() / mag<Period::den>()));
+    using Rep = RepT;
+
+    using ChronoDuration = std::chrono::duration<Rep, Period>;
+
+    static constexpr Rep extract_value(ChronoDuration d) { return d.count(); }
+    static constexpr ChronoDuration construct_from_value(Rep x) { return ChronoDuration{x}; }
+};
+
+// Define special mappings for widely used chrono types.
+template <typename ChronoType, typename AuUnit>
+struct SpecialCorrespondingQuantity {
+    using Unit = AuUnit;
+    using Rep = decltype(ChronoType{}.count());
+
+    static constexpr Rep extract_value(ChronoType d) { return d.count(); }
+    static constexpr ChronoType construct_from_value(Rep x) { return ChronoType{x}; }
+};
+
+template <>
+struct CorrespondingQuantity<std::chrono::nanoseconds>
+    : SpecialCorrespondingQuantity<std::chrono::nanoseconds, Nano<Seconds>> {};
+
+template <>
+struct CorrespondingQuantity<std::chrono::microseconds>
+    : SpecialCorrespondingQuantity<std::chrono::microseconds, Micro<Seconds>> {};
+
+template <>
+struct CorrespondingQuantity<std::chrono::milliseconds>
+    : SpecialCorrespondingQuantity<std::chrono::milliseconds, Milli<Seconds>> {};
+
+template <>
+struct CorrespondingQuantity<std::chrono::seconds>
+    : SpecialCorrespondingQuantity<std::chrono::seconds, Seconds> {};
+
+template <>
+struct CorrespondingQuantity<std::chrono::minutes>
+    : SpecialCorrespondingQuantity<std::chrono::minutes, Minutes> {};
+
+template <>
+struct CorrespondingQuantity<std::chrono::hours>
+    : SpecialCorrespondingQuantity<std::chrono::hours, Hours> {};
+
+// Convert any Au duration quantity to an equivalent `std::chrono::duration`.
+template <typename U, typename R>
+constexpr auto as_chrono_duration(Quantity<U, R> dt) {
+    constexpr auto ratio = unit_ratio(U{}, seconds);
+    static_assert(is_rational(ratio), "Cannot convert to chrono::duration with non-rational ratio");
+    return std::chrono::duration<R,
+                                 std::ratio<get_value<std::intmax_t>(numerator(ratio)),
+                                            get_value<std::intmax_t>(denominator(ratio))>>{dt};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct VoltsLabel {
+    static constexpr const char label[] = "V";
+};
+template <typename T>
+constexpr const char VoltsLabel<T>::label[];
+struct Volts : decltype(Watts{} / Amperes{}), VoltsLabel<void> {
+    using VoltsLabel<void>::label;
+};
+constexpr auto volt = SingularNameFor<Volts>{};
+constexpr auto volts = QuantityMaker<Volts>{};
+
+namespace symbols {
+constexpr auto V = SymbolFor<Volts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
 namespace au {
 
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
@@ -7154,70 +8666,7 @@ constexpr auto ohm = SymbolFor<Ohms>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct YardsLabel {
-    static constexpr const char label[] = "yd";
-};
-template <typename T>
-constexpr const char YardsLabel<T>::label[];
-struct Yards : decltype(Feet{} * mag<3>()), YardsLabel<void> {
-    using YardsLabel<void>::label;
-};
-constexpr auto yard = SingularNameFor<Yards>{};
-constexpr auto yards = QuantityMaker<Yards>{};
-
-namespace symbols {
-constexpr auto yd = SymbolFor<Yards>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FurlongsLabel {
-    static constexpr const char label[] = "fur";
-};
-template <typename T>
-constexpr const char FurlongsLabel<T>::label[];
-struct Furlongs : decltype(Miles{} / mag<8>()), FurlongsLabel<void> {
-    using FurlongsLabel<void>::label;
-};
-constexpr auto furlong = SingularNameFor<Furlongs>{};
-constexpr auto furlongs = QuantityMaker<Furlongs>{};
-
-namespace symbols {
-constexpr auto fur = SymbolFor<Furlongs>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LuxLabel {
-    static constexpr const char label[] = "lx";
-};
-template <typename T>
-constexpr const char LuxLabel<T>::label[];
-struct Lux : decltype(Lumens{} / squared(Meters{})), LuxLabel<void> {
-    using LuxLabel<void>::label;
-};
-constexpr auto lux = QuantityMaker<Lux>{};
-
-namespace symbols {
-constexpr auto lx = SymbolFor<Lux>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -7242,48 +8691,7 @@ constexpr auto F = SymbolFor<Farads>{};
 }  // namespace au
 
 
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SiemensLabel {
-    static constexpr const char label[] = "S";
-};
-template <typename T>
-constexpr const char SiemensLabel<T>::label[];
-struct Siemens : UnitInverseT<Ohms>, SiemensLabel<void> {
-    using SiemensLabel<void>::label;
-};
-constexpr auto siemen = SingularNameFor<Siemens>{};
-constexpr auto siemens = QuantityMaker<Siemens>{};
-
-namespace symbols {
-constexpr auto S = SymbolFor<Siemens>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BarsLabel {
-    static constexpr const char label[] = "bar";
-};
-template <typename T>
-constexpr const char BarsLabel<T>::label[];
-struct Bars : decltype(Kilo<Pascals>{} * mag<100>()), BarsLabel<void> {
-    using BarsLabel<void>::label;
-};
-constexpr auto bar = SingularNameFor<Bars>{};
-constexpr auto bars = QuantityMaker<Bars>{};
-
-namespace symbols {
-constexpr auto bar = SymbolFor<Bars>{};
-}  // namespace symbols
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -7307,27 +8715,7 @@ constexpr auto Wb = SymbolFor<Webers>{};
 }
 }  // namespace au
 
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HenriesLabel {
-    static constexpr const char label[] = "H";
-};
-template <typename T>
-constexpr const char HenriesLabel<T>::label[];
-struct Henries : decltype(Webers{} / Amperes{}), HenriesLabel<void> {
-    using HenriesLabel<void>::label;
-};
-constexpr auto henry = SingularNameFor<Henries>{};
-constexpr auto henries = QuantityMaker<Henries>{};
-
-namespace symbols {
-constexpr auto H = SymbolFor<Henries>{};
-}
-}  // namespace au
+// Keep corresponding `_fwd.hh` file on top.
 
 
 namespace au {
@@ -7347,5 +8735,53 @@ constexpr auto tesla = QuantityMaker<Tesla>{};
 
 namespace symbols {
 constexpr auto T = SymbolFor<Tesla>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SiemensLabel {
+    static constexpr const char label[] = "S";
+};
+template <typename T>
+constexpr const char SiemensLabel<T>::label[];
+struct Siemens : UnitInverseT<Ohms>, SiemensLabel<void> {
+    using SiemensLabel<void>::label;
+};
+constexpr auto siemen = SingularNameFor<Siemens>{};
+constexpr auto siemens = QuantityMaker<Siemens>{};
+
+namespace symbols {
+constexpr auto S = SymbolFor<Siemens>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct HenriesLabel {
+    static constexpr const char label[] = "H";
+};
+template <typename T>
+constexpr const char HenriesLabel<T>::label[];
+struct Henries : decltype(Webers{} / Amperes{}), HenriesLabel<void> {
+    using HenriesLabel<void>::label;
+};
+constexpr auto henry = SingularNameFor<Henries>{};
+constexpr auto henries = QuantityMaker<Henries>{};
+
+namespace symbols {
+constexpr auto H = SymbolFor<Henries>{};
 }
 }  // namespace au
