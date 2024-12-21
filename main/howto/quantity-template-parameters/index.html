@@ -12,25 +12,25 @@
         <meta name="author" content="Au team">
       
       
-        <link rel="canonical" href="https://aurora-opensource.github.io/au/main/reference/detail/monovalue_types/">
+        <link rel="canonical" href="https://aurora-opensource.github.io/au/main/howto/quantity-template-parameters/">
       
       
-        <link rel="prev" href="../dimension/">
+        <link rel="prev" href="../new-units/">
       
       
-        <link rel="next" href="../packs/">
+        <link rel="next" href="../interop/">
       
       
-      <link rel="icon" href="../../../assets/favicon.ico">
+      <link rel="icon" href="../../assets/favicon.ico">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.48">
     
     
       
-        <title>Monovalue Types - The Au units library</title>
+        <title>Quantity template parameters - The Au units library</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.6f8fc17f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6f8fc17f.min.css">
       
       
 
@@ -49,9 +49,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../tweaks.css">
+      <link rel="stylesheet" href="../../tweaks.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -70,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#monovalue-types" class="md-skip">
+        <a href="#quantity-template-parameters" class="md-skip">
           Skip to content
         </a>
       
@@ -90,9 +90,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="The Au units library" class="md-header__button md-logo" aria-label="The Au units library" data-md-component="logo">
+    <a href="../.." title="The Au units library" class="md-header__button md-logo" aria-label="The Au units library" data-md-component="logo">
       
-  <img src="../../../assets/au-logo.png" alt="logo">
+  <img src="../../assets/au-logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -109,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Monovalue Types
+              Quantity template parameters
             
           </span>
         </div>
@@ -198,9 +198,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="The Au units library" class="md-nav__button md-logo" aria-label="The Au units library" data-md-component="logo">
+    <a href="../.." title="The Au units library" class="md-nav__button md-logo" aria-label="The Au units library" data-md-component="logo">
       
-  <img src="../../../assets/au-logo.png" alt="logo">
+  <img src="../../assets/au-logo.png" alt="logo">
 
     </a>
     The Au units library
@@ -227,7 +227,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -247,7 +247,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../develop/" class="md-nav__link">
+      <a href="../../develop/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -267,7 +267,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../install/" class="md-nav__link">
+      <a href="../../install/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -287,7 +287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../supported-compilers/" class="md-nav__link">
+      <a href="../../supported-compilers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -307,7 +307,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../troubleshooting/" class="md-nav__link">
+      <a href="../../troubleshooting/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -362,7 +362,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../alternatives/" class="md-nav__link">
+      <a href="../../alternatives/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -425,7 +425,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/" class="md-nav__link">
+      <a href="../../discussion/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -481,7 +481,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/" class="md-nav__link">
+      <a href="../../discussion/concepts/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -502,7 +502,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/arithmetic/" class="md-nav__link">
+      <a href="../../discussion/concepts/arithmetic/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -523,7 +523,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/common_unit/" class="md-nav__link">
+      <a href="../../discussion/concepts/common_unit/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -544,7 +544,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/dimensionless/" class="md-nav__link">
+      <a href="../../discussion/concepts/dimensionless/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -565,7 +565,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/overflow/" class="md-nav__link">
+      <a href="../../discussion/concepts/overflow/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -586,7 +586,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/quantity_point/" class="md-nav__link">
+      <a href="../../discussion/concepts/quantity_point/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -607,7 +607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/concepts/zero/" class="md-nav__link">
+      <a href="../../discussion/concepts/zero/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -671,7 +671,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/idioms/" class="md-nav__link">
+      <a href="../../discussion/idioms/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -692,7 +692,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/idioms/unit-slots/" class="md-nav__link">
+      <a href="../../discussion/idioms/unit-slots/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -756,7 +756,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/implementation/" class="md-nav__link">
+      <a href="../../discussion/implementation/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -777,7 +777,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/implementation/applying_magnitudes/" class="md-nav__link">
+      <a href="../../discussion/implementation/applying_magnitudes/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -798,7 +798,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../discussion/implementation/vector_space/" class="md-nav__link">
+      <a href="../../discussion/implementation/vector_space/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -831,17 +831,19 @@
       
   
   
+    
   
   
+  
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
         
           
           <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
@@ -855,7 +857,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             Howto
@@ -869,7 +871,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -890,7 +892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/forward-declarations/" class="md-nav__link">
+      <a href="../forward-declarations/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -911,7 +913,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/new-constants/" class="md-nav__link">
+      <a href="../new-constants/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -932,7 +934,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/new-dimensions/" class="md-nav__link">
+      <a href="../new-dimensions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -953,7 +955,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/new-units/" class="md-nav__link">
+      <a href="../new-units/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -971,10 +973,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../../howto/quantity-template-parameters/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Quantity template parameters
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -983,6 +1005,44 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to use
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Worked example
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1030,7 +1090,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/interop/" class="md-nav__link">
+      <a href="../interop/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1051,7 +1111,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../howto/interop/nholthaus/" class="md-nav__link">
+      <a href="../interop/nholthaus/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1084,19 +1144,17 @@
       
   
   
-    
   
   
-  
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
         
           
           <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
@@ -1110,7 +1168,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_9">
             <span class="md-nav__icon md-icon"></span>
             Reference
@@ -1124,7 +1182,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../../reference/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1145,7 +1203,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../constant/" class="md-nav__link">
+      <a href="../../reference/constant/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1166,7 +1224,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../corresponding_quantity/" class="md-nav__link">
+      <a href="../../reference/corresponding_quantity/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1187,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../magnitude/" class="md-nav__link">
+      <a href="../../reference/magnitude/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1208,7 +1266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../math/" class="md-nav__link">
+      <a href="../../reference/math/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1229,7 +1287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../powers/" class="md-nav__link">
+      <a href="../../reference/powers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1250,7 +1308,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../prefix/" class="md-nav__link">
+      <a href="../../reference/prefix/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1271,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../quantity/" class="md-nav__link">
+      <a href="../../reference/quantity/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1292,7 +1350,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../quantity_point/" class="md-nav__link">
+      <a href="../../reference/quantity_point/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1313,7 +1371,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../unit/" class="md-nav__link">
+      <a href="../../reference/unit/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1334,7 +1392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../zero/" class="md-nav__link">
+      <a href="../../reference/zero/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1352,19 +1410,17 @@
                 
   
   
-    
   
   
-  
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_12" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_12" >
         
           
           <label class="md-nav__link" for="__nav_9_12" id="__nav_9_12_label" tabindex="0">
@@ -1378,7 +1434,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_12_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_12_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_9_12">
             <span class="md-nav__icon md-icon"></span>
             Detail
@@ -1392,7 +1448,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../reference/detail/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1413,7 +1469,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dimension/" class="md-nav__link">
+      <a href="../../reference/detail/dimension/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1431,30 +1487,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Monovalue Types
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../reference/detail/monovalue_types/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1463,53 +1499,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#identifying-monovalue-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      Identifying monovalue types
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#examples-of-monovalue-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      Examples of monovalue types
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#switching" class="md-nav__link">
-    <span class="md-ellipsis">
-      Switching between types and values
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1522,7 +1511,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../packs/" class="md-nav__link">
+      <a href="../../reference/detail/packs/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1593,7 +1582,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/" class="md-nav__link">
+      <a href="../../tutorial/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1614,7 +1603,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/101-quantity-makers/" class="md-nav__link">
+      <a href="../../tutorial/101-quantity-makers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1635,7 +1624,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/102-api-types/" class="md-nav__link">
+      <a href="../../tutorial/102-api-types/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1656,7 +1645,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/103-unit-conversions/" class="md-nav__link">
+      <a href="../../tutorial/103-unit-conversions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1712,7 +1701,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/exercise/101-quantity-makers/" class="md-nav__link">
+      <a href="../../tutorial/exercise/101-quantity-makers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1733,7 +1722,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/exercise/102-api-types/" class="md-nav__link">
+      <a href="../../tutorial/exercise/102-api-types/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1754,7 +1743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/exercise/103-unit-conversions/" class="md-nav__link">
+      <a href="../../tutorial/exercise/103-unit-conversions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1801,89 +1790,89 @@
   
 
 
-<h1 id="monovalue-types">Monovalue Types<a class="headerlink" href="#monovalue-types" title="Permanent link">&para;</a></h1>
-<p>A &ldquo;monovalue type&rdquo; is a type which can only hold a single value.  This means that knowing the type
-is <em>equivalent</em> to knowing the value, and vice versa.  We can convert back and forth between
-representing it as a type, and as a value, depending on our needs.</p>
-<p>We named this concept because it occurs again and again in Au, and the name makes it easier to refer
-to.  The &ldquo;monovalue&rdquo; name is based on
-<a href="https://en.cppreference.com/w/cpp/utility/variant/monostate"><code>std::monostate</code></a>, which has these
-properties.  However, &ldquo;monostate&rdquo; could have been confused with the <a href="https://www.simplethread.com/the-monostate-pattern/">monostate
-<em>pattern</em></a>, which exposes actual, changeable,
-global state to its users.  &ldquo;Monovalue&rdquo; also emphasizes <em>value semantics</em>, which is a core property
-of these types.</p>
-<h2 id="identifying-monovalue-types">Identifying monovalue types<a class="headerlink" href="#identifying-monovalue-types" title="Permanent link">&para;</a></h2>
-<p>A type <code>T</code> is a monovalue type when it fulfills these conditions.</p>
-<ol>
-<li><code>T</code> can be instantiated.</li>
-<li>Every instance of <code>T</code> behaves identically to every other instance, in every way, and this
-   behavior does not depend on any program state.</li>
-<li>Instances of <code>T</code> support some set of operations with other types.</li>
-</ol>
-<p>These properties mean we can freely convert a monovalue object between its &ldquo;type&rdquo; and &ldquo;value&rdquo;
-representations.  This is a core feature of monovalue types.</p>
-<p>The second property also distinguishes monovalue types from the monostate pattern mentioned above.</p>
-<p>The third property means there has to be something you can <em>do</em> with the instances.</p>
-<h2 id="examples-of-monovalue-types">Examples of monovalue types<a class="headerlink" href="#examples-of-monovalue-types" title="Permanent link">&para;</a></h2>
-<p>Here are some canonical examples in Au.</p>
-<table>
-<thead>
-<tr>
-<th>Type</th>
-<th>Instance</th>
-<th>Example Operations</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Zero</code></td>
-<td><code>ZERO</code></td>
-<td>Comparing to any <code>Quantity</code></td>
-</tr>
-<tr>
-<td><code>Magnitude&lt;&gt;</code></td>
-<td><code>ONE</code></td>
-<td><ul><li>Equality comparison with other Magnitudes</li><li><code>get_value&lt;T&gt;(ONE)</code></li></ul></td>
-</tr>
-<tr>
-<td><code>Radians</code> (and other units)</td>
-<td><code>Radians{}</code> (no special pre-formed instance)</td>
-<td>Arithmetic with other units, such as <code>Radians{} / Meters{}</code></td>
-</tr>
-<tr>
-<td><code>Constant&lt;...&gt;</code></td>
-<td><code>SPEED_OF_LIGHT</code></td>
-<td><ul><li>Comparing to any same-dimension <code>Quantity</code></li><li><code>Quantity</code> construction with exact conversion policy</li><li>zero-cost multiplying to change units/dimensions of numbers and <code>Quantity</code> instances</li></ul></td>
-</tr>
-</tbody>
-</table>
-<h2 id="switching">Switching between types and values<a class="headerlink" href="#switching" title="Permanent link">&para;</a></h2>
-<p>To get the value of a monovalue type <code>T</code>, instantiate the type using <code>T{}</code>.</p>
-<p>To get the type of a monovalue type value <code>t</code>, pass it to <code>decltype(t)</code>.  However, if <code>t</code> is <code>const</code>
-(including <code>constexpr</code>), you&rsquo;ll need to use <code>std::decay_t&lt;decltype(t)&gt;</code>.</p>
+<h1 id="quantity-template-parameters">Quantity template parameters<a class="headerlink" href="#quantity-template-parameters" title="Permanent link">&para;</a></h1>
+<p>Sometimes, you may want to use a <code>Quantity</code> <em>value</em> as a template parameter.  Generally, this isn&rsquo;t
+possible prior to C++20: the set of types whose values can be template parameters is severely
+limited.  However, if your <code>Quantity</code> has an <em>integral</em> rep, we can provide
+a <a href="../../reference/quantity/#nttp">workaround</a>.  This page explains how to use it.</p>
 <details class="info">
-<summary>More details on when to use <code>std::decay_t</code></summary>
-<p>It&rsquo;s common to provide <code>constexpr</code> instances of monovalue types, like the following.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">static</span><span class="w"> </span><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">ZERO</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Zero</span><span class="p">{};</span>
-</code></pre></div>
-<p>In this case, <code>decltype(ZERO)</code> would be <code>const Zero</code>, not simply <code>Zero</code>.  If we tried comparing
-this to <code>Zero</code> in a type trait, it could fail.</p>
-<p>Using <code>std::decay_t</code> is a concise way to avoid this problem.  However, it only arises for
-<code>const</code> or <code>constexpr</code> instances &mdash; and only when comparing types for exact equality &mdash; so
-most users won&rsquo;t need to worry about this most of the time.</p>
+<summary>How does it work, under the hood?</summary>
+<p>Before C++20, non-type template parameters had to be, very roughly, <em>integral</em> types, <em>pointer</em>
+types (including references), or <em>enumerations</em>.  With integral and pointer types, there&rsquo;s no
+way to provide unit safety.  However, with enumerations, we <em>were</em> able to find a way.</p>
+<p>The way it works is that every <code>Quantity&lt;U, R&gt;</code> type defines its own custom enumeration type,
+which is associated only with that <code>Quantity</code> type: we call it <code>Quantity&lt;U, R&gt;::NTTP</code>. The type
+system preserves the association between the two, so we don&rsquo;t get mixed up with the <code>NTTP</code> type
+for any other <code>Quantity</code>. This lets us safely provide implicit conversion back and forth between
+the <code>Quantity</code> type and its <code>NTTP</code> type. What&rsquo;s more, it&rsquo;s legal C++ to <code>static_cast</code> between an
+enumeration and its underlying type, even for values that aren&rsquo;t part of the enumeration &mdash;
+therefore, we&rsquo;re able to hold any value that the <code>Quantity</code> type can.</p>
+<p>So, even though we can&rsquo;t <em>exactly</em> use a <code>Quantity</code> <em>value</em> as a template parameter, what we
+<em>can</em> do is use a special type that has <em>low-friction conversion</em> to and from that <code>Quantity</code>,
+while still providing the unit safety that we need.</p>
 </details>
-<p>This diagram summarizes how to go back and forth using <code>{}</code> and <code>decltype()</code>.</p>
-<pre class="mermaid"><code>flowchart LR
-
-subgraph "#quot;Realm of Types#quot;"
-  Type
-end
-
-subgraph "#quot;Realm of Instances#quot;"
-  value
-end
-
-Type --&gt;|"auto value =&lt;br&gt;Type{}"| value --&gt;|"using Type =&lt;br&gt;decltype(value)"| Type</code></pre>
+<h2 id="how-to-use">How to use<a class="headerlink" href="#how-to-use" title="Permanent link">&para;</a></h2>
+<p>Let&rsquo;s say that you have a specific specialization of <code>Quantity&lt;U, R&gt;</code>, with some concrete unit <code>U</code>
+and rep <code>R</code>.  (Remember that <code>std::is_integral&lt;R&gt;::value</code> <strong>must</strong> be true in order to use this
+feature.)  Here&rsquo;s how to use this type as a template parameter:</p>
+<ol>
+<li>
+<p>Use <code>Quantity&lt;U, R&gt;::NTTP</code> as the <em>type</em> of the template parameter.</p>
+</li>
+<li>
+<p>When instantiating the template, pass any instance of <code>Quantity&lt;U, R&gt;</code>.</p>
+<ul>
+<li>Note that you can pass the quantity itself, not <code>Quantity&lt;U, R&gt;::NTTP</code>!  Implicit conversion
+  makes this possible.</li>
+<li>Note also that the value (call it <code>q</code>) must be <strong>exactly</strong> an instance of <code>Quantity&lt;U, R&gt;</code>,
+  and not any other <code>Quantity</code> type.  If it&rsquo;s not, you&rsquo;ll get a compiler error.  You can fix
+  this by converting to <code>Quantity&lt;U, R&gt;</code> via the usual library mechanisms &mdash; namely, something
+  like <code>q.as&lt;R&gt;(U{})</code>.</li>
+</ul>
+</li>
+<li>
+<p>To use the value of the template parameter <em>as a <code>Quantity</code></em> in your code, you have two options.</p>
+<ul>
+<li>
+<p>You can assign it to a <code>Quantity&lt;U, R&gt;</code> variable.  If you do this, note again that the type
+  must match <strong>exactly</strong>.  If it does not, your best bet will be the following alternative.</p>
+</li>
+<li>
+<p>You can pass it to the <code>from_nttp()</code> function.  This converts it to a <code>Quantity&lt;U, R&gt;</code>
+  variable, which means that all of the usual library conversion mechanisms will automatically
+  work, with no further effort.</p>
+</li>
+</ul>
+</li>
+</ol>
+<h2 id="worked-example">Worked example<a class="headerlink" href="#worked-example" title="Permanent link">&para;</a></h2>
+<p>Suppose we have a <code>Processor</code> class that has some specific clock frequency.  We may want to use
+a <code>QuantityU64&lt;Hertz&gt;</code> to represent this frequency, and we may want to <em>template the class</em> on this
+frequency as well.  When we specialize this template, we&rsquo;d like to provide the value in megahertz,
+which could be more convenient for our use case.  Finally, we want to make it easy for end users to
+get the frequency as a variable, but as a twist, we&rsquo;ll provide it in gigahertz, with a <code>double</code> rep.</p>
+<p>Here&rsquo;s how we&rsquo;d define that template.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// Step (1): use the NTTP type as the template parameter.</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">template</span><span class="w"> </span><span class="o">&lt;</span><span class="n">QuantityU64</span><span class="o">&lt;</span><span class="n">Hertz</span><span class="o">&gt;::</span><span class="n">NTTP</span><span class="w"> </span><span class="n">ClockFreq</span><span class="o">&gt;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Processor</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w"> </span><span class="k">public</span><span class="o">:</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">constexpr</span><span class="w"> </span><span class="n">QuantityD</span><span class="o">&lt;</span><span class="n">Giga</span><span class="o">&lt;</span><span class="n">Hertz</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">clock_freq</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">        </span><span class="c1">// Step (3): use `from_nttp()` to make it a `Quantity`.</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">        </span><span class="c1">//</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">        </span><span class="c1">// Note how we don&#39;t have to specify the conversion explicitly!</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="c1">// Now that it&#39;s a `Quantity`, the usual mechanisms suffice.</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">from_nttp</span><span class="p">(</span><span class="n">ClockFreq</span><span class="p">);</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">};</span>
+</code></pre></div>
+<p>And here&rsquo;s how we&rsquo;d use it.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// Step (2): when instantiating, convert to the exact right `Quantity` type.</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">using</span><span class="w"> </span><span class="n">Proc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Processor</span><span class="o">&lt;</span><span class="n">mega</span><span class="p">(</span><span class="n">hertz</span><span class="p">)(</span><span class="mi">1&#39;200</span><span class="p">).</span><span class="n">as</span><span class="o">&lt;</span><span class="kt">uint64_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">hertz</span><span class="p">)</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">Proc</span><span class="o">::</span><span class="n">clock_freq</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span>
+</code></pre></div>
+<p>This program prints out <code>"1.2 GHz"</code>.</p>
 
 
 
@@ -1913,7 +1902,7 @@ Type --&gt;|"auto value =&lt;br&gt;Type{}"| value --&gt;|"using Type =&lt;br&gt;
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../dimension/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Dimension">
+          <a href="../new-units/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Defining new units">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1923,20 +1912,20 @@ Type --&gt;|"auto value =&lt;br&gt;Type{}"| value --&gt;|"using Type =&lt;br&gt;
                 Previous
               </span>
               <div class="md-ellipsis">
-                Dimension
+                Defining new units
               </div>
             </div>
           </a>
         
         
           
-          <a href="../packs/" class="md-footer__link md-footer__link--next" aria-label="Next: Parameter packs">
+          <a href="../interop/" class="md-footer__link md-footer__link--next" aria-label="Next: Inter-library Interoperation">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Parameter packs
+                Inter-library Interoperation
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1974,10 +1963,10 @@ Type --&gt;|"auto value =&lt;br&gt;Type{}"| value --&gt;|"using Type =&lt;br&gt;
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../assets/javascripts/workers/search.6ce7567c.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.83f73b43.min.js"></script>
+      <script src="../../assets/javascripts/bundle.83f73b43.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
       

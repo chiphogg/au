@@ -12,13 +12,13 @@
         <meta name="author" content="Au team">
       
       
-        <link rel="canonical" href="https://aurora-opensource.github.io/au/main/tutorial/101-quantity-makers/">
+        <link rel="canonical" href="https://aurora-opensource.github.io/au/main/howto/forward-declarations/">
       
       
         <link rel="prev" href="../">
       
       
-        <link rel="next" href="../102-api-types/">
+        <link rel="next" href="../new-constants/">
       
       
       <link rel="icon" href="../../assets/favicon.ico">
@@ -26,7 +26,7 @@
     
     
       
-        <title>Au 101: Quantity Makers - The Au units library</title>
+        <title>Forward declarations - The Au units library</title>
       
     
     
@@ -70,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#au-101-quantity-makers" class="md-skip">
+        <a href="#forward-declarations" class="md-skip">
           Skip to content
         </a>
       
@@ -109,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Au 101: Quantity Makers
+              Forward declarations
             
           </span>
         </div>
@@ -831,17 +831,19 @@
       
   
   
+    
   
   
+  
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
         
           
           <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
@@ -855,7 +857,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             Howto
@@ -869,7 +871,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -887,10 +889,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../howto/forward-declarations/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Forward declarations
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -899,6 +921,77 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      How to use
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How to use">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core-library-types-aufwdhh" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core library types: "au/fwd.hh"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unit-types-auunitsxyz_fwdhh" class="md-nav__link">
+    <span class="md-ellipsis">
+      Unit types: "au/units/xyz_fwd.hh"
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compound-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compound units
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-worked-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Full worked example
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -911,7 +1004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/new-constants/" class="md-nav__link">
+      <a href="../new-constants/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -932,7 +1025,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/new-dimensions/" class="md-nav__link">
+      <a href="../new-dimensions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -953,7 +1046,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/new-units/" class="md-nav__link">
+      <a href="../new-units/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -974,7 +1067,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/quantity-template-parameters/" class="md-nav__link">
+      <a href="../quantity-template-parameters/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1030,7 +1123,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/interop/" class="md-nav__link">
+      <a href="../interop/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1051,7 +1144,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../howto/interop/nholthaus/" class="md-nav__link">
+      <a href="../interop/nholthaus/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1484,19 +1577,17 @@
       
   
   
-    
   
   
-  
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
         
           
           <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
@@ -1510,7 +1601,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             Tutorial
@@ -1524,7 +1615,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../tutorial/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1542,30 +1633,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Au 101: Quantity Makers
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../tutorial/101-quantity-makers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1574,104 +1645,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#status-quo-no-units-library" class="md-nav__link">
-    <span class="md-ellipsis">
-      Status quo: no units library
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#our-goal-unit-safety" class="md-nav__link">
-    <span class="md-ellipsis">
-      Our goal: unit safety
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#storing-values-the-quantity-maker" class="md-nav__link">
-    <span class="md-ellipsis">
-      Storing values: the &ldquo;quantity maker&rdquo;
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#retrieving-values-you-must-name-the-unit" class="md-nav__link">
-    <span class="md-ellipsis">
-      Retrieving values: you must name the unit
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#basic-quantity-operations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Basic quantity operations
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Basic quantity operations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#multiplying-and-dividing-quantities" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multiplying and dividing quantities
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#exercise-computing-with-quantities" class="md-nav__link">
-    <span class="md-ellipsis">
-      Exercise: computing with quantities
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#takeaways" class="md-nav__link">
-    <span class="md-ellipsis">
-      Takeaways
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1684,7 +1657,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../102-api-types/" class="md-nav__link">
+      <a href="../../tutorial/102-api-types/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1705,7 +1678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../103-unit-conversions/" class="md-nav__link">
+      <a href="../../tutorial/103-unit-conversions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1761,7 +1734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../exercise/101-quantity-makers/" class="md-nav__link">
+      <a href="../../tutorial/exercise/101-quantity-makers/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1782,7 +1755,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../exercise/102-api-types/" class="md-nav__link">
+      <a href="../../tutorial/exercise/102-api-types/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1803,7 +1776,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../exercise/103-unit-conversions/" class="md-nav__link">
+      <a href="../../tutorial/exercise/103-unit-conversions/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1850,259 +1823,188 @@
   
 
 
-<h1 id="au-101-quantity-makers">Au 101: Quantity Makers<a class="headerlink" href="#au-101-quantity-makers" title="Permanent link">&para;</a></h1>
-<p>This tutorial gives a gentle introduction to the Au library.</p>
-<ul>
-<li><strong>Time:</strong> TBD.</li>
-<li><strong>Prerequisites:</strong> Experience writing C++ code.</li>
-<li><strong>You will learn:</strong><ul>
-<li>The concept and importance of &ldquo;unit safety&rdquo;.</li>
-<li>How to store a numeric value in a <em>quantity</em>.</li>
-<li>How to retrieve the stored numeric value.</li>
-<li>Some basic operations you can perform with a quantity.</li>
-</ul>
-</li>
-</ul>
-<h2 id="status-quo-no-units-library">Status quo: no units library<a class="headerlink" href="#status-quo-no-units-library" title="Permanent link">&para;</a></h2>
-<p>Suppose you have a variable that represents a <em>physical quantity</em>.  That variable has some <em>value</em>,
-but that value is meaningless unless you also know the <em>unit of measurement</em>. We usually indicate
-the unit with a suffix on the variable name.  Here&rsquo;s a concrete example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">const</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">track_length_m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">100.0</span><span class="p">;</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">//          Unit suffix--^^   ^^^^^--Value</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">const</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">best_time_s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">10.34</span><span class="p">;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">//       Unit suffix--^^   ^^^^^--Value</span>
-</code></pre></div>
-<p>The first value is <code>100.0</code>.  Since there&rsquo;s no such thing as a &ldquo;length of 100&rdquo;, we add a <code>_m</code> suffix
-on the end of our variable name to make it clear that the value is the length <em>in meters</em>.  We take
-a similar approach for our time <em>in seconds</em>.</p>
-<p>This strategy <em>works</em>, in the sense that it can prevent unit errors, but it&rsquo;s labor intensive and
-error prone.  The naming suffixes provide hints, but enforcement is basically on the honor system.
-Consider a function we might want to call:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kt">double</span><span class="w"> </span><span class="nf">average_speed_mps</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">length_m</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">time_s</span><span class="p">);</span>
-</code></pre></div>
-<p>With the above variables, our callsite might look like this:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">speed_mps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">average_speed_mps</span><span class="p">(</span><span class="n">track_length_m</span><span class="p">,</span><span class="w"> </span><span class="n">best_time_s</span><span class="p">);</span>
-</code></pre></div>
-<p>It&rsquo;s time to consider a very important property:</p>
-<div class="admonition info">
-<p class="admonition-title">Definition</p>
-<p><strong>Unit correctness:</strong> a program is <em>unit-correct</em> when every variable associated with physical
-units is used consistently with those units.</p>
-</div>
-<p>So: is this unit-correct?  Yes:</p>
-<ul>
-<li><code>track_length_m</code> gets passed as the parameter <code>length_m</code>: meters to meters <img alt="✔" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/2714.svg" title=":heavy_check_mark:" /></li>
-<li><code>best_time_s</code> gets passed as the parameter <code>time_s</code>: seconds to seconds <img alt="✔" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/2714.svg" title=":heavy_check_mark:" /></li>
-</ul>
-<p>However, it&rsquo;s quite fragile.  We could just as easily have written the following.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">speed_mps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">average_speed_mps</span><span class="p">(</span><span class="n">best_time_s</span><span class="p">,</span><span class="w"> </span><span class="n">track_length_m</span><span class="p">);</span>
-</code></pre></div>
-<p>By itself, this line looks correct: we&rsquo;re asking for an average speed, given a time and a length.
-We can even see that we&rsquo;re passing in values in seconds and meters to get a result in
-meters-per-second, increasing our confidence!</p>
-<p>Of course, the line is wrong, but the only way to <em>know</em> that it&rsquo;s wrong is to go read the
-declaration of <code>average_speed_mps</code>.  This could easily be in some other file.  In a big project, it
-might be hard to even figure out <em>which</em> file it&rsquo;s in.</p>
-<p>That&rsquo;s a lot of cognitive load!</p>
-<h2 id="our-goal-unit-safety">Our goal: unit safety<a class="headerlink" href="#our-goal-unit-safety" title="Permanent link">&para;</a></h2>
-<p>To write code quickly <em>and</em> robustly, unit-correctness is <strong>not enough</strong>.  We need more: we need
-<em>unit safety</em>.</p>
-<div class="admonition info">
-<p class="admonition-title">Definition</p>
-<p><strong>Unit safety</strong>: We call a program <em>unit-safe</em> when the <em>unit-correctness</em> of <em>each line</em> of
-code can be checked by <em>inspection</em>, in <em>isolation</em>.</p>
-</div>
-<p><em>This</em> is the way to reduce cognitive load for code readers, when it comes to physical units.  If
-you inspect a unit-safe line, and see that it&rsquo;s correct, then you&rsquo;re done with that line.  You can
-move on; you don&rsquo;t have to hold it in your head.</p>
+<h1 id="forward-declarations">Forward declarations<a class="headerlink" href="#forward-declarations" title="Permanent link">&para;</a></h1>
+<p>Forward declarations can meaningfully speed up the compilation of C++ programs in some situations,
+but creating them manually can also be error prone.  Au includes authoritatively correct and tested
+forward declarations.  This page explains how to use them.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>A unit-safe line doesn&rsquo;t guarantee that the <em>program</em> has no unit errors.  It <em>does</em> guarantee
-that <em>if there are</em> unit errors, then they&rsquo;re in some <em>other</em> line (which you can also
-inspect!).</p>
+<p>Au itself is generally pretty fast to compile, costing under a second on most modern
+configurations.  Most users won&rsquo;t need to forward declare Au&rsquo;s types.  However, for situations
+where you really do need every bit of speed, these forward declarations can help.</p>
 </div>
-<p>Unit-safety is not something you could ever get from the standard numeric types, but you <em>can</em> get
-it from the Au library.  Let&rsquo;s learn how!</p>
-<h2 id="storing-values-the-quantity-maker">Storing values: the &ldquo;quantity maker&rdquo;<a class="headerlink" href="#storing-values-the-quantity-maker" title="Permanent link">&para;</a></h2>
-<p>The way to achieve unit-safety is by turning our raw numeric values into <em>quantities</em>.  We do this
-with quantity <em>makers</em>.  These are callables&mdash;things that act like functions&mdash;which have the <em>name
-of some unit</em>, and accept <em>any numeric type</em>.</p>
-<p>For example, let&rsquo;s make our variable <code>track_length_m</code> <em>unit-safe</em> by using the quantity maker,
-<code>meters</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">track_length</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">meters</span><span class="p">(</span><span class="n">track_length_m</span><span class="p">);</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1">//                        ^^^^^^             ^^</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1">//     Quantity maker of *meters*      Takes value in *meters*</span>
-</code></pre></div>
-<p>This is an example of a <em>unit-safe handoff</em>.  We take a raw number whose <em>name</em> tells us it was in
-meters, and we pass it to the <em>quantity maker</em> for that <strong>same unit</strong>.  We can see this line is
-unit-correct simply by inspection&mdash;our first example of a unit-safe line.</p>
-<p>In fact, we have already achieved unit safety everywhere we use the quantity <code>track_length</code> instead
-of the raw number <code>track_length_m</code>!  Think of the quantity as a <em>container</em>, which holds its value
-securely together with information about its unit.  We&rsquo;ll see that the quantity prevents us from
-using that value in ways that are incompatible with its unit.</p>
-<h2 id="retrieving-values-you-must-name-the-unit">Retrieving values: you must name the unit<a class="headerlink" href="#retrieving-values-you-must-name-the-unit" title="Permanent link">&para;</a></h2>
-<p>Ideally, every interface that takes physical quantities would use unit-safe quantity <em>types</em>.  In
-practice, you can&rsquo;t upgrade your entire codebase at once.  Even if you could, there will always be
-third-party libraries which don&rsquo;t know about these quantity types.  One way or another, it&rsquo;s
-important to be able to get the value out.</p>
-<p>Let&rsquo;s imagine we have this example third-party API, which needs a raw <code>double</code>.  How can we call it
-if we have a quantity?</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">// Example third-party API.</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Racetrack</span><span class="p">;</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">RacetrackBuilder</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w"> </span><span class="k">public</span><span class="o">:</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="c1">// Main function we&#39;ll call:</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="kt">void</span><span class="w"> </span><span class="n">set_length_m</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">length_m</span><span class="p">);</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="n">Racetrack</span><span class="w"> </span><span class="nf">build_track</span><span class="p">();</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="p">};</span>
-</code></pre></div>
-<p>Most units libraries provide a function that retrieves a quantity&rsquo;s value &ldquo;in whatever units it
-happens to be stored&rdquo;.  (Think of
-<a href="https://en.cppreference.com/w/cpp/chrono/duration/count"><code>std::chrono::duration::count()</code></a> as a
-very common example.)  These kinds of functions may be convenient, but they&rsquo;re <em>not</em> unit-safe.<sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup></p>
-<p>Au takes a different approach.  To retrieve the value from a quantity <code>q</code>, you call <code>q.in(units)</code>,
-where <code>units</code> is the quantity maker you used to <em>store</em> the value.  Continuing with our earlier
-example, we could call that API like so:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">RacetrackBuilder</span><span class="w"> </span><span class="n">builder</span><span class="p">;</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">builder</span><span class="p">.</span><span class="n">set_length_m</span><span class="p">(</span><span class="n">track_length</span><span class="p">.</span><span class="n">in</span><span class="p">(</span><span class="n">meters</span><span class="p">));</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1">//                ^^             ^^^^^^^^^^^</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1">// API wants length in *meters*      Get value in *meters*</span>
-</code></pre></div>
-<p>Here, we have another <em>unit-safe handoff</em>.  Our first one showed how we <em>enter</em> the library by
-naming the unit.  This one shows how we <em>exit</em> the library by naming that <em>same</em> unit.</p>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Think of the quantity maker&rsquo;s name as a kind of &ldquo;password&rdquo; which you set when you create the
-quantity.  The quantity will hold its underlying value securely.  To retrieve that value, you
-must speak the same &ldquo;password&rdquo; (that is, name the same unit).</p>
+<h2 id="how-to-use">How to use<a class="headerlink" href="#how-to-use" title="Permanent link">&para;</a></h2>
+<p>First, identify the file in your project that could benefit from forward declarations.  <em>This is
+usually a file that gets included in several other files,</em> and the point is to speed up compilation
+for those other files.  The header file (<code>*.hh</code>) for a library target can sometimes benefit from
+forward declarations.  A few library targets in your project might even provide <em>their own</em> forward
+declaration files (<code>*_fwd.hh</code>) &mdash; in these instances, you&rsquo;ll definitely want to use Au&rsquo;s forward
+declarations.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you&rsquo;re defining compound units (as explained below), you&rsquo;ll <em>also</em> need to identify
+a <em>corresponding</em> file that will include the full Au headers.  If there&rsquo;s an associated <code>.cc</code>
+file, this is always a good choice.  Alternatively, if this is a library target that provides
+a <code>_fwd.hh</code> file, then you can use the corresponding <code>.hh</code> file.</p>
 </div>
-<p>Of course, this API is a best-case scenario for raw numeric APIs, since it names the units at the
-callsite (via the <code>_m</code> suffix on <code>set_length_m()</code>).  Our other API, <code>average_speed_mps()</code>, can&rsquo;t do
-this, because we can&rsquo;t see the parameter names at the callsite.  In fact, although we&rsquo;ll see some
-coping strategies in later lessons, <em>there is no unit-safe way to call <code>average_speed_mps()</code>
-directly</em>.</p>
-<h2 id="basic-quantity-operations">Basic quantity operations<a class="headerlink" href="#basic-quantity-operations" title="Permanent link">&para;</a></h2>
-<p>Quantity types do much more than simply hold their values securely: they support a variety of
-operations.  In fact, we strive to support <em>every meaningful</em> operation, because operation
-implementations <em>for quantity types</em> can faithfully maintain unit safety.</p>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Treat any instance of retrieving the value as &ldquo;code smell&rdquo;.  Stop and check whether there&rsquo;s some
-way to perform the operation within the quantity type.  If there&rsquo;s not, stop and consider
-whether there <em>should</em> be.</p>
-<p>By &ldquo;code smell&rdquo;, we don&rsquo;t mean that it&rsquo;s <em>definitely</em> wrong; in fact, it&rsquo;s often necessary.  We
-just mean it&rsquo;s worth checking to see if there&rsquo;s a better pattern.</p>
-</div>
-<p>The first and most basic operations which we&rsquo;ll cover here are <em>arithmetic</em> operations.</p>
+<p>Once you&rsquo;ve identified which file(s) will be using the forward declarations, you&rsquo;ll include the
+appropriate <code>"fwd"</code> headers from Au in that file, while using the &ldquo;full&rdquo; Au headers in the other
+files for that target.</p>
+<p>Here are Au&rsquo;s forward declaration headers, and what each provides.</p>
+<h3 id="core-library-types-aufwdhh">Core library types: <code>"au/fwd.hh"</code><a class="headerlink" href="#core-library-types-aufwdhh" title="Permanent link">&para;</a></h3>
+<p><strong>Every use of Au forward declarations must include this file.</strong>  It provides both core library
+types, and a few utilities for combining other units.</p>
+<p>Here&rsquo;s a partial listing of what&rsquo;s included in the core library forward declarations.</p>
 <ul>
-<li>You can <em>add, subtract, and compare</em> quantities of the <strong>same</strong> units.<sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup></li>
-<li>You can <em>multiply and divide</em> quantities of <strong>any</strong> units.</li>
+<li><code>Quantity&lt;U, R&gt;</code> type (note that you&rsquo;ll need forward-declared <em>units</em> for this to be useful)</li>
+<li><code>QuantityD&lt;U&gt;</code>, <code>QuantityI&lt;U&gt;</code>, and the other &ldquo;rep-named aliases&rdquo; for <code>Quantity</code></li>
+<li><code>QuantityPoint&lt;U, R&gt;</code> type (again: requires <em>units</em> to be forward declared separately)</li>
+<li><code>QuantityPointD&lt;U&gt;</code>, <code>QuantityPointI&lt;U&gt;</code>, and the other &ldquo;rep-named aliases&rdquo; for <code>QuantityPoint</code></li>
+<li><code>Kilo</code>, <code>Mega</code>, and the other SI prefixes</li>
+<li><code>Zero</code> type (but not the <code>ZERO</code> instance)</li>
+<li><code>ForwardDeclareUnitPow</code> and <code>ForwardDeclareUnitProduct</code> to help forward declare <em>compound units</em>
+  (we&rsquo;ll explain how to use these further below).</li>
 </ul>
-<div class="admonition example">
-<p class="admonition-title">Example: same-unit operations</p>
-<p>Here are a couple examples of operations among quantities with the <em>same unit</em>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">meters</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">meters</span><span class="p">(</span><span class="mf">2.0</span><span class="p">);</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1">// distance -&gt; meters(3.0)</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">is_duration_greater</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">seconds</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">seconds</span><span class="p">(</span><span class="mi">55</span><span class="p">));</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1">// is_duration_greater -&gt; true</span>
-</code></pre></div>
-<p>Admittedly, these examples are <em>very</em> basic for now.  Future lessons will explore more
-interesting examples&mdash;like, what happens when you compare a length in inches, to a length in
-centimeters?  But for now, the takeaway is simply that we neither need nor want to extract
-underlying values to perform basic operations.</p>
-</div>
-<h3 id="multiplying-and-dividing-quantities">Multiplying and dividing quantities<a class="headerlink" href="#multiplying-and-dividing-quantities" title="Permanent link">&para;</a></h3>
-<p>The product of two quantities is another quantity.</p>
-<p>Recall that a quantity variable has two parts: the <em>unit</em>, and the <em>value</em>. These parts compose
-nicely with multiplication.</p>
-<ul>
-<li>The unit of the product is the product of the units.</li>
-<li>The value of the product is the product of the values.</li>
-</ul>
-<p>All of these same considerations apply to division.</p>
-<p>So for example: <code>(meters / second)</code> is a quantity maker.  You can call it and pass any numerical
-type, just as with the quantity makers <code>meters</code> or <code>seconds</code>.  In particular,</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">meters</span><span class="p">(</span><span class="mf">50.0</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">seconds</span><span class="p">(</span><span class="mf">10.0</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="p">(</span><span class="n">meters</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">second</span><span class="p">)(</span><span class="mf">5.0</span><span class="p">);</span>
-</code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>To form a compound quantity maker, use the grammatically correct name of the unit.  Examples:</p>
-<ul>
-<li><code>meters / second</code>, <em>not</em> <s><code>meters / seconds</code></s></li>
-<li><code>newton * meters</code>, <em>not</em> <s><code>newtons * meters</code></s></li>
-</ul>
-<p>Empirically, we have found that this pattern works: <code>(s * ...) * p / (s * ...)</code>.  That is:</p>
-<ul>
-<li>pluralize <em>only one</em> token</li>
-<li>for singular tokens: put those which <em>multiply</em> on the <em>left</em>, and those which <em>divide</em> on the
-  <em>right</em>.</li>
-</ul>
-</div>
-<h2 id="exercise-computing-with-quantities">Exercise: computing with quantities<a class="headerlink" href="#exercise-computing-with-quantities" title="Permanent link">&para;</a></h2>
-<p>To get some practice with quantities, we&rsquo;ve included an exercise where you can make and print some
-quantities, and then upgrade an existing function implementation from raw numbers to quantities.</p>
-<p>Check out the <a href="../exercise/101-quantity-makers/">Au 101: API Types Exercise</a>!</p>
-<h2 id="takeaways">Takeaways<a class="headerlink" href="#takeaways" title="Permanent link">&para;</a></h2>
+<h3 id="unit-types-auunitsxyz_fwdhh">Unit types: <code>"au/units/xyz_fwd.hh"</code><a class="headerlink" href="#unit-types-auunitsxyz_fwdhh" title="Permanent link">&para;</a></h3>
+<p>Any unit that can be found in, say, <code>"au/units/xyz.hh"</code> will have a corresponding forward
+declaration file, <code>"au/units/xyz_fwd.hh"</code>.</p>
+<p>When combined with the core library forward declarations, this is enough to declare an interface
+that takes, say, <code>const QuantityD&lt;Kilo&lt;Meters&gt;&gt;&amp;</code> as an argument.</p>
+<p>This is <em>not</em> enough to forward declare a <em>compound unit</em>, such as meters per second.  Our <a href="../new-units/#alias-vs-strong">best
+practices</a> for new units suggests using a simple <em>alias</em> in this
+case, rather than a strong type (for example, <code>UnitQuotientT&lt;Meters, Seconds&gt;</code>).  However, this
+cannot be computed without the full machinery of the library, which can cost tens of milliseconds.
+This may not sound like much, but it&rsquo;s far too slow for a forward declaration file.</p>
+<details class="note">
+<summary>How slow is "too slow"?</summary>
+<p>Time measurements will of course vary based on the hardware and toolchain, but here are some
+numbers from one modern development machine.</p>
+<p>We found that the cost to include <code>"au/fwd.hh"</code> was about 5 ms.  The vast majority of this was
+the cost of including <code>&lt;cstdint&gt;</code>.  If your file already includes <code>&lt;cstdint&gt;</code> by some other
+pathway &mdash; which is extremely common &mdash; then there is no additional cost to include it
+a second time via <code>"au/fwd.hh"</code>.  In this case, the remaining cost was about 1 ms.  This is the
+target that we aim for.</p>
+<p>For calibration purposes, the cost of including <code>&lt;vector&gt;</code> on this same configuration was about
+100 ms.  And the cost of including <code>"au/au.hh"</code> &mdash; essentially, &ldquo;the whole library&rdquo; (without
+individual units) &mdash; was around 500 ms.</p>
+</details>
+<p>We resolve this with a &ldquo;warrant and check&rdquo; approach, explained in the next section.</p>
+<h3 id="compound-units">Compound units<a class="headerlink" href="#compound-units" title="Permanent link">&para;</a></h3>
+<p>The only way to forward declare a compound unit is to specify the exact types that go into the
+<code>UnitProduct&lt;...&gt;</code> template, and in the exact correct order.  We generally avoid having end users do
+this, both because it&rsquo;s hard to get right, and because it&rsquo;s an encapsulated implementation detail
+which could change.  However, for cases where the added speed from forward declaration really
+matters, we can do the next best thing: make it easy to check that it&rsquo;s right.</p>
+<p>Here is a series of steps to follow to forward declare compound units.</p>
 <ol>
 <li>
-<p>We strive for <strong>unit safety</strong>.  If we can check the unit-correctness of every individual line of
-   code, by inspection, in isolation, we can reduce cognitive load, and write code faster and more
-   robustly.</p>
+<p><strong>Find the types in <code>UnitProduct&lt;...&gt;</code>.</strong>  One trick to do this is to assign an instance of the
+    compound unit type itself to another type, say, an <code>int</code>.  The <em>compiler error</em> will contain the
+    correct type name.  Look for <code>UnitProduct&lt;...&gt;</code> in the error message.</p>
 </li>
 <li>
-<p>To <strong>store</strong> a raw numeric value safely inside of a quantity object, <strong>call the quantity maker</strong>
-   whose name is the unit of interest.</p>
-<ul>
-<li>For example, <code>meters(3)</code> is quantity representing <span class="arithmatex"><span class="MathJax_Preview">3\,\text{m}</span><script type="math/tex">3\,\text{m}</script></span>, stored as <code>int</code>.</li>
-</ul>
+<p><strong>Forward declare the powers with <code>ForwardDeclareUnitPow&lt;...&gt;</code>.</strong>  If any of the types in
+    <code>UnitProduct&lt;...&gt;</code> are instances of <code>Pow</code> or <code>RatioPow</code>, you&rsquo;ll want to make an alias for those
+    types.  If your compound unit is, say, the inverse cube of a unit, you can forward declare it
+    like this:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">using</span><span class="w"> </span><span class="n">InverseYourUnitsCubedFwd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ForwardDeclareUnitPow</span><span class="o">&lt;</span><span class="n">YourUnits</span><span class="p">,</span><span class="w"> </span><span class="mi">-3</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">using</span><span class="w"> </span><span class="n">InverseYourUnitsCubed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">YourUnitsCubedFwd</span><span class="o">::</span><span class="n">unit_type</span><span class="p">;</span>
+</code></pre></div>
+<p>If you add a third template parameter to <code>ForwardDeclareUnitPow</code>, it will be treated as the
+denominator for the power.  For example, to form a square root of the above unit, you could use
+<code>ForwardDeclareUnitPow&lt;YourUnits, 1, 2&gt;</code>.</p>
 </li>
 <li>
-<p>To <strong>retrieve</strong> a stored numeric value from a quantity <code>q</code>, <strong>call <code>q.in(units)</code></strong>, where <code>units</code> was the
-   quantity maker used in the first place.</p>
-<ul>
-<li>For example, <code>meters(3).in(meters)</code> is simply <code>3</code>.</li>
-</ul>
+<p><strong>Forward declare the product itself with <code>ForwardDeclareUnitProduct&lt;...&gt;</code>.</strong>  This is similar
+    to the above.  For example, if the full product type from step 1 was
+    <code>UnitProduct&lt;OtherUnits, Pow&lt;YourUnits, -3&gt;&gt;</code>, you would forward declare it like this (using the
+    existing <code>InverseYourUnitsCubed</code> that you would have defined in step 2):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">using</span><span class="w"> </span><span class="n">OtherUnitsPerYourUnitsCubedFwd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ForwardDeclareUnitProduct</span><span class="o">&lt;</span><span class="n">OtherUnits</span><span class="p">,</span><span class="w"> </span><span class="n">InverseYourUnitsCubed</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">using</span><span class="w"> </span><span class="n">OtherUnitsPerYourUnitsCubed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OtherUnitsPerYourUnitsCubedFwd</span><span class="o">::</span><span class="n">unit_type</span><span class="p">;</span>
+</code></pre></div>
 </li>
 <li>
-<p><strong>Quantity makers compose</strong>: you can multiply, divide, and raise them to powers to get a new quantity
-   maker.</p>
-<ul>
-<li>For example, <code>(meters / second)</code> is a quantity maker which you can call like any other.<br>
-  <code>(meters / second)(5)</code> represents the quantity <span class="arithmatex"><span class="MathJax_Preview">5\,\text{m/s}</span><script type="math/tex">5\,\text{m/s}</script></span>.</li>
-</ul>
+<p><strong>Add appropriate checks.</strong>  These will go in the &ldquo;corresponding file&rdquo; (see the Note in the
+    <a href="#how-to-use">above section</a>).  You can pass an instance of the <code>ForwardDeclare...&lt;...&gt;</code> type to
+    the utility <code>is_forward_declared_unit_valid(...)</code>, which can be used with <code>static_assert</code>.  For
+    example:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1">// In whatever file _corresponds to_ the one with the forward declarations:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">static_assert</span><span class="p">(</span><span class="n">is_forward_declared_unit_valid</span><span class="p">(</span><span class="n">InverseYourUnitsCubedFwd</span><span class="p">{}));</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">static_assert</span><span class="p">(</span><span class="n">is_forward_declared_unit_valid</span><span class="p">(</span><span class="n">OtherUnitsPerYourUnitsCubedFwd</span><span class="p">{}));</span>
+</code></pre></div>
 </li>
 </ol>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Au <strong>only</strong> contains unit-safe interfaces.  That&rsquo;s why simply storing the value in a quantity is
-enough to achieve unit-safety!</p>
+<h2 id="full-worked-example">Full worked example<a class="headerlink" href="#full-worked-example" title="Permanent link">&para;</a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We are omitting the <code>au::</code> namespace in the text of this example, for conciseness and
+readability.</p>
 </div>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>To take the example from <code>std::chrono::duration</code>, note that the system clock <a href="https://stackoverflow.com/a/51539549/15777264">has different
-resolutions on different widely used toolchains</a>. gcc
-uses <span class="arithmatex"><span class="MathJax_Preview">1\,\text{ns}</span><script type="math/tex">1\,\text{ns}</script></span>, MSVC uses <span class="arithmatex"><span class="MathJax_Preview">100\,\text{ns}</span><script type="math/tex">100\,\text{ns}</script></span>, and clang uses <span class="arithmatex"><span class="MathJax_Preview">1000\,\text{ns}</span><script type="math/tex">1000\,\text{ns}</script></span>.  So if you
-subtracted two calls to <code>std::chrono::system_clock::now()</code> and called <code>.count()</code>, your answers would
-vary by 3 orders of magnitude on different compilers!  This is not to say that doing so would be a
-good use of the chrono library.  It&rsquo;s not, and that&rsquo;s the point: a bare call to <code>.count()</code> gives the
-reader no idea how to interpret its result.&#160;<a class="footnote-backref" href="#fnref:1" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>What about adding, subtracting, and comparing quantities of <em>different</em> units, but the <em>same</em>
-dimensions&mdash;like comparing <code>seconds(100)</code> to <code>minutes(1)</code>, or adding <code>inches(1)</code> to <code>feet(6)</code>?  In
-most cases, we <em>do</em> support this as well, but it&rsquo;s a more advanced usage which we&rsquo;ll discuss further
-in future lessons.&#160;<a class="footnote-backref" href="#fnref:2" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
+<p>Suppose we want to make a library target that can print a speed, in km/h, to a <code>std::string</code>.
+Suppose, too, that we want our library to be as lightweight as possible: maybe some client targets
+are interacting with all of their <code>Quantity</code> types by const-ref, so they don&rsquo;t actually need to see
+Au&rsquo;s definitions.</p>
+<p>Normally, we&rsquo;d refer to our speed type as <code>QuantityD&lt;UnitQuotientT&lt;Kilo&lt;Meters&gt;, Hours&gt;&gt;</code>.  However,
+<code>UnitQuotientT</code> needs the full machinery of the library.  Instead, let&rsquo;s create an alias,
+<code>KilometersPerHour</code>, so we can write <code>QuantityD&lt;KilometersPerHour&gt;</code>.</p>
+<p>The first step is to find out which types go inside <code>UnitProduct&lt;...&gt;</code>, and in which order.  This
+<a href="https://godbolt.org/z/cW3Gs7YzT">compiler explorer link</a> shows how to do this.  Note the
+highlighted portion of the error message:</p>
+<p><img alt="Compiler error providing info for fwd decls" src="../../assets/fwd_declare_compiler_error.png" /></p>
+<p>We can see that the types are <code>Kilo&lt;Meters&gt;</code> and <code>Pow&lt;Hours, -1&gt;</code>, in that order.  We&rsquo;ll need to
+start by defining an alias for the latter alone.  Then, we can define our <code>KilometersPerHour</code> alias,
+and declare our function signature.  Here&rsquo;s what it looks like all together.</p>
+<p>First, the header file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1">// print_speed.hh</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="cp">#pragma once</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;string&gt;</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/fwd.hh&quot;</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/units/hours_fwd.hh&quot;</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/units/meters_fwd.hh&quot;</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="k">namespace</span><span class="w"> </span><span class="nn">my_library</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="k">using</span><span class="w"> </span><span class="n">InverseHoursFwd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">au</span><span class="o">::</span><span class="n">ForwardDeclareUnitPow</span><span class="o">&lt;</span><span class="n">au</span><span class="o">::</span><span class="n">Hours</span><span class="p">,</span><span class="w"> </span><span class="mi">-1</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="k">using</span><span class="w"> </span><span class="n">InverseHours</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">typename</span><span class="w"> </span><span class="nc">InverseHoursFwd</span><span class="o">::</span><span class="n">unit_type</span><span class="p">;</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="k">using</span><span class="w"> </span><span class="n">KilometersPerHourFwd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">au</span><span class="o">::</span><span class="n">ForwardDeclareUnitProduct</span><span class="o">&lt;</span><span class="n">au</span><span class="o">::</span><span class="n">Kilo</span><span class="o">&lt;</span><span class="n">au</span><span class="o">::</span><span class="n">Meters</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">InverseHours</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="k">using</span><span class="w"> </span><span class="n">KilometersPerHour</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">typename</span><span class="w"> </span><span class="nc">KilometersPerHourFwd</span><span class="o">::</span><span class="n">unit_type</span><span class="p">;</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">print_to_string</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">au</span><span class="o">::</span><span class="n">QuantityD</span><span class="o">&lt;</span><span class="n">KilometersPerHour</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">speed</span><span class="p">);</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="p">}</span><span class="w">  </span><span class="c1">// namespace my_library</span>
+</code></pre></div>
+<p>Now, the implementation file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1">// print_speed.cc</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;print_speed.hh&quot;</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;sstream&gt;</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;string&gt;</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/io.hh&quot;</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/quantity.hh&quot;</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/units/hours.hh&quot;</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;au/units/meters.hh&quot;</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="k">namespace</span><span class="w"> </span><span class="nn">my_library</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="k">static_assert</span><span class="p">(</span><span class="n">is_forward_declared_unit_valid</span><span class="p">(</span><span class="n">InverseHoursFwd</span><span class="p">{}));</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="k">static_assert</span><span class="p">(</span><span class="n">is_forward_declared_unit_valid</span><span class="p">(</span><span class="n">KilometersPerHourFwd</span><span class="p">{}));</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">print_to_string</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">au</span><span class="o">::</span><span class="n">QuantityD</span><span class="o">&lt;</span><span class="n">KilometersPerHour</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">speed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">ostringstream</span><span class="w"> </span><span class="n">oss</span><span class="p">;</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">    </span><span class="n">oss</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">speed</span><span class="p">;</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">oss</span><span class="p">.</span><span class="n">str</span><span class="p">();</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="p">}</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="p">}</span><span class="w">  </span><span class="c1">// namespace my_library</span>
+</code></pre></div>
+<p>At this point, the cost of including <code>print_speed.hh</code> in other files should be almost completely
+negligible, beyond the cost of including <code>&lt;string&gt;</code>.</p>
 
 
 
@@ -2132,7 +2034,7 @@ in future lessons.&#160;<a class="footnote-backref" href="#fnref:2" title="Jump 
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Tutorials: home">
+          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: How-to guides">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2142,20 +2044,20 @@ in future lessons.&#160;<a class="footnote-backref" href="#fnref:2" title="Jump 
                 Previous
               </span>
               <div class="md-ellipsis">
-                Tutorials: home
+                How-to guides
               </div>
             </div>
           </a>
         
         
           
-          <a href="../102-api-types/" class="md-footer__link md-footer__link--next" aria-label="Next: Au 102: API Types">
+          <a href="../new-constants/" class="md-footer__link md-footer__link--next" aria-label="Next: Defining new constants">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Au 102: API Types
+                Defining new constants
               </div>
             </div>
             <div class="md-footer__button md-icon">
