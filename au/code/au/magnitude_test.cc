@@ -61,6 +61,15 @@ TEST(Magnitude, PowersBehaveCorrectly) {
 
 TEST(Magnitude, RootsBehaveCorrectly) { EXPECT_EQ(root<3>(mag<8>()), mag<2>()); }
 
+TEST(Magnitude, CanNegate) {
+    EXPECT_THAT(-mag<5>(), Eq(MagProductT<Magnitude<Negative>, decltype(mag<5>())>{}));
+}
+
+TEST(Magnitude, NegativeCancelsOutWhenSquared) {
+    StaticAssertTypeEq<decltype(squared(-mag<5>())), decltype(mag<25>())>();
+    // StaticAssertTypeEq<decltype((-mag<5>()) * (-mag<5>()), decltype(mag<25>())>();
+}
+
 TEST(MagnitudeLabel, HandlesIntegers) {
     EXPECT_THAT(mag_label(mag<1>()), StrEq("1"));
     EXPECT_THAT(mag_label(mag<287'987>()), StrEq("287987"));

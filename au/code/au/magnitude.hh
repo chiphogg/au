@@ -61,6 +61,35 @@ using MagQuotientT = PackQuotientT<Magnitude, T, U>;
 template <typename T>
 using MagInverseT = PackInverseT<Magnitude, T>;
 
+// Enable negative magnitudes with a type representing (-1) that appears/disappears under powers.
+struct Negative {};
+template <typename... BPs, std::intmax_t ExpNum, std::intmax_t ExpDen>
+struct PackPower<Magnitude, Magnitude<Negative, BPs...>, std::ratio<ExpNum, ExpDen>>
+    : std::conditional<
+          (std::ratio<ExpNum, ExpDen>::num % 2 == 0),
+
+          // Even powers of (-1) are 1 for any root.
+          PackPowerT<Magnitude, Magnitude<BPs...>, ExpNum, ExpDen>,
+
+          // At this point, we know we're taking the D'th root of (-1), which is (-1)
+          // if D is odd, and a hard compiler error if D is even.
+          MagProductT<Magnitude<Negative>, MagPowerT<Magnitude<BPs...>, ExpNum, ExpDen>>>
+// Implement the hard error for raising to (odd / even) power:
+{
+    static_assert(std::ratio<ExpNum, ExpDen>::den % 2 == 1,
+                  "Cannot take even root of negative magnitude");
+};
+
+// Define negation.
+template <typename... BPs>
+constexpr auto operator-(Magnitude<Negative, BPs...>) {
+    return Magnitude<BPs...>{};
+}
+template <typename... BPs>
+constexpr auto operator-(Magnitude<BPs...>) {
+    return Magnitude<Negative, BPs...>{};
+}
+
 // A printable label to indicate the Magnitude for human readers.
 template <typename MagT>
 struct MagnitudeLabel;
@@ -98,6 +127,15 @@ struct Pi {
 namespace detail {
 template <typename T, typename U>
 struct OrderByValue : stdx::bool_constant<(T::value() < U::value())> {};
+
+template <typename T>
+struct OrderByValue<Negative, T> : std::true_type {};
+
+template <typename T>
+struct OrderByValue<T, Negative> : std::false_type {};
+
+template <>
+struct OrderByValue<Negative, Negative> : std::false_type {};
 }  // namespace detail
 
 template <typename A, typename B>
