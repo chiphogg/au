@@ -65,9 +65,21 @@ TEST(Magnitude, CanNegate) {
     EXPECT_THAT(-mag<5>(), Eq(MagProductT<Magnitude<Negative>, decltype(mag<5>())>{}));
 }
 
-TEST(Magnitude, NegativeCancelsOutWhenSquared) {
+TEST(Magnitude, NegativeCancelsOutWhenRepeated) {
+    StaticAssertTypeEq<decltype((-mag<5>()) * (-mag<5>())), decltype(mag<25>())>();
+    StaticAssertTypeEq<decltype(mag<5>() * (-mag<5>())), decltype(-mag<25>())>();
+    StaticAssertTypeEq<decltype((-mag<5>()) * mag<5>()), decltype(-mag<25>())>();
+
+    StaticAssertTypeEq<decltype((-mag<5>()) / (-mag<5>())), decltype(mag<1>())>();
+    StaticAssertTypeEq<decltype(mag<5>() / (-mag<5>())), decltype(-mag<1>())>();
+    StaticAssertTypeEq<decltype((-mag<5>()) / mag<5>()), decltype(-mag<1>())>();
+
     StaticAssertTypeEq<decltype(squared(-mag<5>())), decltype(mag<25>())>();
-    // StaticAssertTypeEq<decltype((-mag<5>()) * (-mag<5>()), decltype(mag<25>())>();
+    StaticAssertTypeEq<decltype(cubed(-mag<5>())), decltype(-mag<125>())>();
+
+    StaticAssertTypeEq<decltype(root<3>(-mag<125>())), decltype(-mag<5>())>();
+    // Uncomment to test ("Cannot take even root of negative magnitude"):
+    // StaticAssertTypeEq<decltype(root<2>(-mag<25>())), void>();
 }
 
 TEST(MagnitudeLabel, HandlesIntegers) {

@@ -79,6 +79,9 @@ struct PackPower<Magnitude, Magnitude<Negative, BPs...>, std::ratio<ExpNum, ExpD
     static_assert(std::ratio<ExpNum, ExpDen>::den % 2 == 1,
                   "Cannot take even root of negative magnitude");
 };
+template <typename... LeftBPs, typename... RightBPs>
+struct PackProduct<Magnitude, Magnitude<Negative, LeftBPs...>, Magnitude<Negative, RightBPs...>>
+    : stdx::type_identity<MagProductT<Magnitude<LeftBPs...>, Magnitude<RightBPs...>>> {};
 
 // Define negation.
 template <typename... BPs>
