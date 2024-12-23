@@ -332,6 +332,7 @@ namespace detail {
 enum class MagRepresentationOutcome {
     OK,
     ERR_NON_INTEGER_IN_INTEGER_TYPE,
+    ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE,
     ERR_INVALID_ROOT,
     ERR_CANNOT_FIT,
 };
@@ -576,6 +577,19 @@ constexpr MagRepresentationOrError<T> get_value_result(Magnitude<BPs...>) {
     }
 
     return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
+}
+
+template <typename T, typename... BPs>
+constexpr MagRepresentationOrError<T> get_value_result(Magnitude<Negative, BPs...>) {
+    if (std::is_unsigned<T>::value) {
+        return {MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE};
+    }
+
+    const auto result = get_value_result<T>(Magnitude<BPs...>{});
+    if (result.outcome != MagRepresentationOutcome::OK) {
+        return result;
+    }
+    return {MagRepresentationOutcome::OK, static_cast<T>(-result.value)};
 }
 
 // This simple overload avoids edge cases with creating and passing zero-sized arrays.

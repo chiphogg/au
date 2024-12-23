@@ -264,6 +264,12 @@ TEST(GetValue, WorksForEmptyPack) {
     EXPECT_THAT(get_value<float>(one), SameTypeAndValue(1.f));
 }
 
+TEST(GetValue, WorksForNegativeNumber) {
+    constexpr auto neg_5 = -mag<5>();
+    EXPECT_THAT(get_value<int>(neg_5), SameTypeAndValue(-5));
+    EXPECT_THAT(get_value<float>(neg_5), SameTypeAndValue(-5.f));
+}
+
 TEST(CommonMagnitude, ReturnsCommonMagnitudeWhenBothAreIdentical) {
     EXPECT_EQ(common_magnitude(mag<1>(), mag<1>()), mag<1>());
     EXPECT_EQ(common_magnitude(PI, PI), PI);
@@ -319,6 +325,11 @@ namespace detail {
 
 MATCHER(CannotFit, "") {
     return (arg.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT) && (arg.value == 0);
+}
+
+MATCHER(NegativeNumberInUnsignedType, "") {
+    return (arg.outcome == MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE) &&
+           (arg.value == 0);
 }
 
 MATCHER(NonIntegerInIntegerType, "") {
@@ -460,6 +471,11 @@ TEST(Root, ResultAtLeastAsGoodAsStdPowForRationalPowers) {
 
 TEST(GetValueResult, HandlesNumbersTooBigForUintmax) {
     EXPECT_THAT(get_value_result<std::uintmax_t>(pow<64>(mag<2>())), CannotFit());
+}
+
+TEST(GetValueResult, GivesAppropriateErrorForNegativeNumberInUnsignedType) {
+    constexpr auto neg_5 = -mag<5>();
+    EXPECT_THAT(get_value_result<uint64_t>(neg_5), NegativeNumberInUnsignedType());
 }
 
 TEST(PrimeFactorizationT, NullMagnitudeFor1) {
