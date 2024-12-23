@@ -87,19 +87,29 @@ TEST(MagnitudeLabel, HandlesIntegers) {
     EXPECT_THAT(mag_label(mag<287'987>()), StrEq("287987"));
 }
 
+TEST(MagnitudeLabel, HandlesNegativeIntegers) {
+    EXPECT_THAT(mag_label(-mag<1>()), StrEq("-1"));
+    EXPECT_THAT(mag_label(-mag<287'987>()), StrEq("-287987"));
+}
+
 TEST(MagnitudeLabel, HandlesRationals) {
     EXPECT_THAT(mag_label(mag<1>() / mag<2>()), StrEq("1 / 2"));
     EXPECT_THAT(mag_label(mag<541>() / mag<123456789>()), StrEq("541 / 123456789"));
+    EXPECT_THAT(mag_label(-mag<541>() / mag<123456789>()), StrEq("-541 / 123456789"));
 }
 
 TEST(MagnitudeLabel, DefaultsToUnlabeledForFactorTooBig) {
     // Someday, we'll find a better way to handle this; this just unblocks the first implementation.
     EXPECT_THAT(mag_label(pow<24>(mag<10>())), StrEq("(UNLABELED SCALE FACTOR)"));
+
+    // However, we do want to reliably indicate the presence/absence of a sign.
+    EXPECT_THAT(mag_label(-pow<24>(mag<10>())), StrEq("-(UNLABELED SCALE FACTOR)"));
 }
 
 TEST(MagnitudeLabel, IndicatesPresenceOfExposedSlash) {
     EXPECT_FALSE(MagnitudeLabel<decltype(mag<287'987>())>::has_exposed_slash);
     EXPECT_TRUE(MagnitudeLabel<decltype(mag<1>() / mag<2>())>::has_exposed_slash);
+    EXPECT_TRUE(MagnitudeLabel<decltype(-mag<1>() / mag<2>())>::has_exposed_slash);
 }
 
 TEST(Pi, HasCorrectValue) {

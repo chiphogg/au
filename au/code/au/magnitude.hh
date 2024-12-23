@@ -695,6 +695,18 @@ struct MagnitudeLabel<Magnitude<BPs...>>
     : detail::MagnitudeLabelImplementation<Magnitude<BPs...>,
                                            detail::categorize_mag_label(Magnitude<BPs...>{})> {};
 
+template <typename... BPs>
+struct MagnitudeLabel<Magnitude<Negative, BPs...>> :
+    // Inherit for "has exposed slash".
+    MagnitudeLabel<Magnitude<BPs...>> {
+    using LabelT = detail::ExtendedMagLabel<1u, Magnitude<BPs...>>;
+    static constexpr LabelT value =
+        detail::concatenate("-", MagnitudeLabel<Magnitude<BPs...>>::value);
+};
+template <typename... BPs>
+constexpr typename MagnitudeLabel<Magnitude<Negative, BPs...>>::LabelT
+    MagnitudeLabel<Magnitude<Negative, BPs...>>::value;
+
 template <typename MagT>
 constexpr const auto &mag_label(MagT) {
     return detail::as_char_array(MagnitudeLabel<MagT>::value);
