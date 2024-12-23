@@ -336,6 +336,10 @@ struct IntegerPartImpl<Magnitude<BPs...>>
     : stdx::type_identity<
           MagProductT<typename IntegerPartOfBasePower<BaseT<BPs>, ExpT<BPs>>::type...>> {};
 
+template <typename... BPs>
+struct IntegerPartImpl<Magnitude<Negative, BPs...>>
+    : stdx::type_identity<MagProductT<Magnitude<Negative>, IntegerPartT<Magnitude<BPs...>>>> {};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `abs()` implementation.
 

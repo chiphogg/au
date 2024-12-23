@@ -144,6 +144,11 @@ TEST(IntegerPart, PicksOutIntegersFromNumerator) {
     EXPECT_EQ(integer_part(PI * sqrt(mag<32>()) / mag<15>()), mag<4>());
 }
 
+TEST(IntegerPart, PreservesSign) {
+    EXPECT_EQ(integer_part(-mag<1>()), -mag<1>());
+    EXPECT_EQ(integer_part(-mag<8765>()), -mag<8765>());
+}
+
 TEST(Numerator, IsIdentityForInteger) {
     EXPECT_EQ(numerator(mag<2>()), mag<2>());
     EXPECT_EQ(numerator(mag<31415>()), mag<31415>());
@@ -205,6 +210,13 @@ TEST(IsRational, TrueForRatios) {
     EXPECT_TRUE(is_rational(mag<9>()));
     EXPECT_TRUE(is_rational(mag<1>() / mag<10>()));
     EXPECT_TRUE(is_rational(mag<9>() / mag<10>()));
+}
+
+TEST(IsRational, TrueForNegativeRatios) {
+    EXPECT_TRUE(is_rational(-mag<1>()));
+    EXPECT_TRUE(is_rational(-mag<9>()));
+    EXPECT_TRUE(is_rational(-mag<1>() / mag<10>()));
+    EXPECT_TRUE(is_rational(-mag<9>() / mag<10>()));
 }
 
 TEST(IsRational, FalseForInexactRoots) {
