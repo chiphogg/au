@@ -153,6 +153,12 @@ TEST(Numerator, PutsFractionInLowestTerms) {
     EXPECT_EQ(numerator(mag<24>() / mag<16>()), mag<3>());
 }
 
+TEST(Numerator, NegativeForNegativeNumber) {
+    EXPECT_EQ(numerator(-mag<2>()), -mag<2>());
+    EXPECT_EQ(numerator(-mag<31415>()), -mag<31415>());
+    EXPECT_EQ(numerator(-mag<5>() / mag<7>()), -mag<5>());
+}
+
 TEST(Numerator, IncludesNonIntegersWithPositiveExponent) {
     EXPECT_EQ(numerator(PI * sqrt(mag<24>() / mag<16>())), PI * sqrt(mag<3>()));
 }
@@ -163,6 +169,35 @@ TEST(Denominator, PutsFractionInLowestTerms) {
 
 TEST(Denominator, IncludesNonIntegersWithNegativeExponent) {
     EXPECT_EQ(denominator(sqrt(mag<24>() / mag<16>()) / PI), PI * sqrt(mag<2>()));
+}
+
+TEST(Denominator, PositiveForNegativeNumber) {
+    EXPECT_EQ(denominator(-mag<5>() / mag<7>()), mag<7>());
+    EXPECT_EQ(denominator(mag<5>() / (-mag<7>())), mag<7>());
+}
+
+TEST(Abs, IdentityForPositive) {
+    EXPECT_EQ(abs(mag<1>()), mag<1>());
+    EXPECT_EQ(abs(mag<2>()), mag<2>());
+    EXPECT_EQ(abs(mag<5>() / mag<7>()), mag<5>() / mag<7>());
+}
+
+TEST(Abs, FlipsSignForNegative) {
+    EXPECT_EQ(abs(-mag<1>()), mag<1>());
+    EXPECT_EQ(abs(-mag<5>() / mag<7>()), mag<5>() / mag<7>());
+    EXPECT_EQ(abs(-mag<2>() / PI), mag<2>() / PI);
+}
+
+TEST(IsPositive, TrueForPositive) {
+    EXPECT_TRUE(is_positive(mag<1>()));
+    EXPECT_TRUE(is_positive(mag<2>()));
+    EXPECT_TRUE(is_positive(mag<5>() / mag<7>()));
+}
+
+TEST(IsPositive, FalseForNegative) {
+    EXPECT_FALSE(is_positive(-mag<1>()));
+    EXPECT_FALSE(is_positive(-mag<5>() / mag<7>()));
+    EXPECT_FALSE(is_positive(-mag<2>() / PI));
 }
 
 TEST(IsRational, TrueForRatios) {

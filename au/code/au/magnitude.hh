@@ -153,12 +153,22 @@ template <typename MagT>
 using IntegerPartT = typename IntegerPartImpl<MagT>::type;
 
 template <typename MagT>
+struct AbsImpl;
+template <typename MagT>
+using Abs = typename AbsImpl<MagT>::type;
+
+template <typename MagT>
 struct NumeratorImpl;
 template <typename MagT>
 using NumeratorT = typename NumeratorImpl<MagT>::type;
 
 template <typename MagT>
-using DenominatorT = NumeratorT<MagInverseT<MagT>>;
+using DenominatorT = NumeratorT<MagInverseT<Abs<MagT>>>;
+
+template <typename MagT>
+struct IsPositive : std::true_type {};
+template <typename... BPs>
+struct IsPositive<Magnitude<Negative, BPs...>> : std::false_type {};
 
 template <typename MagT>
 struct IsRational
@@ -232,6 +242,11 @@ constexpr auto integer_part(Magnitude<BPs...>) {
 }
 
 template <typename... BPs>
+constexpr auto abs(Magnitude<BPs...>) {
+    return Abs<Magnitude<BPs...>>{};
+}
+
+template <typename... BPs>
 constexpr auto numerator(Magnitude<BPs...>) {
     return NumeratorT<Magnitude<BPs...>>{};
 }
@@ -239,6 +254,11 @@ constexpr auto numerator(Magnitude<BPs...>) {
 template <typename... BPs>
 constexpr auto denominator(Magnitude<BPs...>) {
     return DenominatorT<Magnitude<BPs...>>{};
+}
+
+template <typename... BPs>
+constexpr bool is_positive(Magnitude<BPs...>) {
+    return IsPositive<Magnitude<BPs...>>::value;
 }
 
 template <typename... BPs>
@@ -315,6 +335,15 @@ template <typename... BPs>
 struct IntegerPartImpl<Magnitude<BPs...>>
     : stdx::type_identity<
           MagProductT<typename IntegerPartOfBasePower<BaseT<BPs>, ExpT<BPs>>::type...>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `abs()` implementation.
+
+template <typename... BPs>
+struct AbsImpl<Magnitude<Negative, BPs...>> : stdx::type_identity<Magnitude<BPs...>> {};
+
+template <typename... BPs>
+struct AbsImpl<Magnitude<BPs...>> : stdx::type_identity<Magnitude<BPs...>> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `numerator()` implementation.
