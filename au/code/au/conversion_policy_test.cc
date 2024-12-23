@@ -47,6 +47,10 @@ TEST(ImplicitRepPermitted, TrueForIdentityMagnitude) {
     EXPECT_TRUE((ImplicitRepPermitted<uint8_t, Magnitude<>>::value));
 }
 
+TEST(ImplicitRepPermitted, TrueForNegativeOneUnlessUnsigned) {
+    EXPECT_TRUE((ImplicitRepPermitted<int, Magnitude<Negative>>::value));
+}
+
 TEST(ImplicitRepPermitted, TrueForFloatingPointTypesForVeryWideRanges) {
     EXPECT_TRUE((ImplicitRepPermitted<float, decltype(pow<10>(mag<10>()))>::value));
     EXPECT_TRUE((ImplicitRepPermitted<float, decltype(pow<-10>(mag<10>()))>::value));

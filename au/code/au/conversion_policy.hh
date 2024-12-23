@@ -27,11 +27,11 @@ namespace au {
 template <typename Rep, typename... BPs>
 constexpr bool can_scale_without_overflow(Magnitude<BPs...> m, Rep value) {
     // Scales that shrink don't cause overflow.
-    if (get_value<double>(m) <= 1.0) {
+    if (get_value<double>(abs(m)) <= 1.0) {
         (void)value;
         return true;
     } else {
-        return std::numeric_limits<Rep>::max() / get_value<Rep>(m) >= value;
+        return std::numeric_limits<Rep>::max() / get_value<Rep>(abs(m)) >= value;
     }
 }
 
