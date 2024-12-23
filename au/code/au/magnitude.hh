@@ -612,6 +612,12 @@ constexpr MagRepresentationOrError<T> get_value_result(Magnitude<BPs...>) {
     return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
 }
 
+// This simple overload avoids edge cases with creating and passing zero-sized arrays.
+template <typename T>
+constexpr MagRepresentationOrError<T> get_value_result(Magnitude<>) {
+    return {MagRepresentationOutcome::OK, static_cast<T>(1)};
+}
+
 template <typename T, typename... BPs>
 constexpr MagRepresentationOrError<T> get_value_result(Magnitude<Negative, BPs...>) {
     if (std::is_unsigned<T>::value) {
@@ -623,12 +629,6 @@ constexpr MagRepresentationOrError<T> get_value_result(Magnitude<Negative, BPs..
         return result;
     }
     return {MagRepresentationOutcome::OK, static_cast<T>(-result.value)};
-}
-
-// This simple overload avoids edge cases with creating and passing zero-sized arrays.
-template <typename T>
-constexpr MagRepresentationOrError<T> get_value_result(Magnitude<>) {
-    return {MagRepresentationOutcome::OK, static_cast<T>(1)};
 }
 }  // namespace detail
 

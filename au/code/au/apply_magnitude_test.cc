@@ -40,6 +40,8 @@ TEST(CategorizeMagnitude, FindsIntegerMultiplyInstances) {
     EXPECT_EQ(categorize_magnitude(mag<2>()), ApplyAs::INTEGER_MULTIPLY);
     EXPECT_EQ(categorize_magnitude(mag<35>()), ApplyAs::INTEGER_MULTIPLY);
 
+    EXPECT_EQ(categorize_magnitude(-mag<35>()), ApplyAs::INTEGER_MULTIPLY);
+
     EXPECT_EQ(categorize_magnitude(mag<35>() / mag<7>()), ApplyAs::INTEGER_MULTIPLY);
 }
 
@@ -47,16 +49,25 @@ TEST(CategorizeMagnitude, FindsIntegerDivideInstances) {
     EXPECT_EQ(categorize_magnitude(ONE / mag<2>()), ApplyAs::INTEGER_DIVIDE);
     EXPECT_EQ(categorize_magnitude(ONE / mag<35>()), ApplyAs::INTEGER_DIVIDE);
 
+    EXPECT_EQ(categorize_magnitude(-ONE / mag<35>()), ApplyAs::INTEGER_DIVIDE);
+
     EXPECT_EQ(categorize_magnitude(mag<7>() / mag<35>()), ApplyAs::INTEGER_DIVIDE);
 }
 
 TEST(CategorizeMagnitude, FindsRationalMultiplyInstances) {
     EXPECT_EQ(categorize_magnitude(mag<5>() / mag<2>()), ApplyAs::RATIONAL_MULTIPLY);
+    EXPECT_EQ(categorize_magnitude(mag<2>() / mag<5>()), ApplyAs::RATIONAL_MULTIPLY);
+
+    EXPECT_EQ(categorize_magnitude(-mag<5>() / mag<2>()), ApplyAs::RATIONAL_MULTIPLY);
+    EXPECT_EQ(categorize_magnitude(-mag<2>() / mag<5>()), ApplyAs::RATIONAL_MULTIPLY);
 }
 
 TEST(CategorizeMagnitude, FindsIrrationalMultiplyInstances) {
     EXPECT_EQ(categorize_magnitude(sqrt(mag<2>())), ApplyAs::IRRATIONAL_MULTIPLY);
+    EXPECT_EQ(categorize_magnitude(-sqrt(mag<2>())), ApplyAs::IRRATIONAL_MULTIPLY);
+
     EXPECT_EQ(categorize_magnitude(PI), ApplyAs::IRRATIONAL_MULTIPLY);
+    EXPECT_EQ(categorize_magnitude(-PI), ApplyAs::IRRATIONAL_MULTIPLY);
 }
 
 TEST(ApplyMagnitude, MultipliesForIntegerMultiply) {
@@ -65,6 +76,14 @@ TEST(ApplyMagnitude, MultipliesForIntegerMultiply) {
 
     EXPECT_THAT(apply_magnitude(4, m), SameTypeAndValue(100));
     EXPECT_THAT(apply_magnitude(4.0f, m), SameTypeAndValue(100.0f));
+}
+
+TEST(ApplyMagnitude, MultipliesForNegativeIntegerMultiply) {
+    constexpr auto m = -mag<20>();
+    ASSERT_EQ(categorize_magnitude(m), ApplyAs::INTEGER_MULTIPLY);
+
+    EXPECT_THAT(apply_magnitude(4, m), SameTypeAndValue(-80));
+    EXPECT_THAT(apply_magnitude(4.0f, m), SameTypeAndValue(-80.0f));
 }
 
 TEST(ApplyMagnitude, DividesForIntegerDivide) {
