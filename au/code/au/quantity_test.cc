@@ -486,10 +486,11 @@ TEST(Quantity, SupportsConvertingUnitsForComplexQuantity) {
     EXPECT_THAT(b, SameTypeAndValue(centi(meters)(std::complex<double>{-300.0, 400.0})));
 }
 
-TEST(Quantity, SupportsConvertingWithNegativeUnits) {
+TEST(Quantity, ConvertingByNegativeOneCanBeDoneImplicitly) {
+    // Use `int8_t`, because it's a type that requires the special carve-out.
     constexpr auto neginches = inches * (-mag<1>());
-    constexpr auto q = inches(-10);
-    EXPECT_THAT(q.as(neginches), SameTypeAndValue(neginches(10)));
+    constexpr auto q = inches(int8_t{-10});
+    EXPECT_THAT(q.as(neginches), SameTypeAndValue(neginches(int8_t{10})));
 }
 
 TEST(Quantity, SupportsExplicitRepConversionToComplexRep) {
