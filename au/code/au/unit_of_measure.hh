@@ -519,7 +519,7 @@ struct AreUnitsQuantityEquivalent
 
 namespace detail {
 template <typename U1, typename U2>
-struct HasSameOrigin : stdx::bool_constant<(OriginDisplacement<U1, U2>::value() == ZERO)> {};
+struct HasSameOrigin : stdx::bool_constant<(OriginOf<U1>::value() == OriginOf<U2>::value())> {};
 }  // namespace detail
 
 template <typename U1, typename U2>
@@ -776,7 +776,7 @@ struct CommonPointUnit {
         using OriginT = decltype(detail::CommonOrigin<Us...>::value());
         static constexpr OriginT origin() { return detail::CommonOrigin<Us...>::value(); }
     };
-    static constexpr auto origin() { return TypeHoldingCommonOrigin::origin(); }
+    static constexpr auto origin() { return detail::CommonOrigin<Us...>::value(); }
 
     // This handles checking that all the dimensions are the same.  It's what lets us reason in
     // terms of pure Magnitudes below, whereas usually this kind of reasoning is meaningless.
@@ -1004,7 +1004,8 @@ struct OrderAsUnitProduct<UnitProduct<U1s...>, UnitProduct<U2s...>>
     : InStandardPackOrder<UnitProduct<U1s...>, UnitProduct<U2s...>> {};
 
 template <typename A, typename B>
-struct OrderByOrigin : stdx::bool_constant<(OriginDisplacement<A, B>::value() < ZERO)> {};
+struct OrderByOrigin
+    : stdx::bool_constant<(detail::OriginOf<A>::value() < detail::OriginOf<B>::value())> {};
 
 // "Unit avoidance" is a tiebreaker for quantity-equivalent units.  Anonymous units, such as
 // `UnitImpl<...>`, `ScaledUnit<...>`, and `UnitProduct<...>`, are more "avoidable" than units which
