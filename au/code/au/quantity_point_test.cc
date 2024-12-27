@@ -19,6 +19,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using ::testing::Eq;
 using ::testing::Not;
 using ::testing::StaticAssertTypeEq;
 using ::testing::StrEq;
@@ -51,11 +52,7 @@ constexpr QuantityMaker<Kelvins> kelvins{};
 constexpr QuantityPointMaker<Kelvins> kelvins_pt{};
 
 struct Celsius : Kelvins {
-    // We must divide by 100 to turn the integer value of `273'15` into the decimal `273.15`.  We
-    // split that division between the unit and the value.  The goal is to divide the unit by as
-    // little as possible (while still keeping the value an integer), because that will make the
-    // conversion factor as small as possible in converting to the common-point-unit.
-    static constexpr auto origin() { return (kelvins / mag<20>())(273'15 / 5); }
+    static constexpr auto origin() { return centi(kelvins)(273'15); }
 
     static constexpr const char label[] = "degC";
 };
@@ -116,6 +113,12 @@ TEST(QuantityPoint, CanGetValueInDifferentUnits) {
 TEST(QuantityPoint, IntermediateTypeIsSignedIfExplicitRepIsSigned) {
     EXPECT_THAT(milli(kelvins_pt)(0u).coerce_as<int>(celsius_pt),
                 SameTypeAndValue(celsius_pt(-273)));
+}
+
+TEST(QuantityPoint, CanConstructExpected) {
+    using Com = CommonPointUnitT<Kelvins, Celsius>;
+    QuantityPointI<Com> pt{celsius_pt(0)};
+    EXPECT_THAT(pt, Eq((kelvins_pt / mag<20>())(273'15 / 5)));
 }
 
 TEST(QuantityPoint, SupportsDirectAccessWithSameUnit) {

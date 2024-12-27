@@ -864,35 +864,14 @@ struct MagType<Zero> : stdx::type_identity<Zero> {};
 // responsible for this; thus, they should never name this type directly.  Rather, they should name
 // the `CommonPointUnitT` alias, which will handle the canonicalization.
 template <typename... Us>
-struct CommonPointUnit {
+struct CommonPointUnit
+    : CommonUnitT<Us..., detail::OriginDisplacementUnit<detail::UnitOfLowestOrigin<Us...>, Us>...> {
     static_assert(AreElementsInOrder<CommonPointUnit, CommonPointUnit<Us...>>::value,
                   "Elements must be listed in ascending order");
     static_assert(HasSameDimension<Us...>::value,
                   "Common unit only meaningful if units have same dimension");
 
-    // We need to store the origin member inside of a type, so that it will act "just enough" like a
-    // unit to let us use `OriginDisplacement`.  (We'll link to this nested type's origin member for
-    // our own origin member.)
-    struct TypeHoldingCommonOrigin {
-        using OriginT = decltype(detail::CommonOrigin<Us...>::value());
-        static constexpr OriginT origin() { return detail::CommonOrigin<Us...>::value(); }
-    };
     static constexpr auto origin() { return detail::CommonOrigin<Us...>::value(); }
-
-    // This handles checking that all the dimensions are the same.  It's what lets us reason in
-    // terms of pure Magnitudes below, whereas usually this kind of reasoning is meaningless.
-    using Dim = CommonDimensionT<detail::DimT<Us>...>;
-
-    // Now, for Magnitude reasoning.  `OriginDisplacementMagnitude` tells us how finely grained we
-    // are forced to split our Magnitude to handle the additive displacements from the common
-    // origin.  It might be `Zero` if there is no such constraint (which would mean all the units
-    // have the _same_ origin).
-    using OriginDisplacementMagnitude = CommonMagnitudeT<
-        detail::MagTypeT<decltype(OriginDisplacement<TypeHoldingCommonOrigin, Us>::value())>...>;
-
-    // The final Magnitude is just what it would have been before, except that we also take the
-    // results of `OriginDisplacementMagnitude` into account.
-    using Mag = CommonMagnitudeT<detail::MagT<Us>..., OriginDisplacementMagnitude>;
 };
 
 template <typename A, typename B>
@@ -1104,6 +1083,34 @@ template <typename... U1s, typename... U2s>
 struct OrderAsUnitProduct<UnitProduct<U1s...>, UnitProduct<U2s...>>
     : InStandardPackOrder<UnitProduct<U1s...>, UnitProduct<U2s...>> {};
 
+// OrderAsOneOriginDisplacement<A, B> can only be true if both A and B are `OneOriginDisplacement`
+// specializations, _and_ their first units are in order, or their first units are identical and
+// their second units are in order.  This default case handles the usual case where either A or B
+// (or both) is not a `OneOriginDisplacement` specialization in the first place.
+template <typename A, typename B>
+struct OrderAsOneOriginDisplacement : std::false_type {};
+
+template <typename A, typename B>
+struct OrderByFirstInOneOriginDisplacement;
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderByFirstInOneOriginDisplacement<OneOriginDisplacement<A1, A2>,
+                                           OneOriginDisplacement<B1, B2>>
+    : InOrderFor<UnitProduct, A1, B1> {};
+
+template <typename A, typename B>
+struct OrderBySecondInOneOriginDisplacement;
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderBySecondInOneOriginDisplacement<OneOriginDisplacement<A1, A2>,
+                                            OneOriginDisplacement<B1, B2>>
+    : InOrderFor<UnitProduct, A2, B2> {};
+
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderAsOneOriginDisplacement<OneOriginDisplacement<A1, A2>, OneOriginDisplacement<B1, B2>>
+    : LexicographicTotalOrdering<OneOriginDisplacement<A1, A2>,
+                                 OneOriginDisplacement<B1, B2>,
+                                 OrderByFirstInOneOriginDisplacement,
+                                 OrderBySecondInOneOriginDisplacement> {};
+
 template <typename A, typename B>
 struct OrderByOrigin
     : stdx::bool_constant<(detail::OriginOf<A>::value() < detail::OriginOf<B>::value())> {};
@@ -1143,13 +1150,15 @@ struct UnitAvoidance<CommonPointUnit<Us...>> : std::integral_constant<int, 7> {}
 }  // namespace detail
 
 template <typename A, typename B>
-struct InOrderFor<UnitProduct, A, B> : LexicographicTotalOrdering<A,
-                                                                  B,
-                                                                  detail::OrderByUnitAvoidance,
-                                                                  detail::OrderByDim,
-                                                                  detail::OrderByMag,
-                                                                  detail::OrderByScaleFactor,
-                                                                  detail::OrderByOrigin,
-                                                                  detail::OrderAsUnitProduct> {};
+struct InOrderFor<UnitProduct, A, B>
+    : LexicographicTotalOrdering<A,
+                                 B,
+                                 detail::OrderByUnitAvoidance,
+                                 detail::OrderByDim,
+                                 detail::OrderByMag,
+                                 detail::OrderByScaleFactor,
+                                 detail::OrderByOrigin,
+                                 detail::OrderAsUnitProduct,
+                                 detail::OrderAsOneOriginDisplacement> {};
 
 }  // namespace au

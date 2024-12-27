@@ -434,13 +434,19 @@ TEST(OriginDisplacement, FunctionalInterfaceHandlesInstancesCorrectly) {
 }
 
 struct OffsetCelsius : Celsius {
-    static constexpr auto origin() { return detail::OriginOf<Celsius>::value() + kelvins(10); }
+    // The origin is _specified_ in the common units of the Celsius origin (which we gave in mK),
+    // and a difference of 10 in units of [(1/6) K].  This means that the type of the origin should
+    // be in units of [(1/3000) K].  However, the difference should boil down to a constant of
+    // exactly (5/3 K)
+    static constexpr auto origin() {
+        return detail::OriginOf<Celsius>::value() + (kelvins / mag<6>())(10);
+    }
     static constexpr const char label[] = "offset_deg_C";
 };
 constexpr const char OffsetCelsius::label[];
 
 TEST(DisplaceOrigin, DisplacesOrigin) {
-    EXPECT_EQ(origin_displacement(Celsius{}, OffsetCelsius{}), kelvins(10));
+    EXPECT_EQ(origin_displacement(Celsius{}, OffsetCelsius{}), (kelvins / mag<3>())(5));
 }
 
 TEST(CommonUnit, FindsCommonMagnitude) {
@@ -532,13 +538,11 @@ TEST(CommonPointUnit, TakesOriginMagnitudeIntoAccount) {
     using CommonByQuantity = CommonUnitT<Kelvins, Celsius>;
     using CommonByPoint = CommonPointUnitT<Kelvins, Celsius>;
 
-    // The definition of Celsius in this file uses millikelvin to define its constant.
-    EXPECT_EQ(unit_ratio(CommonByQuantity{}, CommonByPoint{}), mag<1000>());
+    EXPECT_EQ(unit_ratio(CommonByQuantity{}, CommonByPoint{}), mag<20>());
 
-    // The common point-unit should not be the _same_ as mK (since we never named the latter, and
-    // thus can't "conjure it up").  However, it _should_ be _point-equivalent_ to mK.
-    ASSERT_FALSE((std::is_same<CommonByPoint, Milli<Kelvins>>::value));
-    EXPECT_THAT(CommonByPoint{}, PointEquivalentToUnit(milli(Kelvins{})));
+    constexpr auto expected = Kelvins{} / mag<20>();
+    EXPECT_THAT(CommonByPoint{}, PointEquivalentToUnit(expected))
+        << "Expected " << unit_label(expected) << ", got " << unit_label(CommonByPoint{});
 }
 
 TEST(CommonPointUnit, IndependentOfOrderingAndRepetitions) {
@@ -588,7 +592,8 @@ TEST(MakeCommonPoint, PreservesCategory) {
 
     // The origin of the common point unit is the lowest origin among all input units.
     EXPECT_EQ(celsenheit_pt(0), fahrenheit_pt(0));
-    EXPECT_LT(celsenheit_pt(0), celsius_pt(0));
+    EXPECT_LT(celsenheit_pt(0), celsius_pt(0))
+        << "Difference: " << celsius_pt(0) - celsenheit_pt(0);
 
     // The common point unit should evenly divide both input units.
     //
@@ -722,17 +727,10 @@ TEST(UnitLabel, CommonPointUnitLabelWorksWithUnitProduct) {
 }
 
 TEST(UnitLabel, CommonPointUnitLabelTakesOriginOffsetIntoAccount) {
-    // NOTE: the (1 / 1000) scaling comes about because we're still using `Quantity` to define our
-    // origins.  We may be able to do better, and re-found them on `Constant`, at least once we add
-    // some kind of subtraction that works at least some of the time.  The ideal end point would be
-    // that the common point unit for `Celsius` and `OffsetCelsius` would be simply `Celsius`
-    // (because `OffsetCelsius` is just `Celsius` with a _higher_ origin).  At that point, we'll
-    // need to construct a more complicated example here that will force us to use
-    // `CommonPointUnit<...>`, because it will be meaningfully different from all of its parameters.
     using U = CommonPointUnitT<Celsius, OffsetCelsius>;
     EXPECT_THAT(unit_label(U{}),
-                AnyOf(StrEq("EQUIV{[(1 / 1000) deg_C], [(1 / 1000) offset_deg_C]}"),
-                      StrEq("EQUIV{[(1 / 1000) offset_deg_C], [(1 / 1000) deg_C]}")));
+                AnyOf(StrEq("EQUIV{[(1 / 3) deg_C], [(1 / 3) offset_deg_C]}"),
+                      StrEq("EQUIV{[(1 / 3) offset_deg_C], [(1 / 3) deg_C]}")));
 }
 
 TEST(UnitLabel, APICompatibleWithUnitSlots) { EXPECT_THAT(unit_label(feet), StrEq("ft")); }
