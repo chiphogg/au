@@ -490,6 +490,61 @@ struct OriginDisplacement
                          detail::ValueDifference<detail::OriginOf<U2>, detail::OriginOf<U1>>> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// `ValueDisplacementMagnitude` utility.
+namespace detail {
+
+// `ValueDisplacementMagnitude<T1, T2>` is a type that can be instantiated, and is either a
+// `Magnitude` type or else `Zero`.  It represents the magnitude of the unit that takes us from
+// `T1::value()` to `T2::value()` (and is `Zero` if and only if these values are equal).
+//
+// This is fully encapsulated inside of the `detail` namespace because we don't want end users
+// reasoning in terms of "the magnitude" of a unit.  This concept makes no sense generally.
+// However, it's useful to us internally, because it helps us compute the largest possible magnitude
+// of a common point unit.  Being fully encapsulated, we ourselves can be careful not to misuse it.
+template <typename U1, typename U2, bool AreValuesEqual>
+struct ValueDisplacementMagnitudeImpl;
+template <typename U1, typename U2>
+using ValueDisplacementMagnitude =
+    typename ValueDisplacementMagnitudeImpl<U1, U2, (U1::value() == U2::value())>::type;
+
+// Equal values case.
+template <typename U1, typename U2>
+struct ValueDisplacementMagnitudeImpl<U1, U2, true> {
+    static_assert(U1::value() == U2::value(), "Mismatched instantiation (should never happen)");
+    using type = Zero;
+};
+
+// Prep for handling unequal values: it's useful to be able to turn a signed integer into a
+// Magnitude.
+//
+// The `bool` template parameter in the `MagSign` interface has poor callsite readability, but it
+// doesn't matter because we're only using it right here.
+template <bool IsNeg>
+struct MagSign : stdx::type_identity<Magnitude<>> {};
+template <>
+struct MagSign<true> : stdx::type_identity<Magnitude<Negative>> {};
+template <std::intmax_t N>
+constexpr auto signed_mag() {
+    constexpr auto sign = typename MagSign<(N < 0)>::type{};
+    return sign * mag<(N < 0 ? (-N) : N)>();
+}
+
+// Unequal values case implementation: scale up the magnitude of the diff's _unit_ by the diff's
+// _value in_ that unit.
+template <typename U1, typename U2>
+struct ValueDisplacementMagnitudeImpl<U1, U2, false> {
+    static_assert(U1::value() != U2::value(), "Mismatched instantiation (should never happen)");
+    static constexpr auto mag() {
+        constexpr auto diff = U2::value() - U1::value();
+        using D = typename decltype(diff)::Unit;
+        return MagT<D>{} * signed_mag<diff.in(D{})>();
+    }
+    using type = decltype(mag());
+};
+
+}  // namespace detail
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // `HasSameDimension` implementation.
 
 template <typename U>
