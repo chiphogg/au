@@ -724,11 +724,17 @@ struct SimplifyIfOnlyOneUnscaledUnitImpl;
 template <typename U>
 using SimplifyIfOnlyOneUnscaledUnit =
     typename SimplifyIfOnlyOneUnscaledUnitImpl<U, DistinctUnscaledUnits<U>>::type;
+template <>
+struct SimplifyIfOnlyOneUnscaledUnitImpl<Zero, UnitList<Zero>> : stdx::type_identity<Zero> {};
 template <typename U, typename SoleUnscaledUnit>
 struct SimplifyIfOnlyOneUnscaledUnitImpl<U, UnitList<SoleUnscaledUnit>>
     : stdx::type_identity<decltype(SoleUnscaledUnit{} * UnitRatioT<U, SoleUnscaledUnit>{})> {};
 template <typename U, typename... Us>
 struct SimplifyIfOnlyOneUnscaledUnitImpl<U, UnitList<Us...>> : stdx::type_identity<U> {};
+
+// Explicit specialization to short-circuit `FirstMatchingUnit` machinery for `Zero`.
+template <>
+struct FirstMatchingUnit<AreUnitsQuantityEquivalent, Zero, Zero> : stdx::type_identity<Zero> {};
 
 }  // namespace detail
 
@@ -739,14 +745,20 @@ template <typename... Us>
 using CommonUnitLabel = FlatDedupedTypeListT<detail::CommonUnitLabelImpl, Us...>;
 
 template <typename... Us>
-using ComputeCommonUnitImpl =
-    detail::EliminateRedundantUnits<FlatDedupedTypeListT<CommonUnit, Us...>>;
+struct ComputeCommonUnitImpl
+    : stdx::type_identity<
+          detail::EliminateRedundantUnits<FlatDedupedTypeListT<CommonUnit, Us...>>> {};
+template <>
+struct ComputeCommonUnitImpl<> : stdx::type_identity<Zero> {};
+
+template <typename T>
+struct IsNonzero : stdx::negation<std::is_same<T, Zero>> {};
 
 template <typename... Us>
 struct ComputeCommonUnit
-    : stdx::type_identity<detail::SimplifyIfOnlyOneUnscaledUnit<
-          typename detail::FirstMatchingUnit<AreUnitsQuantityEquivalent,
-                                             ComputeCommonUnitImpl<Us...>>::type>> {};
+    : stdx::type_identity<detail::SimplifyIfOnlyOneUnscaledUnit<typename detail::FirstMatchingUnit<
+          AreUnitsQuantityEquivalent,
+          typename detail::ApplyIf<IsNonzero, ComputeCommonUnitImpl, Us...>::type>::type>> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `CommonPointUnitT` helper implementation.
