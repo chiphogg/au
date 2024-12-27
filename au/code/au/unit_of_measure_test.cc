@@ -14,6 +14,7 @@
 
 #include "au/unit_of_measure.hh"
 
+#include "au/constant.hh"
 #include "au/prefix.hh"
 #include "au/testing.hh"
 #include "au/units/fahrenheit.hh"
@@ -777,6 +778,18 @@ TEST(UnitOfLowestOrigin, ProducesConsistentResultsRegardlessOfOrdering) {
     // Do this later.
     // StaticAssertTypeEq<UnitOfLowestOrigin<Celsius, Milli<Celsius>>,
     //                    UnitOfLowestOrigin<Milli<Celsius>, Celsius>>();
+}
+
+TEST(OriginDisplacementUnit, ZeroForSameOrigin) {
+    StaticAssertTypeEq<OriginDisplacementUnit<Celsius, Milli<Celsius>>, Zero>();
+}
+
+TEST(OriginDisplacementUnit, HasExpectedMagnitudeAndSign) {
+    constexpr auto disp_k0_to_c0 = make_constant(OriginDisplacementUnit<Kelvins, Celsius>{});
+    EXPECT_EQ(disp_k0_to_c0, centi(kelvins)(273'15));
+
+    constexpr auto disp_c0_to_k0 = make_constant(OriginDisplacementUnit<Celsius, Kelvins>{});
+    EXPECT_EQ(disp_c0_to_k0, centi(kelvins)(-273'15));
 }
 
 TEST(EliminateRedundantUnits, IdentityForEmptySet) {

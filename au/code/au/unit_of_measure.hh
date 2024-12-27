@@ -824,6 +824,27 @@ struct UnitOfLowestOriginImpl<U, U1, Us...>
                        U,
                        UnitOfLowestOrigin<U1, Us...>> {};
 
+// `OriginDisplacementUnit<U1, U2>` is an ad hoc unit equal to the displacement from the origin of
+// `U1` to the origin of `U2`.  If `U1` and `U2` have equal origins, then it is `Zero`.
+template <typename U1, typename U2, bool AreOriginsEqual>
+struct OriginDisplacementUnitImpl;
+template <typename U1, typename U2>
+using OriginDisplacementUnit =
+    typename OriginDisplacementUnitImpl<U1, U2, (OriginOf<U1>::value() == OriginOf<U2>::value())>::
+        type;
+template <typename U1, typename U2>
+struct OriginDisplacementUnitImpl<U1, U2, true> : stdx::type_identity<Zero> {};
+
+template <typename U1, typename U2>
+struct OneOriginDisplacement {
+    using Dim = CommonDimensionT<DimT<U1>, DimT<U2>>;
+    using Mag = ValueDisplacementMagnitude<OriginOf<U1>, OriginOf<U2>>;
+};
+
+template <typename U1, typename U2>
+struct OriginDisplacementUnitImpl<U1, U2, false>
+    : stdx::type_identity<OneOriginDisplacement<U1, U2>> {};
+
 // MagTypeT<T> gives some measure of the size of the unit for this "quantity-alike" type.
 //
 // Zero acts like a quantity in this context, and we treat it as if its unit's Magnitude is Zero.

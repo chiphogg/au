@@ -620,6 +620,7 @@ cc_test(
     srcs = ["code/au/unit_of_measure_test.cc"],
     deps = [
         ":prefix",
+        ":constant",
         ":testing",
         ":unit_of_measure",
         ":units",
