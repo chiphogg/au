@@ -811,6 +811,19 @@ struct CommonOrigin<Head, Tail...> :
                                OriginOf<Head>,
                                CommonOrigin<Tail...>>>> {};
 
+// `UnitOfLowestOrigin<Us...>` is any unit among `Us` whose origin equals `CommonOrigin<Us...>`.
+template <typename... Us>
+struct UnitOfLowestOriginImpl;
+template <typename... Us>
+using UnitOfLowestOrigin = typename UnitOfLowestOriginImpl<Us...>::type;
+template <typename U>
+struct UnitOfLowestOriginImpl<U> : stdx::type_identity<U> {};
+template <typename U, typename U1, typename... Us>
+struct UnitOfLowestOriginImpl<U, U1, Us...>
+    : std::conditional<(OriginOf<U>::value() == CommonOrigin<U, U1, Us...>::value()),
+                       U,
+                       UnitOfLowestOrigin<U1, Us...>> {};
+
 // MagTypeT<T> gives some measure of the size of the unit for this "quantity-alike" type.
 //
 // Zero acts like a quantity in this context, and we treat it as if its unit's Magnitude is Zero.

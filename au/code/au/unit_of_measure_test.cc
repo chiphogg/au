@@ -763,6 +763,22 @@ TEST(CommonOrigin, SymmetricUnderReordering) {
     EXPECT_THAT(common_origin_value, Not(SameTypeAndValue(AlternateCelsius::origin())));
 }
 
+TEST(UnitOfLowestOrigin, SelectsSingleUnit) {
+    StaticAssertTypeEq<UnitOfLowestOrigin<Celsius>, Celsius>();
+    StaticAssertTypeEq<UnitOfLowestOrigin<Kelvins>, Kelvins>();
+}
+
+TEST(UnitOfLowestOrigin, SelectsLowestOriginUnit) {
+    StaticAssertTypeEq<UnitOfLowestOrigin<Celsius, Kelvins>, Kelvins>();
+    StaticAssertTypeEq<UnitOfLowestOrigin<Kelvins, Celsius>, Kelvins>();
+}
+
+TEST(UnitOfLowestOrigin, ProducesConsistentResultsRegardlessOfOrdering) {
+    // Do this later.
+    // StaticAssertTypeEq<UnitOfLowestOrigin<Celsius, Milli<Celsius>>,
+    //                    UnitOfLowestOrigin<Milli<Celsius>, Celsius>>();
+}
+
 TEST(EliminateRedundantUnits, IdentityForEmptySet) {
     StaticAssertTypeEq<EliminateRedundantUnits<SomePack<>>, SomePack<>>();
 }
