@@ -26,6 +26,11 @@ struct Prepend;
 template <typename PackT, typename T>
 using PrependT = typename Prepend<PackT, T>::type;
 
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+struct ApplyIfImpl;
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+using ApplyIf = typename ApplyIfImpl<Condition, Pack, Ts...>::type;
+
 template <typename T, typename Pack>
 struct DropAllImpl;
 template <typename T, typename Pack>
@@ -55,6 +60,45 @@ struct Prepend<Pack<Us...>, T> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// `ApplyIf` implementation.
+
+// Helper: change the pack.  This lets us do our work in one kind of pack, and then swap it out for
+// another pack at the end.
+template <template <class...> class NewPack, typename PackT>
+struct ChangePackToImpl;
+template <template <class...> class NewPack, typename PackT>
+using ChangePackTo = typename ChangePackToImpl<NewPack, PackT>::type;
+template <template <class...> class NewPack, template <class...> class OldPack, typename... Ts>
+struct ChangePackToImpl<NewPack, OldPack<Ts...>> : stdx::type_identity<NewPack<Ts...>> {};
+
+// A generic typelist with no constraints on members or ordering.  Intended as a type to hold
+// intermediate work.
+template <typename... Ts>
+struct GenericTypeList;
+
+template <template <class> class Condition, typename PackT>
+struct ListMatchingTypesImpl;
+template <template <class> class Condition, typename PackT>
+using ListMatchingTypes = typename ListMatchingTypesImpl<Condition, PackT>::type;
+
+// Base case:
+template <template <class> class Condition>
+struct ListMatchingTypesImpl<Condition, GenericTypeList<>>
+    : stdx::type_identity<GenericTypeList<>> {};
+
+// Recursive case:
+template <template <class> class Condition, typename H, typename... Ts>
+struct ListMatchingTypesImpl<Condition, GenericTypeList<H, Ts...>>
+    : std::conditional<Condition<H>::value,
+                       PrependT<ListMatchingTypes<Condition, GenericTypeList<Ts...>>, H>,
+                       ListMatchingTypes<Condition, GenericTypeList<Ts...>>> {};
+
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+struct ApplyIfImpl : stdx::type_identity<
+                         ChangePackTo<Pack, ListMatchingTypes<Condition, GenericTypeList<Ts...>>>> {
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // `DropAll` implementation.
 
 // Base case.
@@ -63,10 +107,9 @@ struct DropAllImpl<T, Pack<>> : stdx::type_identity<Pack<>> {};
 
 // Recursive case:
 template <typename T, template <class...> class Pack, typename H, typename... Ts>
-struct DropAllImpl<T, Pack<H, Ts...>>
-    : std::conditional<std::is_same<T, H>::value,
-                       DropAll<T, Pack<Ts...>>,
-                       detail::PrependT<DropAll<T, Pack<Ts...>>, H>> {};
+struct DropAllImpl<T, Pack<H, Ts...>> : std::conditional<std::is_same<T, H>::value,
+                                                         DropAll<T, Pack<Ts...>>,
+                                                         PrependT<DropAll<T, Pack<Ts...>>, H>> {};
 
 }  // namespace detail
 }  // namespace au
