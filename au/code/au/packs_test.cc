@@ -235,6 +235,33 @@ TEST(LexicographicTotalOrdering, SecondArgumentBreaksTieInFirst) {
     EXPECT_TRUE((InOrderFor<LexiPack, TwoIndex<0, 0>, TwoIndex<0, 1>>::value));
 }
 
+TEST(InsertUsingOrderingFor, UsesRequestedOrdering) {
+    StaticAssertTypeEq<InsertUsingOrderingFor<LexiPack, TwoIndex<5, 0>, LexiPack<>>,
+                       LexiPack<TwoIndex<5, 0>>>();
+    StaticAssertTypeEq<InsertUsingOrderingFor<LexiPack, TwoIndex<4, 0>, LexiPack<TwoIndex<5, 0>>>,
+                       LexiPack<TwoIndex<4, 0>, TwoIndex<5, 0>>>();
+    StaticAssertTypeEq<InsertUsingOrderingFor<LexiPack, TwoIndex<6, 0>, LexiPack<TwoIndex<5, 0>>>,
+                       LexiPack<TwoIndex<5, 0>, TwoIndex<6, 0>>>();
+    StaticAssertTypeEq<
+        InsertUsingOrderingFor<LexiPack, TwoIndex<5, 1>, LexiPack<TwoIndex<5, 0>, TwoIndex<6, 0>>>,
+        LexiPack<TwoIndex<5, 0>, TwoIndex<5, 1>, TwoIndex<6, 0>>>();
+}
+
+TEST(SortAs, SortsAs) {
+    StaticAssertTypeEq<SortAs<LexiPack, Pack<>>, Pack<>>();
+
+    StaticAssertTypeEq<SortAs<LexiPack, Pack<TwoIndex<1, 1>>>, Pack<TwoIndex<1, 1>>>();
+
+    StaticAssertTypeEq<SortAs<LexiPack, Pack<TwoIndex<1, 1>, TwoIndex<2, 2>>>,
+                       Pack<TwoIndex<1, 1>, TwoIndex<2, 2>>>();
+
+    StaticAssertTypeEq<SortAs<LexiPack, Pack<TwoIndex<2, 2>, TwoIndex<1, 1>>>,
+                       Pack<TwoIndex<1, 1>, TwoIndex<2, 2>>>();
+
+    StaticAssertTypeEq<SortAs<LexiPack, Pack<TwoIndex<2, 2>, TwoIndex<3, 3>, TwoIndex<1, 1>>>,
+                       Pack<TwoIndex<1, 1>, TwoIndex<2, 2>, TwoIndex<3, 3>>>();
+}
+
 TEST(InStandardPackOrder, NullPackComesBeforeEveryNonNullPack) {
     EXPECT_FALSE((InStandardPackOrder<Pack<>, Pack<>>::value));
 
