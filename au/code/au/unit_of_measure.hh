@@ -815,7 +815,7 @@ struct CommonOrigin<Head, Tail...> :
 template <typename... Us>
 struct UnitOfLowestOriginImpl;
 template <typename... Us>
-using UnitOfLowestOrigin = typename UnitOfLowestOriginImpl<Us...>::type;
+using UnitOfLowestOrigin = typename SortAs<UnitProduct, UnitOfLowestOriginImpl<Us...>>::type;
 template <typename U>
 struct UnitOfLowestOriginImpl<U> : stdx::type_identity<U> {};
 template <typename U, typename U1, typename... Us>

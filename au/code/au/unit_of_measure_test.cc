@@ -773,9 +773,8 @@ TEST(UnitOfLowestOrigin, SelectsLowestOriginUnit) {
 }
 
 TEST(UnitOfLowestOrigin, ProducesConsistentResultsRegardlessOfOrdering) {
-    // Do this later.
-    // StaticAssertTypeEq<UnitOfLowestOrigin<Celsius, Milli<Celsius>>,
-    //                    UnitOfLowestOrigin<Milli<Celsius>, Celsius>>();
+    StaticAssertTypeEq<UnitOfLowestOrigin<Celsius, Milli<Celsius>>,
+                       UnitOfLowestOrigin<Milli<Celsius>, Celsius>>();
 }
 
 TEST(OriginDisplacementUnit, ZeroForSameOrigin) {
