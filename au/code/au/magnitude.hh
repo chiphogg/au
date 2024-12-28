@@ -245,6 +245,7 @@ template <typename... BPs>
 constexpr auto abs(Magnitude<BPs...>) {
     return Abs<Magnitude<BPs...>>{};
 }
+constexpr auto abs(Zero z) { return z; }
 
 template <typename... BPs>
 constexpr auto numerator(Magnitude<BPs...>) {
@@ -348,6 +349,9 @@ struct AbsImpl<Magnitude<Negative, BPs...>> : stdx::type_identity<Magnitude<BPs.
 
 template <typename... BPs>
 struct AbsImpl<Magnitude<BPs...>> : stdx::type_identity<Magnitude<BPs...>> {};
+
+template <>
+struct AbsImpl<Zero> : stdx::type_identity<Zero> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `numerator()` implementation.
@@ -761,11 +765,16 @@ struct PrependIfExpNegative<BP, Magnitude<Ts...>>
 // If M is (N/D), DenominatorPartT<M> is D; we want 1/D.
 template <typename M>
 using NegativePowers = MagInverseT<DenominatorPartT<M>>;
+
+template <typename MagT>
+struct TypeIdentityAndAssertPositive : stdx::type_identity<MagT> {
+    static_assert(IsPositive<MagT>::value, "Common magnitude only defined for unsigned values");
+};
 }  // namespace detail
 
 // 1-ary case: identity.
 template <typename M>
-struct CommonMagnitude<M> : stdx::type_identity<M> {};
+struct CommonMagnitude<M> : detail::TypeIdentityAndAssertPositive<M> {};
 
 // 2-ary base case: both Magnitudes null.
 template <>
@@ -774,12 +783,12 @@ struct CommonMagnitude<Magnitude<>, Magnitude<>> : stdx::type_identity<Magnitude
 // 2-ary base case: only left Magnitude is null.
 template <typename Head, typename... Tail>
 struct CommonMagnitude<Magnitude<>, Magnitude<Head, Tail...>>
-    : stdx::type_identity<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
+    : detail::TypeIdentityAndAssertPositive<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
 
 // 2-ary base case: only right Magnitude is null.
 template <typename Head, typename... Tail>
 struct CommonMagnitude<Magnitude<Head, Tail...>, Magnitude<>>
-    : stdx::type_identity<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
+    : detail::TypeIdentityAndAssertPositive<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
 
 // 2-ary recursive case: two non-null Magnitudes.
 template <typename H1, typename... T1, typename H2, typename... T2>
@@ -810,9 +819,9 @@ struct CommonMagnitude<M1, M2, Tail...> : CommonMagnitude<M1, CommonMagnitudeT<M
 
 // Zero is always ignored.
 template <typename M>
-struct CommonMagnitude<M, Zero> : stdx::type_identity<M> {};
+struct CommonMagnitude<M, Zero> : detail::TypeIdentityAndAssertPositive<M> {};
 template <typename M>
-struct CommonMagnitude<Zero, M> : stdx::type_identity<M> {};
+struct CommonMagnitude<Zero, M> : detail::TypeIdentityAndAssertPositive<M> {};
 template <>
 struct CommonMagnitude<Zero, Zero> : stdx::type_identity<Zero> {};
 

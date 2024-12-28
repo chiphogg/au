@@ -193,6 +193,10 @@ TEST(Abs, FlipsSignForNegative) {
     EXPECT_EQ(abs(-mag<2>() / PI), mag<2>() / PI);
 }
 
+TEST(Abs, IdentityForZero) {
+    EXPECT_EQ(abs(ZERO), ZERO);
+}
+
 TEST(IsPositive, TrueForPositive) {
     EXPECT_TRUE(is_positive(mag<1>()));
     EXPECT_TRUE(is_positive(mag<2>()));

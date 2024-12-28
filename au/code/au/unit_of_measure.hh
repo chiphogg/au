@@ -863,6 +863,13 @@ struct MagType<Zero> : stdx::type_identity<Zero> {};
 
 }  // namespace detail
 
+// Enable `Abs<OneOriginDisplacement>`: it's useful, because these units are often negative.
+template <typename U1, typename U2>
+struct AbsImpl<detail::OneOriginDisplacement<U1, U2>>
+    : std::conditional<IsPositive<detail::MagT<detail::OneOriginDisplacement<U1, U2>>>::value,
+                       detail::OneOriginDisplacement<U1, U2>,
+                       detail::OneOriginDisplacement<U2, U1>> {};
+
 template <typename U1, typename U2>
 struct UnitLabel<detail::OneOriginDisplacement<U1, U2>> {
     using LabelT = detail::ExtendedLabel<15u, U1, U2>;
