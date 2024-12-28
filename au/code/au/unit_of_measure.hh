@@ -836,6 +836,11 @@ template <typename U1, typename U2>
 struct OriginDisplacementUnitImpl<U1, U2, true> : stdx::type_identity<Zero> {};
 
 template <typename U1, typename U2>
+constexpr auto origin_displacement_unit(U1, U2) {
+    return OriginDisplacementUnit<AssociatedUnitForPointsT<U1>, AssociatedUnitForPointsT<U2>>{};
+}
+
+template <typename U1, typename U2>
 struct OneOriginDisplacement {
     using Dim = CommonDimensionT<DimT<U1>, DimT<U2>>;
     using Mag = ValueDisplacementMagnitude<OriginOf<U1>, OriginOf<U2>>;
@@ -858,14 +863,26 @@ struct MagType<Zero> : stdx::type_identity<Zero> {};
 
 }  // namespace detail
 
+template <typename U1, typename U2>
+struct UnitLabel<detail::OneOriginDisplacement<U1, U2>> {
+    using LabelT = detail::ExtendedLabel<15u, U1, U2>;
+    static constexpr LabelT value =
+        detail::concatenate("(@(0 ", UnitLabel<U2>::value, ") - @(0 ", UnitLabel<U1>::value, "))");
+};
+template <typename U1, typename U2>
+constexpr typename UnitLabel<detail::OneOriginDisplacement<U1, U2>>::LabelT
+    UnitLabel<detail::OneOriginDisplacement<U1, U2>>::value;
+
 // This exists to be the "named type" for the common unit of a bunch of input units.
 //
 // To be well-formed, the units must be listed in the same order every time.  End users cannot be
 // responsible for this; thus, they should never name this type directly.  Rather, they should name
 // the `CommonPointUnitT` alias, which will handle the canonicalization.
 template <typename... Us>
-struct CommonPointUnit
-    : CommonUnitT<Us..., detail::OriginDisplacementUnit<detail::UnitOfLowestOrigin<Us...>, Us>...> {
+using CommonAmongUnitsAndOriginDisplacements =
+    CommonUnitT<Us..., detail::OriginDisplacementUnit<detail::UnitOfLowestOrigin<Us...>, Us>...>;
+template <typename... Us>
+struct CommonPointUnit : CommonAmongUnitsAndOriginDisplacements<Us...> {
     static_assert(AreElementsInOrder<CommonPointUnit, CommonPointUnit<Us...>>::value,
                   "Elements must be listed in ascending order");
     static_assert(HasSameDimension<Us...>::value,
@@ -1038,8 +1055,7 @@ struct UnitLabel<CommonUnit<Us...>>
 // origin displacements into account.
 template <typename... Us>
 struct UnitLabel<CommonPointUnit<Us...>>
-    : CommonUnitLabel<decltype(
-          Us{} * (detail::MagT<CommonPointUnit<Us...>>{} / detail::MagT<Us>{}))...> {};
+    : UnitLabel<CommonAmongUnitsAndOriginDisplacements<Us...>> {};
 
 template <typename Unit>
 constexpr const auto &unit_label(Unit) {

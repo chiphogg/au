@@ -729,8 +729,8 @@ TEST(UnitLabel, CommonPointUnitLabelWorksWithUnitProduct) {
 TEST(UnitLabel, CommonPointUnitLabelTakesOriginOffsetIntoAccount) {
     using U = CommonPointUnitT<Celsius, OffsetCelsius>;
     EXPECT_THAT(unit_label(U{}),
-                AnyOf(StrEq("EQUIV{[(1 / 3) deg_C], [(1 / 3) offset_deg_C]}"),
-                      StrEq("EQUIV{[(1 / 3) offset_deg_C], [(1 / 3) deg_C]}")));
+                AnyOf(StrEq("EQUIV{[(1 / 3) deg_C], [(1 / 5) (@(0 offset_deg_C) - @(0 deg_C))]}"),
+                      StrEq("EQUIV{[(1 / 5) (@(0 offset_deg_C) - @(0 deg_C))], [(1 / 3) deg_C]}")));
 }
 
 TEST(UnitLabel, APICompatibleWithUnitSlots) { EXPECT_THAT(unit_label(feet), StrEq("ft")); }
@@ -788,6 +788,13 @@ TEST(OriginDisplacementUnit, HasExpectedMagnitudeAndSign) {
 
     constexpr auto disp_c0_to_k0 = make_constant(OriginDisplacementUnit<Celsius, Kelvins>{});
     EXPECT_EQ(disp_c0_to_k0, centi(kelvins)(-273'15));
+}
+
+TEST(OriginDisplacementUnit, HasExpectedLabel) {
+    EXPECT_THAT(unit_label(origin_displacement_unit(kelvins_pt, celsius_pt)),
+                StrEq("(@(0 deg_C) - @(0 K))"));
+    EXPECT_THAT(unit_label(origin_displacement_unit(celsius_pt, kelvins_pt)),
+                StrEq("(@(0 K) - @(0 deg_C))"));
 }
 
 TEST(EliminateRedundantUnits, IdentityForEmptySet) {

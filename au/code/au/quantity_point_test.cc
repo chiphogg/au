@@ -365,8 +365,9 @@ TEST(QuantityPoint, MixedUnitAndRepDifferenceUsesCommonPointType) {
 
 TEST(QuantityPoint, CommonPointUnitLabel) {
     EXPECT_THAT(stream_to_string(celsius_pt(0) - kelvins_pt(0)),
-                AnyOf(StrEq("5463 EQUIV{[(1 / 20) K], [(1 / 20) degC]}"),
-                      StrEq("5463 EQUIV{[(1 / 20) degC], [(1 / 20) K]}")));
+                AnyOf(
+                    StrEq("5463 EQUIV{[(1 / 20) K], [(1 / 5463) (@(0 degC) - @(0 K))]}"),
+                    StrEq("5463 EQUIV{[(1 / 5463) (@(0 degC) - @(0 K))], [(1 / 20) K]}")));
 }
 
 TEST(QuantityPoint, CanCompareUnitsWithDifferentOrigins) {
