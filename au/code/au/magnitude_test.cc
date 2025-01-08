@@ -381,6 +381,8 @@ TEST(CommonMagnitude, ZeroResultIndicatesAllInputsAreZero) {
 
 TEST(CommonMagnitude, CommonMagOfPosAndNegIsPos) {
     EXPECT_EQ(common_magnitude(mag<12>(), -mag<15>()), mag<3>());
+    EXPECT_EQ(common_magnitude(-mag<12>(), mag<15>()), mag<3>());
+
     EXPECT_EQ(common_magnitude(mag<12>(), -mag<15>(), -mag<27>()), mag<3>());
     EXPECT_EQ(common_magnitude(-mag<9>(), mag<12>(), -mag<15>(), -mag<27>()), mag<3>());
 }
