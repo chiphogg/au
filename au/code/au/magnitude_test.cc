@@ -193,9 +193,7 @@ TEST(Abs, FlipsSignForNegative) {
     EXPECT_EQ(abs(-mag<2>() / PI), mag<2>() / PI);
 }
 
-TEST(Abs, IdentityForZero) {
-    EXPECT_EQ(abs(ZERO), ZERO);
-}
+TEST(Abs, IdentityForZero) { EXPECT_EQ(abs(ZERO), ZERO); }
 
 TEST(IsPositive, TrueForPositive) {
     EXPECT_TRUE(is_positive(mag<1>()));
@@ -379,6 +377,18 @@ TEST(CommonMagnitude, ZeroResultIndicatesAllInputsAreZero) {
     EXPECT_EQ(common_magnitude(ZERO, ZERO), ZERO);
     EXPECT_EQ(common_magnitude(ZERO, ZERO, ZERO), ZERO);
     EXPECT_EQ(common_magnitude(ZERO, ZERO, ZERO, ZERO, ZERO), ZERO);
+}
+
+TEST(CommonMagnitude, CommonMagOfPosAndNegIsPos) {
+    EXPECT_EQ(common_magnitude(mag<12>(), -mag<15>()), mag<3>());
+    EXPECT_EQ(common_magnitude(mag<12>(), -mag<15>(), -mag<27>()), mag<3>());
+    EXPECT_EQ(common_magnitude(-mag<9>(), mag<12>(), -mag<15>(), -mag<27>()), mag<3>());
+}
+
+TEST(CommonMagnitude, CommonMagOfNegAndNegIsNeg) {
+    EXPECT_EQ(common_magnitude(-mag<12>(), -mag<15>()), -mag<3>());
+    EXPECT_EQ(common_magnitude(-mag<12>(), -mag<15>(), -mag<27>()), -mag<3>());
+    EXPECT_EQ(common_magnitude(-mag<9>(), -mag<12>(), -mag<15>(), -mag<27>()), -mag<3>());
 }
 }  // namespace
 

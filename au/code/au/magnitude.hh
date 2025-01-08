@@ -765,16 +765,11 @@ struct PrependIfExpNegative<BP, Magnitude<Ts...>>
 // If M is (N/D), DenominatorPartT<M> is D; we want 1/D.
 template <typename M>
 using NegativePowers = MagInverseT<DenominatorPartT<M>>;
-
-template <typename MagT>
-struct TypeIdentityAndAssertPositive : stdx::type_identity<MagT> {
-    static_assert(IsPositive<MagT>::value, "Common magnitude only defined for unsigned values");
-};
 }  // namespace detail
 
 // 1-ary case: identity.
 template <typename M>
-struct CommonMagnitude<M> : detail::TypeIdentityAndAssertPositive<M> {};
+struct CommonMagnitude<M> : stdx::type_identity<M> {};
 
 // 2-ary base case: both Magnitudes null.
 template <>
@@ -783,12 +778,12 @@ struct CommonMagnitude<Magnitude<>, Magnitude<>> : stdx::type_identity<Magnitude
 // 2-ary base case: only left Magnitude is null.
 template <typename Head, typename... Tail>
 struct CommonMagnitude<Magnitude<>, Magnitude<Head, Tail...>>
-    : detail::TypeIdentityAndAssertPositive<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
+    : stdx::type_identity<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
 
 // 2-ary base case: only right Magnitude is null.
 template <typename Head, typename... Tail>
 struct CommonMagnitude<Magnitude<Head, Tail...>, Magnitude<>>
-    : detail::TypeIdentityAndAssertPositive<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
+    : stdx::type_identity<detail::NegativePowers<Magnitude<Head, Tail...>>> {};
 
 // 2-ary recursive case: two non-null Magnitudes.
 template <typename H1, typename... T1, typename H2, typename... T2>
@@ -819,9 +814,9 @@ struct CommonMagnitude<M1, M2, Tail...> : CommonMagnitude<M1, CommonMagnitudeT<M
 
 // Zero is always ignored.
 template <typename M>
-struct CommonMagnitude<M, Zero> : detail::TypeIdentityAndAssertPositive<M> {};
+struct CommonMagnitude<M, Zero> : stdx::type_identity<M> {};
 template <typename M>
-struct CommonMagnitude<Zero, M> : detail::TypeIdentityAndAssertPositive<M> {};
+struct CommonMagnitude<Zero, M> : stdx::type_identity<M> {};
 template <>
 struct CommonMagnitude<Zero, Zero> : stdx::type_identity<Zero> {};
 
