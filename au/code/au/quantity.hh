@@ -100,12 +100,26 @@ constexpr auto as_quantity(T &&x) -> CorrespondingQuantityT<T> {
     return make_quantity<typename Q::Unit>(value);
 }
 
+namespace detail {
+template <typename Rep, bool IsUnitPositive>
+struct CompareUnderlyingValues;
+}  // namespace detail
+
 template <typename UnitT, typename RepT>
 class Quantity {
     template <bool ImplicitOk, typename OtherUnit, typename OtherRep>
     using EnableIfImplicitOkIs = std::enable_if_t<
         ImplicitOk ==
         ConstructionPolicy<UnitT, RepT>::template PermitImplicitFrom<OtherUnit, OtherRep>::value>;
+    using Vals = detail::CompareUnderlyingValues<RepT, IsPositive<detail::MagT<UnitT>>::value>;
+
+    // Not strictly necessary, but we want to keep each comparator implementation to one line.
+    using Eq = detail::Equal;
+    using Ne = detail::NotEqual;
+    using Lt = detail::Less;
+    using Le = detail::LessEqual;
+    using Gt = detail::Greater;
+    using Ge = detail::GreaterEqual;
 
  public:
     using Rep = RepT;
@@ -247,12 +261,12 @@ class Quantity {
     friend struct QuantityMaker<UnitT>;
 
     // Comparison operators.
-    friend constexpr bool operator==(Quantity a, Quantity b) { return a.value_ == b.value_; }
-    friend constexpr bool operator!=(Quantity a, Quantity b) { return a.value_ != b.value_; }
-    friend constexpr bool operator<(Quantity a, Quantity b) { return a.value_ < b.value_; }
-    friend constexpr bool operator<=(Quantity a, Quantity b) { return a.value_ <= b.value_; }
-    friend constexpr bool operator>(Quantity a, Quantity b) { return a.value_ > b.value_; }
-    friend constexpr bool operator>=(Quantity a, Quantity b) { return a.value_ >= b.value_; }
+    friend constexpr bool operator==(Quantity a, Quantity b) { return Vals::cmp(a, b, Eq{}); }
+    friend constexpr bool operator!=(Quantity a, Quantity b) { return Vals::cmp(a, b, Ne{}); }
+    friend constexpr bool operator<(Quantity a, Quantity b) { return Vals::cmp(a, b, Lt{}); }
+    friend constexpr bool operator<=(Quantity a, Quantity b) { return Vals::cmp(a, b, Le{}); }
+    friend constexpr bool operator>(Quantity a, Quantity b) { return Vals::cmp(a, b, Gt{}); }
+    friend constexpr bool operator>=(Quantity a, Quantity b) { return Vals::cmp(a, b, Ge{}); }
 
     // Addition and subtraction for like quantities.
     friend constexpr Quantity<UnitT, decltype(std::declval<RepT>() + std::declval<RepT>())>
@@ -830,6 +844,24 @@ template <typename U, typename R, typename QLike>
 constexpr auto operator>=(QLike q1, Quantity<U, R> q2) -> decltype(as_quantity(q1) >= q2) {
     return as_quantity(q1) >= q2;
 }
+
+namespace detail {
+template <typename Rep>
+struct CompareUnderlyingValues<Rep, true> {
+    template <typename U, typename Comp>
+    static constexpr bool cmp(Quantity<U, Rep> lhs, Quantity<U, Rep> rhs, Comp comp) {
+        return comp(lhs.in(U{}), rhs.in(U{}));
+    }
+};
+
+template <typename Rep>
+struct CompareUnderlyingValues<Rep, false> {
+    template <typename U, typename Comp>
+    static constexpr bool cmp(Quantity<U, Rep> lhs, Quantity<U, Rep> rhs, Comp comp) {
+        return comp(rhs.in(U{}), lhs.in(U{}));
+    }
+};
+}  // namespace detail
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 template <typename U1, typename R1, typename U2, typename R2>

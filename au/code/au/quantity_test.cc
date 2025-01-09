@@ -24,6 +24,8 @@
 using ::testing::DoubleEq;
 using ::testing::Each;
 using ::testing::Eq;
+using ::testing::Gt;
+using ::testing::Lt;
 using ::testing::StaticAssertTypeEq;
 
 namespace au {
@@ -491,6 +493,12 @@ TEST(Quantity, ConvertingByNegativeOneCanBeDoneImplicitly) {
     constexpr auto neginches = inches * (-mag<1>());
     constexpr auto q = inches(int8_t{-10});
     EXPECT_THAT(q.as(neginches), SameTypeAndValue(neginches(int8_t{10})));
+}
+
+TEST(Quantity, ComparisonsAreReversedForNegativeUnits) {
+    constexpr auto neginches = inches * (-mag<1>());
+    EXPECT_THAT(neginches(10), Gt(neginches(20)));
+    EXPECT_THAT(neginches(10u), Lt(neginches(5u)));
 }
 
 TEST(Quantity, SupportsExplicitRepConversionToComplexRep) {
