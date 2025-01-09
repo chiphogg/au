@@ -375,6 +375,18 @@ TEST(QuantityPoint, CanCompareUnitsWithDifferentOrigins) {
     EXPECT_THAT(celsius_pt(0), ConsistentlyLessThan(kelvins_pt(274)));
 }
 
+TEST(QuantityPoint, ComparisonsWithNegativeUnitHaveAppropriatelyReversedResults) {
+    constexpr auto neg_celsius_pt = celsius_pt * (-mag<1>());
+    constexpr auto neg_kelvins_pt = kelvins_pt * (-mag<1>());
+
+    EXPECT_THAT(neg_celsius_pt(1), ConsistentlyLessThan(neg_celsius_pt(0)));
+
+    EXPECT_THAT(celsius_pt(0), ConsistentlyGreaterThan(neg_kelvins_pt(-273)));
+    EXPECT_THAT(celsius_pt(0), ConsistentlyLessThan(neg_kelvins_pt(-274)));
+
+    EXPECT_THAT(neg_celsius_pt(1), ConsistentlyEqualTo(milli(neg_kelvins_pt)(-272'150)));
+}
+
 TEST(QuantityPoint, CanSubtractIntegralInputsWithNonintegralOriginDifference) {
     EXPECT_EQ(celsius_pt(0) - kelvins_pt(273), centi(kelvins)(15));
 }
