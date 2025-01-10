@@ -144,6 +144,11 @@ TEST(CanScaleByMagnitude, MakesScaledWrapperWhenDividingByMagnitude) {
     StaticAssertTypeEq<decltype(mol / PI), UnitWrapper<decltype(Moles{} / PI)>>();
 }
 
+TEST(CanScaleByMagnitude, SupportsNegation) {
+    constexpr auto mol = UnitWrapper<Moles>{};
+    StaticAssertTypeEq<decltype(-mol), UnitWrapper<decltype(Moles{} * (-mag<1>()))>>();
+}
+
 TEST(ForbidsComposingWith, FailsToCompileWhenMultiplyingOrDividingWithForbiddenWrapper) {
     // Uncomment each line below individually to verify.
 
