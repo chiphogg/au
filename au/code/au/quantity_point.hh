@@ -82,7 +82,7 @@ class QuantityPoint {
     //      OK : QuantityPoint<Celsius, int> -> QuantityPoint<Milli<Kelvins>, int>
     template <typename OtherUnit, typename OtherRep>
     static constexpr bool should_enable_implicit_construction_from() {
-        using Com = CommonUnitT<OtherUnit, Abs<detail::OriginDisplacementUnit<Unit, OtherUnit>>>;
+        using Com = CommonUnitT<OtherUnit, Abs<detail::ComputeOriginDisplacement<Unit, OtherUnit>>>;
         return std::is_convertible<Quantity<Com, OtherRep>, QuantityPoint::Diff>::value;
     }
 
@@ -144,7 +144,7 @@ class QuantityPoint {
         using Target = AssociatedUnitForPointsT<NewUnit>;
         return (x_.template as<CalcRep>(Target{}) +
                 detail::coerce_as_quantity<Target, CalcRep>(
-                    make_constant(detail::OriginDisplacementUnit<Target, Unit>{})))
+                    make_constant(detail::ComputeOriginDisplacement<Target, Unit>{})))
             .template in<NewRep>(Target{});
     }
 
@@ -158,8 +158,9 @@ class QuantityPoint {
 
         // `rep_cast` is needed because if these are integral types, their difference might become a
         // different type due to integer promotion.
-        return rep_cast<Rep>(x_.as(Target{}) + Quantity<Target, Rep>{make_constant(
-                                                   detail::OriginDisplacementUnit<Target, Unit>{})})
+        return rep_cast<Rep>(x_.as(Target{}) +
+                             Quantity<Target, Rep>{
+                                 make_constant(detail::ComputeOriginDisplacement<Target, Unit>{})})
             .in(Target{});
     }
 

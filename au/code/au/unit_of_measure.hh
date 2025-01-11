@@ -825,12 +825,12 @@ struct UnitOfLowestOriginImpl<U, U1, Us...>
                        U,
                        UnitOfLowestOrigin<U1, Us...>> {};
 
-// `OriginDisplacementUnit<U1, U2>` is an ad hoc unit equal to the displacement from the origin of
-// `U1` to the origin of `U2`.  If `U1` and `U2` have equal origins, then it is `Zero`.
+// `ComputeOriginDisplacement<U1, U2>` is an ad hoc unit equal to the displacement from the
+// origin of `U1` to the origin of `U2`.  If `U1` and `U2` have equal origins, then it is `Zero`.
 template <typename U1, typename U2, bool AreOriginsEqual>
 struct OriginDisplacementUnitImpl;
 template <typename U1, typename U2>
-using OriginDisplacementUnit =
+using ComputeOriginDisplacement =
     typename OriginDisplacementUnitImpl<U1, U2, (OriginOf<U1>::value() == OriginOf<U2>::value())>::
         type;
 template <typename U1, typename U2>
@@ -838,18 +838,18 @@ struct OriginDisplacementUnitImpl<U1, U2, true> : stdx::type_identity<Zero> {};
 
 template <typename U1, typename U2>
 constexpr auto origin_displacement_unit(U1, U2) {
-    return OriginDisplacementUnit<AssociatedUnitForPointsT<U1>, AssociatedUnitForPointsT<U2>>{};
+    return ComputeOriginDisplacement<AssociatedUnitForPointsT<U1>, AssociatedUnitForPointsT<U2>>{};
 }
 
 template <typename U1, typename U2>
-struct OneOriginDisplacement {
+struct OriginDisplacementUnit {
     using Dim = CommonDimensionT<DimT<U1>, DimT<U2>>;
     using Mag = ValueDisplacementMagnitude<OriginOf<U1>, OriginOf<U2>>;
 };
 
 template <typename U1, typename U2>
 struct OriginDisplacementUnitImpl<U1, U2, false>
-    : stdx::type_identity<OneOriginDisplacement<U1, U2>> {};
+    : stdx::type_identity<OriginDisplacementUnit<U1, U2>> {};
 
 // MagTypeT<T> gives some measure of the size of the unit for this "quantity-alike" type.
 //
@@ -864,22 +864,22 @@ struct MagType<Zero> : stdx::type_identity<Zero> {};
 
 }  // namespace detail
 
-// Enable `Abs<OneOriginDisplacement>`: it's useful, because these units are often negative.
+// Enable `Abs<OriginDisplacementUnit>`: it's useful, because these units are often negative.
 template <typename U1, typename U2>
-struct AbsImpl<detail::OneOriginDisplacement<U1, U2>>
-    : std::conditional<IsPositive<detail::MagT<detail::OneOriginDisplacement<U1, U2>>>::value,
-                       detail::OneOriginDisplacement<U1, U2>,
-                       detail::OneOriginDisplacement<U2, U1>> {};
+struct AbsImpl<detail::OriginDisplacementUnit<U1, U2>>
+    : std::conditional<IsPositive<detail::MagT<detail::OriginDisplacementUnit<U1, U2>>>::value,
+                       detail::OriginDisplacementUnit<U1, U2>,
+                       detail::OriginDisplacementUnit<U2, U1>> {};
 
 template <typename U1, typename U2>
-struct UnitLabel<detail::OneOriginDisplacement<U1, U2>> {
+struct UnitLabel<detail::OriginDisplacementUnit<U1, U2>> {
     using LabelT = detail::ExtendedLabel<15u, U1, U2>;
     static constexpr LabelT value =
         detail::concatenate("(@(0 ", UnitLabel<U2>::value, ") - @(0 ", UnitLabel<U1>::value, "))");
 };
 template <typename U1, typename U2>
-constexpr typename UnitLabel<detail::OneOriginDisplacement<U1, U2>>::LabelT
-    UnitLabel<detail::OneOriginDisplacement<U1, U2>>::value;
+constexpr typename UnitLabel<detail::OriginDisplacementUnit<U1, U2>>::LabelT
+    UnitLabel<detail::OriginDisplacementUnit<U1, U2>>::value;
 
 // This exists to be the "named type" for the common unit of a bunch of input units.
 //
@@ -888,7 +888,7 @@ constexpr typename UnitLabel<detail::OneOriginDisplacement<U1, U2>>::LabelT
 // the `CommonPointUnitT` alias, which will handle the canonicalization.
 template <typename... Us>
 using CommonAmongUnitsAndOriginDisplacements =
-    CommonUnitT<Us..., detail::OriginDisplacementUnit<detail::UnitOfLowestOrigin<Us...>, Us>...>;
+    CommonUnitT<Us..., detail::ComputeOriginDisplacement<detail::UnitOfLowestOrigin<Us...>, Us>...>;
 template <typename... Us>
 struct CommonPointUnit : CommonAmongUnitsAndOriginDisplacements<Us...> {
     static_assert(AreElementsInOrder<CommonPointUnit, CommonPointUnit<Us...>>::value,
@@ -1107,33 +1107,33 @@ template <typename... U1s, typename... U2s>
 struct OrderAsUnitProduct<UnitProduct<U1s...>, UnitProduct<U2s...>>
     : InStandardPackOrder<UnitProduct<U1s...>, UnitProduct<U2s...>> {};
 
-// OrderAsOneOriginDisplacement<A, B> can only be true if both A and B are `OneOriginDisplacement`
+// OrderAsOriginDisplacementUnit<A, B> can only be true if both A and B are `OriginDisplacementUnit`
 // specializations, _and_ their first units are in order, or their first units are identical and
 // their second units are in order.  This default case handles the usual case where either A or B
-// (or both) is not a `OneOriginDisplacement` specialization in the first place.
+// (or both) is not a `OriginDisplacementUnit` specialization in the first place.
 template <typename A, typename B>
-struct OrderAsOneOriginDisplacement : std::false_type {};
+struct OrderAsOriginDisplacementUnit : std::false_type {};
 
 template <typename A, typename B>
-struct OrderByFirstInOneOriginDisplacement;
+struct OrderByFirstInOriginDisplacementUnit;
 template <typename A1, typename A2, typename B1, typename B2>
-struct OrderByFirstInOneOriginDisplacement<OneOriginDisplacement<A1, A2>,
-                                           OneOriginDisplacement<B1, B2>>
+struct OrderByFirstInOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>,
+                                            OriginDisplacementUnit<B1, B2>>
     : InOrderFor<UnitProduct, A1, B1> {};
 
 template <typename A, typename B>
-struct OrderBySecondInOneOriginDisplacement;
+struct OrderBySecondInOriginDisplacementUnit;
 template <typename A1, typename A2, typename B1, typename B2>
-struct OrderBySecondInOneOriginDisplacement<OneOriginDisplacement<A1, A2>,
-                                            OneOriginDisplacement<B1, B2>>
+struct OrderBySecondInOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>,
+                                             OriginDisplacementUnit<B1, B2>>
     : InOrderFor<UnitProduct, A2, B2> {};
 
 template <typename A1, typename A2, typename B1, typename B2>
-struct OrderAsOneOriginDisplacement<OneOriginDisplacement<A1, A2>, OneOriginDisplacement<B1, B2>>
-    : LexicographicTotalOrdering<OneOriginDisplacement<A1, A2>,
-                                 OneOriginDisplacement<B1, B2>,
-                                 OrderByFirstInOneOriginDisplacement,
-                                 OrderBySecondInOneOriginDisplacement> {};
+struct OrderAsOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>, OriginDisplacementUnit<B1, B2>>
+    : LexicographicTotalOrdering<OriginDisplacementUnit<A1, A2>,
+                                 OriginDisplacementUnit<B1, B2>,
+                                 OrderByFirstInOriginDisplacementUnit,
+                                 OrderBySecondInOriginDisplacementUnit> {};
 
 template <typename A, typename B>
 struct OrderByOrigin
@@ -1183,6 +1183,6 @@ struct InOrderFor<UnitProduct, A, B>
                                  detail::OrderByScaleFactor,
                                  detail::OrderByOrigin,
                                  detail::OrderAsUnitProduct,
-                                 detail::OrderAsOneOriginDisplacement> {};
+                                 detail::OrderAsOriginDisplacementUnit> {};
 
 }  // namespace au

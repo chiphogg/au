@@ -789,19 +789,19 @@ TEST(UnitOfLowestOrigin, ProducesConsistentResultsRegardlessOfOrdering) {
                        UnitOfLowestOrigin<Milli<Celsius>, Celsius>>();
 }
 
-TEST(OriginDisplacementUnit, ZeroForSameOrigin) {
-    StaticAssertTypeEq<OriginDisplacementUnit<Celsius, Milli<Celsius>>, Zero>();
+TEST(ComputeOriginDisplacement, ZeroForSameOrigin) {
+    StaticAssertTypeEq<ComputeOriginDisplacement<Celsius, Milli<Celsius>>, Zero>();
 }
 
-TEST(OriginDisplacementUnit, HasExpectedMagnitudeAndSign) {
-    constexpr auto disp_k0_to_c0 = make_constant(OriginDisplacementUnit<Kelvins, Celsius>{});
+TEST(ComputeOriginDisplacement, HasExpectedMagnitudeAndSign) {
+    constexpr auto disp_k0_to_c0 = make_constant(ComputeOriginDisplacement<Kelvins, Celsius>{});
     EXPECT_EQ(disp_k0_to_c0, centi(kelvins)(273'15));
 
-    constexpr auto disp_c0_to_k0 = make_constant(OriginDisplacementUnit<Celsius, Kelvins>{});
+    constexpr auto disp_c0_to_k0 = make_constant(ComputeOriginDisplacement<Celsius, Kelvins>{});
     EXPECT_EQ(disp_c0_to_k0, centi(kelvins)(-273'15));
 }
 
-TEST(OriginDisplacementUnit, HasExpectedLabel) {
+TEST(ComputeOriginDisplacement, HasExpectedLabel) {
     EXPECT_THAT(unit_label(origin_displacement_unit(kelvins_pt, celsius_pt)),
                 StrEq("(@(0 deg_C) - @(0 K))"));
     EXPECT_THAT(unit_label(origin_displacement_unit(celsius_pt, kelvins_pt)),
