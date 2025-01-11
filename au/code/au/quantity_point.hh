@@ -82,7 +82,7 @@ class QuantityPoint {
     //      OK : QuantityPoint<Celsius, int> -> QuantityPoint<Milli<Kelvins>, int>
     template <typename OtherUnit, typename OtherRep>
     static constexpr bool should_enable_implicit_construction_from() {
-        using Com = CommonUnitT<OtherUnit, Abs<detail::ComputeOriginDisplacement<Unit, OtherUnit>>>;
+        using Com = CommonUnitT<OtherUnit, detail::ComputeOriginDisplacement<Unit, OtherUnit>>;
         return std::is_convertible<Quantity<Com, OtherRep>, QuantityPoint::Diff>::value;
     }
 

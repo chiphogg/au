@@ -70,8 +70,8 @@ constexpr T clamp_to_range_of(U x) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// `is_abs_known_to_be_less_than_one(MagT)` is true if the magnitude `MagT` is purely rational; its
-// numerator is representable in `std::uintmax_t`; and, it is less than 1.
+// `is_abs_known_to_be_less_than_one(MagT)` is true if the absolute value of the magnitude `MagT` is
+// purely rational; its numerator is representable in `std::uintmax_t`; and, it is less than 1.
 //
 
 template <typename... BPs>
