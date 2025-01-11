@@ -417,22 +417,6 @@ TEST(AreUnitsPointEquivalent, DifferentUnitsWithDifferentButEquivalentOriginsAre
     EXPECT_TRUE(are_units_point_equivalent(Celsius{}, AlternateCelsius{}));
 }
 
-TEST(OriginDisplacement, IdenticallyZeroForOriginsThatCompareEqual) {
-    ASSERT_THAT(detail::OriginOf<Celsius>::value(),
-                Not(SameTypeAndValue(detail::OriginOf<AlternateCelsius>::value())));
-    EXPECT_THAT(origin_displacement(Celsius{}, AlternateCelsius{}), SameTypeAndValue(ZERO));
-}
-
-TEST(OriginDisplacement, GivesDisplacementFromFirstToSecond) {
-    EXPECT_EQ(origin_displacement(Kelvins{}, Celsius{}), milli(kelvins)(273'150));
-    EXPECT_EQ(origin_displacement(Celsius{}, Kelvins{}), milli(kelvins)(-273'150));
-}
-
-TEST(OriginDisplacement, FunctionalInterfaceHandlesInstancesCorrectly) {
-    EXPECT_EQ(origin_displacement(kelvins, celsius), milli(kelvins)(273'150));
-    EXPECT_EQ(origin_displacement(celsius, kelvins), milli(kelvins)(-273'150));
-}
-
 struct OffsetCelsius : Celsius {
     // The origin is _specified_ in the common units of the Celsius origin (which we gave in mK),
     // and a difference of 10 in units of [(1/6) K].  This means that the type of the origin should

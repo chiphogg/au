@@ -135,12 +135,6 @@ struct UnitRatio : stdx::type_identity<MagQuotientT<detail::MagT<U1>, detail::Ma
 template <typename U1, typename U2>
 using UnitRatioT = typename UnitRatio<U1, U2>::type;
 
-// Some units have an "origin".  This is not meaningful by itself, but its difference w.r.t. the
-// "origin" of another unit of the same Dimension _is_ meaningful.  This type trait provides access
-// to that difference.
-template <typename U1, typename U2>
-struct OriginDisplacement;
-
 template <typename U>
 struct AssociatedUnit : stdx::type_identity<U> {};
 template <typename U>
@@ -243,11 +237,6 @@ constexpr bool is_unitless_unit(U) {
 template <typename U1, typename U2>
 constexpr UnitRatioT<AssociatedUnitT<U1>, AssociatedUnitT<U2>> unit_ratio(U1, U2) {
     return {};
-}
-
-template <typename U1, typename U2>
-constexpr auto origin_displacement(U1, U2) {
-    return OriginDisplacement<AssociatedUnitT<U1>, AssociatedUnitT<U2>>::value();
 }
 
 template <typename U>
@@ -440,7 +429,7 @@ constexpr auto pow(SingularNameFor<Unit>) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// `OriginDisplacement` implementation.
+// Origin displacement implementation.
 
 namespace detail {
 // Callable type trait for the default origin of a unit: choose ZERO.
@@ -467,27 +456,6 @@ struct ValueDifference {
     static constexpr auto value() { return T::value() - U::value(); }
 };
 }  // namespace detail
-
-// Why this conditional, instead of just using `ValueDifference` unconditionally?  The use case is
-// somewhat subtle.  Without it, we would still deduce a displacement _numerically_ equal to 0, but
-// it would be stored in specific _units_.  For example, for Celsius, the displacement would be "0
-// millikelvins" rather than a generic ZERO.  This has implications for type deduction.  It means
-// that, e.g., the following would fail!
-//
-//   celsius_pt(20).in(celsius_pt);
-//
-// The reason it would fail is because under the hood, we'd be subtracting a `QuantityI32<Celsius>`
-// from a `QuantityI32<Milli<Kelvins>>`, yielding a result expressed in millikelvins for what should
-// be an integer number of degrees Celsius.  True, that result happens to have a _value_ of 0... but
-// values don't affect overload resolution!
-//
-// Using ZeroValue when the origins are equal fixes this problem, by expressing the "zero-ness" in
-// the _type_.
-template <typename U1, typename U2>
-struct OriginDisplacement
-    : std::conditional_t<detail::OriginOf<U1>::value() == detail::OriginOf<U2>::value(),
-                         detail::ZeroValue,
-                         detail::ValueDifference<detail::OriginOf<U2>, detail::OriginOf<U1>>> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `ValueDisplacementMagnitude` utility.

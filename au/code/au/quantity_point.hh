@@ -47,9 +47,6 @@ template <typename P1, typename P2>
 struct AreQuantityPointTypesEquivalent;
 
 namespace detail {
-template <typename TargetRep, typename U1, typename U2>
-struct OriginDisplacementFitsIn;
-
 template <typename U, typename R, typename ConstUnit>
 constexpr Quantity<U, R> coerce_as_quantity(Constant<ConstUnit> c) {
     return c.template coerce_as<R>(U{});
@@ -62,6 +59,18 @@ constexpr Quantity<U, R> coerce_as_quantity(Zero z) {
 template <typename FromRep, typename ToRep>
 struct IntermediateRep;
 }  // namespace detail
+
+// Some units have an "origin".  This is not meaningful by itself, but its difference w.r.t. the
+// "origin" of another unit of the same Dimension _is_ meaningful.  This type trait provides access
+// to that difference.
+template <typename U1, typename U2>
+constexpr auto origin_displacement(U1, U2) {
+    return make_constant(detail::ComputeOriginDisplacement<AssociatedUnitForPointsT<U1>,
+                                                           AssociatedUnitForPointsT<U2>>{});
+}
+
+template <typename U1, typename U2>
+using OriginDisplacement = decltype(origin_displacement(U1{}, U2{}));
 
 // QuantityPoint implementation and API elaboration.
 template <typename UnitT, typename RepT>
@@ -143,25 +152,19 @@ class QuantityPoint {
         using CalcRep = typename detail::IntermediateRep<Rep, NewRep>::type;
         using Target = AssociatedUnitForPointsT<NewUnit>;
         return (x_.template as<CalcRep>(Target{}) +
-                detail::coerce_as_quantity<Target, CalcRep>(
-                    make_constant(detail::ComputeOriginDisplacement<Target, Unit>{})))
+                detail::coerce_as_quantity<Target, CalcRep>(origin_displacement(Target{}, Unit{})))
             .template in<NewRep>(Target{});
     }
 
     template <typename NewUnit,
               typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
     constexpr Rep in(NewUnit) const {
-        static_assert(
-            detail::OriginDisplacementFitsIn<Rep, AssociatedUnitForPointsT<NewUnit>, Unit>::value,
-            "Cannot represent origin displacement in desired Rep");
-        using Target = AssociatedUnitForPointsT<NewUnit>;
-
+        using TargetUnit = AssociatedUnitForPointsT<NewUnit>;
         // `rep_cast` is needed because if these are integral types, their difference might become a
         // different type due to integer promotion.
-        return rep_cast<Rep>(x_.as(Target{}) +
-                             Quantity<Target, Rep>{
-                                 make_constant(detail::ComputeOriginDisplacement<Target, Unit>{})})
-            .in(Target{});
+        return rep_cast<Rep>(x_.as(TargetUnit{}) +
+                             Quantity<TargetUnit, Rep>{origin_displacement(TargetUnit{}, Unit{})})
+            .in(TargetUnit{});
     }
 
     // "Forcing" conversions, which explicitly ignore safety checks for overflow and truncation.
@@ -405,23 +408,6 @@ constexpr auto operator<=>(const QuantityPoint<U1, R1> &lhs, const QuantityPoint
 #endif
 
 namespace detail {
-
-template <typename TargetRep, typename U, typename R>
-constexpr bool underlying_value_in_range(Quantity<U, R> q) {
-    return stdx::in_range<TargetRep>(q.in(U{}));
-}
-
-template <typename TargetRep>
-constexpr bool underlying_value_in_range(Zero) {
-    return true;
-}
-
-template <typename TargetRep, typename U1, typename U2>
-struct OriginDisplacementFitsIn
-    : std::conditional_t<std::is_integral<TargetRep>::value,
-                         stdx::bool_constant<underlying_value_in_range<TargetRep>(
-                             OriginDisplacement<U1, U2>::value())>,
-                         std::true_type> {};
 
 // We simply want a version of `std::make_signed_t` that won't choke on non-integral types.
 template <typename T, bool IsInt = std::is_integral<T>::value>
