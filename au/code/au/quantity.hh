@@ -120,7 +120,6 @@ class Quantity {
     using Le = detail::LessEqual;
     using Gt = detail::Greater;
     using Ge = detail::GreaterEqual;
-    using Twc = detail::ThreeWayCompare;
 
  public:
     using Rep = RepT;
@@ -270,6 +269,7 @@ class Quantity {
     friend constexpr bool operator>=(Quantity a, Quantity b) { return Vals::cmp(a, b, Ge{}); }
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    using Twc = detail::ThreeWayCompare;
     friend constexpr auto operator<=>(Quantity a, Quantity b) { return Vals::cmp(a, b, Twc{}); }
 #endif
 
