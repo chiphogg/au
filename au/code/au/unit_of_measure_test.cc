@@ -207,6 +207,11 @@ TEST(UnitProductT, CreatesPowForIntegerPowers) {
     StaticAssertTypeEq<UnitProductT<FeetSquared, UnitInverseT<Feet>>, Feet>();
 }
 
+TEST(UnitProductT, PullsOutAndCombinesAllScaleFactors) {
+    StaticAssertTypeEq<UnitProductT<decltype(Feet{} * mag<3>()), decltype(Feet{} * mag<5>())>,
+                       decltype(squared(Feet{}) * mag<15>())>();
+}
+
 TEST(UnitPowerT, ProducesSimplifiedPowersOfAllExponents) {
     using Input = UnitProductT<Feet, Pow<Minutes, 3>, Pow<Inches, -6>, RatioPow<Yards, 3, 2>>;
 
@@ -214,6 +219,11 @@ TEST(UnitPowerT, ProducesSimplifiedPowersOfAllExponents) {
         UnitProductT<RatioPow<Feet, 1, 3>, Minutes, Pow<Inches, -2>, RatioPow<Yards, 1, 2>>;
 
     StaticAssertTypeEq<UnitPowerT<Input, 1, 3>, ExpectedCbrtInput>();
+}
+
+TEST(UnitPowerT, PullsOutAndCombinesAllScaleFactors) {
+    StaticAssertTypeEq<UnitPowerT<decltype(Feet{} * mag<10>()), 3>,
+                       decltype(cubed(Feet{}) * mag<1'000>())>();
 }
 
 TEST(UnitQuotientT, InteractsAndCancelsAsExpected) {

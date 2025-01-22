@@ -319,6 +319,31 @@ struct ScaledUnit : Unit {
     using Mag = MagProductT<detail::MagT<Unit>, ScaleFactor>;
 };
 
+template <typename U>
+struct UnscaledUnitImpl : stdx::type_identity<U> {};
+template <typename U>
+using UnscaledUnit = typename UnscaledUnitImpl<U>::type;
+template <typename U, typename M>
+struct UnscaledUnitImpl<ScaledUnit<U, M>> : stdx::type_identity<U> {};
+template <typename U, std::intmax_t N>
+struct UnscaledUnitImpl<Pow<U, N>> : stdx::type_identity<Pow<UnscaledUnit<U>, N>> {};
+template <typename U, std::intmax_t N, std::intmax_t D>
+struct UnscaledUnitImpl<RatioPow<U, N, D>> : stdx::type_identity<RatioPow<UnscaledUnit<U>, N, D>> {
+};
+
+template <typename U>
+struct ExtractScaleFactorImpl : stdx::type_identity<Magnitude<>> {};
+template <typename U>
+using ExtractScaleFactor = typename ExtractScaleFactorImpl<U>::type;
+template <typename U, typename M>
+struct ExtractScaleFactorImpl<ScaledUnit<U, M>> : stdx::type_identity<M> {};
+template <typename U, std::intmax_t N>
+struct ExtractScaleFactorImpl<Pow<U, N>>
+    : stdx::type_identity<MagPowerT<ExtractScaleFactor<U>, N>> {};
+template <typename U, std::intmax_t N, std::intmax_t D>
+struct ExtractScaleFactorImpl<RatioPow<U, N, D>>
+    : stdx::type_identity<MagPowerT<ExtractScaleFactor<U>, N, D>> {};
+
 // Type template to hold the product of powers of Units.
 template <typename... UnitPows>
 struct UnitProduct {
@@ -332,13 +357,17 @@ struct UnitProduct {
 // simplify it using `UnpackIfSoloT`.  (The motivation is that we don't want to return, say,
 // `UnitProduct<Meters>`; we'd rather just return `Meters`.)
 template <typename... UnitPows>
-using UnitProductT =
-    UnpackIfSoloT<UnitProduct, PackProductT<UnitProduct, AsPackT<UnitProduct, UnitPows>...>>;
+using UnitProductT = ComputeScaledUnit<
+    UnpackIfSoloT<UnitProduct,
+                  PackProductT<UnitProduct, AsPackT<UnitProduct, UnscaledUnit<UnitPows>>...>>,
+    MagProductT<ExtractScaleFactor<UnitPows>...>>;
 
 // Raise a Unit to a (possibly rational) Power.
 template <typename U, std::intmax_t ExpNum, std::intmax_t ExpDen = 1>
-using UnitPowerT =
-    UnpackIfSoloT<UnitProduct, PackPowerT<UnitProduct, AsPackT<UnitProduct, U>, ExpNum, ExpDen>>;
+using UnitPowerT = ComputeScaledUnit<
+    UnpackIfSoloT<UnitProduct,
+                  PackPowerT<UnitProduct, AsPackT<UnitProduct, UnscaledUnit<U>>, ExpNum, ExpDen>>,
+    MagPowerT<ExtractScaleFactor<U>, ExpNum, ExpDen>>;
 
 // Compute the inverse of a unit.
 template <typename U>
@@ -652,13 +681,6 @@ constexpr typename CommonUnitLabelImpl<Us...>::LabelT CommonUnitLabelImpl<Us...>
 
 template <typename U>
 struct CommonUnitLabelImpl<U> : UnitLabel<U> {};
-
-template <typename U>
-struct UnscaledUnitImpl : stdx::type_identity<U> {};
-template <typename U, typename M>
-struct UnscaledUnitImpl<ScaledUnit<U, M>> : stdx::type_identity<U> {};
-template <typename U>
-using UnscaledUnit = typename UnscaledUnitImpl<U>::type;
 
 template <typename U>
 struct DistinctUnscaledUnitsImpl : stdx::type_identity<UnitList<UnscaledUnit<U>>> {};
