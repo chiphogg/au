@@ -97,15 +97,18 @@ struct OverflowBoundaryNotYetImplemented {
                   "Overflow boundary not yet implemented for this type.");
 };
 
+// A type whose `::value()` function returns `CannotOverflow{}`.
 struct ValueIsCannotOverflow {
     static constexpr CannotOverflow value() { return CannotOverflow{}; }
 };
 
+// A type whose `::value()` function returns `0`, expressed in `T`.
 template <typename T>
 struct ValueIsZero {
     static constexpr T value() { return T{0}; }
 };
 
+// A type whose `::value()` function returns the lowest value of `U`, expressed in `T`.
 template <typename T, typename U>
 struct ValueIsLowestInDestination {
     static constexpr T value() { return static_cast<T>(std::numeric_limits<U>::lowest()); }
@@ -114,6 +117,7 @@ struct ValueIsLowestInDestination {
                   "This utility assumes lossless round trips");
 };
 
+// A type whose `::value()` function returns the highest value of `U`, expressed in `T`.
 template <typename T, typename U>
 struct ValueIsHighestInDestination {
     static constexpr T value() { return static_cast<T>(std::numeric_limits<U>::max()); }
@@ -122,8 +126,22 @@ struct ValueIsHighestInDestination {
                   "This utility assumes lossless round trips");
 };
 
+// A type whose `::value()` function returns the highest value in `Float` (assumed to be a floating
+// point type) that can be cast to `Int` (assumed to be an integral type).  We need to be really
+// careful in how we express this, because max int values tend not to be nice powers of 2.
+// Therefore, even though we can cast the `Int` max to `Float` successfully, casting back to `Int`
+// will produce a compile time error because the closest representable integer in `Float` is
+// slightly _higher_ than that max.
+//
+// On the implementation side, keep in mind that our library supports C++14, and most common
+// floating point utilities (such as `std::nextafter`) are not `constexpr` compatible in C++14.
+// Therefore, we need to use alternative strategies to explore the floating point type.  These are
+// always evaluated at compile time, so we are not especially concerned about the efficiency: it
+// should have no runtime effect at all, and we expect even the compile time impact --- which we
+// measure regularly as we land commits --- to be too small to measure.
 template <typename Float, typename Int>
 struct ValueIsMaxFloatNotExceedingMaxInt {
+    // The `Float` value where all mantissa bits are set to `1`, and the exponent is `0`.
     static constexpr Float max_mantissa() {
         constexpr Float ONE = Float{1};
         Float x = ONE;
@@ -135,6 +153,7 @@ struct ValueIsMaxFloatNotExceedingMaxInt {
         return last;
     }
 
+    // Function to do the actual computation of the value.
     static constexpr Float compute_value() {
         constexpr Float LIMIT = static_cast<Float>(std::numeric_limits<Int>::max());
         constexpr Float MAX_MANTISSA = max_mantissa();
@@ -150,6 +169,7 @@ struct ValueIsMaxFloatNotExceedingMaxInt {
         return x;
     }
 
+    // `value()` implementation simply computes the result _once_ (caching it), and then returns it.
     static constexpr Float value() {
         constexpr Float CACHED = compute_value();
         return CACHED;
@@ -165,7 +185,9 @@ template <typename T, typename U>
 struct OpOutputImpl<StaticCast<T, U>> : stdx::type_identity<U> {};
 
 //
-// `MinGood<StaticCast<T, U>>` implementation cluster:
+// `MinGood<StaticCast<T, U>>` implementation cluster.
+//
+// See comment above for meanings of (N), (X), (A), etc.
 //
 
 // (N) -> (X) (placeholder)
@@ -242,7 +264,9 @@ struct MinGoodImpl<StaticCast<T, U>>
                          MinGoodImplForStaticCastFromNonArithmetic<T, U>> {};
 
 //
-// `MaxGood<StaticCast<T, U>>` implementation cluster:
+// `MaxGood<StaticCast<T, U>>` implementation cluster.
+//
+// See comment above for meanings of (N), (X), (A), etc.
 //
 
 // (N) -> (X) (placeholder)
