@@ -423,6 +423,28 @@ cc_test(
 )
 
 cc_library(
+    name = "overflow_boundary",
+    hdrs = ["code/au/overflow_boundary.hh"],
+    includes = ["code"],
+    deps = [
+        ":magnitude",
+        ":stdx",
+        ":zero",
+    ],
+)
+
+cc_test(
+    name = "overflow_boundary_test",
+    size = "small",
+    srcs = ["code/au/overflow_boundary_test.cc"],
+    deps = [
+        ":overflow_boundary",
+        ":testing",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "packs",
     hdrs = ["code/au/packs.hh"],
     includes = ["code"],
