@@ -40,6 +40,16 @@ template <typename Op>
 using MinGood = typename MinGoodImpl<Op>::type;
 
 //
+// `MaxGood<Op>::value()` is `CannotOverflow{}` if the input type of `Op` cannot be made to overflow
+// by taking larger and larger values.  Otherwise, it is a constexpr constant of type `OpInput<Op>`
+// that is the maximum value that does not overflow.
+//
+template <typename Op>
+struct MaxGoodImpl;
+template <typename Op>
+using MaxGood = typename MaxGoodImpl<Op>::type;
+
+//
 // `StaticCast<T, U>` represents an operation that converts from `T` to `U` via `static_cast`.
 //
 template <typename T, typename U>
@@ -102,6 +112,48 @@ struct ValueIsLowestInDestination {
 
     static_assert(static_cast<U>(value()) == std::numeric_limits<U>::lowest(),
                   "This utility assumes lossless round trips");
+};
+
+template <typename T, typename U>
+struct ValueIsHighestInDestination {
+    static constexpr T value() { return static_cast<T>(std::numeric_limits<U>::max()); }
+
+    static_assert(static_cast<U>(value()) == std::numeric_limits<U>::max(),
+                  "This utility assumes lossless round trips");
+};
+
+template <typename Float, typename Int>
+struct ValueIsMaxFloatNotExceedingMaxInt {
+    static constexpr Float max_mantissa() {
+        constexpr Float ONE = Float{1};
+        Float x = ONE;
+        Float last = x;
+        while (x + ONE > x) {
+            last = x;
+            x += x + ONE;
+        }
+        return last;
+    }
+
+    static constexpr Float compute_value() {
+        constexpr Float LIMIT = static_cast<Float>(std::numeric_limits<Int>::max());
+        constexpr Float MAX_MANTISSA = max_mantissa();
+
+        if (LIMIT <= MAX_MANTISSA) {
+            return LIMIT;
+        }
+
+        Float x = MAX_MANTISSA;
+        while (x + x < LIMIT) {
+            x += x;
+        }
+        return x;
+    }
+
+    static constexpr Float value() {
+        constexpr Float CACHED = compute_value();
+        return CACHED;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -188,6 +240,70 @@ struct MinGoodImpl<StaticCast<T, U>>
     : std::conditional_t<std::is_arithmetic<T>::value,
                          MinGoodImplForStaticCastFromArithmetic<T, U>,
                          MinGoodImplForStaticCastFromNonArithmetic<T, U>> {};
+
+//
+// `MaxGood<StaticCast<T, U>>` implementation cluster:
+//
+
+// (N) -> (X) (placeholder)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
+
+// (A) -> (N) (placeholder)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromArithmeticToNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
+
+// (I) -> (I)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromIntegralToIntegral
+    : std::conditional<(static_cast<std::common_type_t<T, U>>(std::numeric_limits<T>::max()) <=
+                        static_cast<std::common_type_t<T, U>>(std::numeric_limits<U>::max())),
+                       ValueIsCannotOverflow,
+                       ValueIsHighestInDestination<T, U>> {};
+
+// (I) -> (A)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromIntegralToArithmetic
+    : std::conditional_t<std::is_integral<U>::value,
+                         MaxGoodImplForStaticCastFromIntegralToIntegral<T, U>,
+                         stdx::type_identity<ValueIsCannotOverflow>> {};
+
+// (F) -> (F)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromFloatingPointToFloatingPoint
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueIsCannotOverflow,
+                       ValueIsHighestInDestination<T, U>> {};
+
+// (F) -> (A)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromFloatingPointToArithmetic
+    : std::conditional_t<std::is_floating_point<U>::value,
+                         MaxGoodImplForStaticCastFromFloatingPointToFloatingPoint<T, U>,
+                         stdx::type_identity<ValueIsMaxFloatNotExceedingMaxInt<T, U>>> {};
+
+// (A) -> (A)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromArithmeticToArithmetic
+    : std::conditional_t<std::is_integral<T>::value,
+                         MaxGoodImplForStaticCastFromIntegralToArithmetic<T, U>,
+                         MaxGoodImplForStaticCastFromFloatingPointToArithmetic<T, U>> {};
+
+// (A) -> (X)
+template <typename T, typename U>
+struct MaxGoodImplForStaticCastFromArithmetic
+    : std::conditional_t<std::is_arithmetic<U>::value,
+                         MaxGoodImplForStaticCastFromArithmeticToArithmetic<T, U>,
+                         MaxGoodImplForStaticCastFromArithmeticToNonArithmetic<T, U>> {};
+
+// (X) -> (X)
+template <typename T, typename U>
+struct MaxGoodImpl<StaticCast<T, U>>
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         MaxGoodImplForStaticCastFromArithmetic<T, U>,
+                         MaxGoodImplForStaticCastFromNonArithmetic<T, U>> {};
 
 }  // namespace detail
 }  // namespace au

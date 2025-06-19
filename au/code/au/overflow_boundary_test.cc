@@ -119,6 +119,117 @@ TEST(StaticCast, MinGoodIsCannotOverflowFromAnySignedToAnyFloatingPoint) {
     EXPECT_THAT((MinGood<StaticCast<int64_t, float>>::value()), Eq(CannotOverflow{}));
 }
 
+//
+// `MaxGood`:
+//
+
+TEST(StaticCast, MaxGoodIsCannotOverflowIfDestinationEqualsSource) {
+    EXPECT_THAT((MaxGood<StaticCast<int8_t, int8_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, uint16_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<float, float>>::value()), Eq(CannotOverflow{}));
+}
+
+TEST(StaticCast, MaxGoodIsCannotOverflowIfCastWidens) {
+    EXPECT_THAT((MaxGood<StaticCast<int8_t, int16_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<uint8_t, uint16_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<float, double>>::value()), Eq(CannotOverflow{}));
+}
+
+TEST(StaticCast, MaxGoodIsCannotOverflowFromSignedToUnsignedOfSameSize) {
+    EXPECT_THAT((MaxGood<StaticCast<int8_t, uint8_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<int16_t, uint16_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint32_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, uint64_t>>::value()), Eq(CannotOverflow{}));
+}
+
+TEST(StaticCast, MaxGoodIsHighestInDestinationFromUnsignedToSignedOfSameSize) {
+    EXPECT_THAT((MaxGood<StaticCast<uint8_t, int8_t>>::value()),
+                SameTypeAndValue(static_cast<uint8_t>(std::numeric_limits<int8_t>::max())));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, int64_t>>::value()),
+                SameTypeAndValue(static_cast<uint64_t>(std::numeric_limits<int64_t>::max())));
+}
+
+TEST(StaticCast, MaxGoodIsCannotOverflowFromAnyIntegerToAnyLargerInteger) {
+    EXPECT_THAT((MaxGood<StaticCast<uint8_t, int16_t>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint64_t>>::value()), Eq(CannotOverflow{}));
+}
+
+TEST(StaticCast, MaxGoodIsHighestInDestinationFromAnyIntegerToAnySmallerInteger) {
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, uint8_t>>::value()),
+                SameTypeAndValue(static_cast<uint16_t>(std::numeric_limits<uint8_t>::max())));
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint16_t>>::value()),
+                SameTypeAndValue(static_cast<int32_t>(std::numeric_limits<uint16_t>::max())));
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, int32_t>>::value()),
+                SameTypeAndValue(static_cast<uint64_t>(std::numeric_limits<int32_t>::max())));
+}
+
+TEST(StaticCast, MaxGoodIsHighestInDestinationWhenNarrowingToSameFamily) {
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, uint8_t>>::value()),
+                SameTypeAndValue(static_cast<uint16_t>(std::numeric_limits<uint8_t>::max())));
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, int32_t>>::value()),
+                SameTypeAndValue(static_cast<int64_t>(std::numeric_limits<int32_t>::max())));
+    EXPECT_THAT((MaxGood<StaticCast<double, float>>::value()),
+                SameTypeAndValue(static_cast<double>(std::numeric_limits<float>::max())));
+}
+
+TEST(StaticCast, MaxGoodIsHighestInDestinationFromAnyFloatingPointToAnySmallIntegral) {
+    // The precondition for this test is that the max for the (destination) integral type is
+    // _exactly_ representable in the (source) floating point type.  This helper will double check
+    // this assumption.
+    auto expect_max_good_is_exact_representation_of_destination_int_max = [](auto float_type_val,
+                                                                             auto int_type_val) {
+        using Float = decltype(float_type_val);
+        using Int = decltype(int_type_val);
+
+        constexpr auto expected = static_cast<Float>(std::numeric_limits<Int>::max());
+
+        ASSERT_THAT(static_cast<Int>(expected), Eq(std::numeric_limits<Int>::max()));
+        EXPECT_THAT((MaxGood<StaticCast<Float, Int>>::value()), SameTypeAndValue(expected));
+    };
+
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, uint8_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, int8_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, uint16_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, int16_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, uint32_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(double{}, int32_t{});
+
+    expect_max_good_is_exact_representation_of_destination_int_max(float{}, uint8_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(float{}, int8_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(float{}, uint16_t{});
+    expect_max_good_is_exact_representation_of_destination_int_max(float{}, int16_t{});
+}
+
+TEST(StaticCast, MaxGoodIsHighestRepresentableFloatBelowCastedIntMaxForTooBigInt) {
+    // `float` to 64-bit integer:
+    EXPECT_THAT((MaxGood<StaticCast<float, int64_t>>::value()),
+                SameTypeAndValue(
+                    std::nextafter(static_cast<float>(std::numeric_limits<int64_t>::max()), 1.0f)));
+    EXPECT_THAT((MaxGood<StaticCast<float, uint64_t>>::value()),
+                SameTypeAndValue(std::nextafter(
+                    static_cast<float>(std::numeric_limits<uint64_t>::max()), 1.0f)));
+
+    // `double` to 64-bit integer:
+    EXPECT_THAT((MaxGood<StaticCast<double, int64_t>>::value()),
+                SameTypeAndValue(
+                    std::nextafter(static_cast<double>(std::numeric_limits<int64_t>::max()), 1.0)));
+    EXPECT_THAT((MaxGood<StaticCast<double, uint64_t>>::value()),
+                SameTypeAndValue(std::nextafter(
+                    static_cast<double>(std::numeric_limits<uint64_t>::max()), 1.0)));
+}
+
+TEST(StaticCast, MaxGoodIsCannotOverflowFromAnyIntegralToAnyFloatingPoint) {
+    // See comments in `MinGoodIsCannotOverflowFromAnySignedToAnyFloatingPoint` for more on the
+    // assumptions we're making here.
+
+    EXPECT_THAT((MaxGood<StaticCast<int8_t, double>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<uint8_t, double>>::value()), Eq(CannotOverflow{}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, float>>::value()), Eq(CannotOverflow{}));
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, float>>::value()), Eq(CannotOverflow{}));
+}
+
 }  // namespace
 }  // namespace detail
 }  // namespace au
