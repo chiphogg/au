@@ -26,10 +26,10 @@ namespace detail {
 // `MinGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the minimum value
 // that does not overflow.
 //
-template <typename Op, typename Limit>
+template <typename Op, typename Limits>
 struct MinGoodImpl;
-template <typename Op, typename Limit = void>
-using MinGood = typename MinGoodImpl<Op, Limit>::type;
+template <typename Op, typename Limits = void>
+using MinGood = typename MinGoodImpl<Op, Limits>::type;
 
 //
 // `MaxGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the maximum value
@@ -86,22 +86,22 @@ using OpOutput = typename OpOutputImpl<Op>::type;
 // (U) = unsigned integral
 // (X) = any type
 
-// `LowerLimit<T, Limit>::value()` returns `Limit::value()` (assumed to be of type `T`), unless
-// `Limit` is `void`, in which case it means "no limit" and we return the lowest possible value.
-template <typename T, typename Limit>
+// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limits>
 struct LowerLimit {
-    static constexpr T value() { return Limit::value(); }
+    static constexpr T value() { return Limits::lower(); }
 };
 template <typename T>
 struct LowerLimit<T, void> {
     static constexpr T value() { return std::numeric_limits<T>::lowest(); }
 };
 
-// `UpperLimit<T, Limit>::value()` returns `Limit::value()` (assumed to be of type `T`), unless
-// `Limit` is `void`, in which case it means "no limit" and we return the highest possible value.
-template <typename T, typename Limit>
+// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
+template <typename T, typename Limits>
 struct UpperLimit {
-    static constexpr T value() { return Limit::value(); }
+    static constexpr T value() { return Limits::upper(); }
 };
 template <typename T>
 struct UpperLimit<T, void> {
