@@ -23,17 +23,8 @@ namespace au {
 namespace detail {
 
 //
-// A monovalue type to indicate that no values can overflow in this direction.
-//
-// By "direction", we mean that if this is the result for an upper limit, then no value can be large
-// enough to overflow; likewise, if a lower limit, no value can be small enough.
-//
-struct CannotOverflow {};
-
-//
-// `MinGood<Op>::value()` is `CannotOverflow{}` if the input type of `Op` cannot be made to overflow
-// by taking lower and lower values.  Otherwise, it is a constexpr constant of type `OpInput<Op>`
-// that is the minimum value that does not overflow.
+// `MinGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the minimum value
+// that does not overflow.
 //
 template <typename Op>
 struct MinGoodImpl;
@@ -41,9 +32,8 @@ template <typename Op>
 using MinGood = typename MinGoodImpl<Op>::type;
 
 //
-// `MaxGood<Op>::value()` is `CannotOverflow{}` if the input type of `Op` cannot be made to overflow
-// by taking larger and larger values.  Otherwise, it is a constexpr constant of type `OpInput<Op>`
-// that is the maximum value that does not overflow.
+// `MaxGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the maximum value
+// that does not overflow.
 //
 template <typename Op>
 struct MaxGoodImpl;
@@ -105,15 +95,22 @@ struct OverflowBoundaryNotYetImplemented {
                   "Overflow boundary not yet implemented for this type.");
 };
 
-// A type whose `::value()` function returns `CannotOverflow{}`.
-struct ValueIsCannotOverflow {
-    static constexpr CannotOverflow value() { return CannotOverflow{}; }
-};
-
 // A type whose `::value()` function returns `0`, expressed in `T`.
 template <typename T>
 struct ValueIsZero {
     static constexpr T value() { return T{0}; }
+};
+
+// A type whose `::value()` function returns `std::numeric_limits<T>::lowest()`.
+template <typename T>
+struct ValueIsLowest {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
+
+// A type whose `::value()` function returns `std::numeric_limits<T>::max()`.
+template <typename T>
+struct ValueIsHighest {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
 };
 
 // A type whose `::value()` function returns the lowest value of `U`, expressed in `T`.
@@ -211,9 +208,8 @@ struct MinGoodImplForStaticCastFromArithmeticToNonArithmetic
 // (S) -> (S)
 template <typename T, typename U>
 struct MinGoodImplForStaticCastFromSignedToSigned
-    : std::conditional<sizeof(T) <= sizeof(U),
-                       ValueIsCannotOverflow,
-                       ValueIsLowestInDestination<T, U>> {};
+    : std::conditional<sizeof(T) <= sizeof(U), ValueIsLowest<T>, ValueIsLowestInDestination<T, U>> {
+};
 
 // (S) -> (I)
 template <typename T, typename U>
@@ -226,22 +222,21 @@ struct MinGoodImplForStaticCastFromSignedToIntegral
 template <typename T, typename U>
 struct MinGoodImplForStaticCastFromSignedToArithmetic
     : std::conditional_t<std::is_floating_point<U>::value,
-                         stdx::type_identity<ValueIsCannotOverflow>,
+                         stdx::type_identity<ValueIsLowest<T>>,
                          MinGoodImplForStaticCastFromSignedToIntegral<T, U>> {};
 
 // (I) -> (A)
 template <typename T, typename U>
 struct MinGoodImplForStaticCastFromIntegralToArithmetic
     : std::conditional_t<std::is_unsigned<T>::value,
-                         stdx::type_identity<ValueIsCannotOverflow>,
+                         stdx::type_identity<ValueIsLowest<T>>,
                          MinGoodImplForStaticCastFromSignedToArithmetic<T, U>> {};
 
 // (F) -> (F)
 template <typename T, typename U>
 struct MinGoodImplForStaticCastFromFloatingPointToFloatingPoint
-    : std::conditional<sizeof(T) <= sizeof(U),
-                       ValueIsCannotOverflow,
-                       ValueIsLowestInDestination<T, U>> {};
+    : std::conditional<sizeof(T) <= sizeof(U), ValueIsLowest<T>, ValueIsLowestInDestination<T, U>> {
+};
 
 // (F) -> (A)
 template <typename T, typename U>
@@ -292,7 +287,7 @@ template <typename T, typename U>
 struct MaxGoodImplForStaticCastFromIntegralToIntegral
     : std::conditional<(static_cast<std::common_type_t<T, U>>(std::numeric_limits<T>::max()) <=
                         static_cast<std::common_type_t<T, U>>(std::numeric_limits<U>::max())),
-                       ValueIsCannotOverflow,
+                       ValueIsHighest<T>,
                        ValueIsHighestInDestination<T, U>> {};
 
 // (I) -> (A)
@@ -300,13 +295,13 @@ template <typename T, typename U>
 struct MaxGoodImplForStaticCastFromIntegralToArithmetic
     : std::conditional_t<std::is_integral<U>::value,
                          MaxGoodImplForStaticCastFromIntegralToIntegral<T, U>,
-                         stdx::type_identity<ValueIsCannotOverflow>> {};
+                         stdx::type_identity<ValueIsHighest<T>>> {};
 
 // (F) -> (F)
 template <typename T, typename U>
 struct MaxGoodImplForStaticCastFromFloatingPointToFloatingPoint
     : std::conditional<sizeof(T) <= sizeof(U),
-                       ValueIsCannotOverflow,
+                       ValueIsHighest<T>,
                        ValueIsHighestInDestination<T, U>> {};
 
 // (F) -> (A)
