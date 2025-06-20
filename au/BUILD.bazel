@@ -210,7 +210,10 @@ cc_library(
     name = "apply_rational_magnitude_to_integral",
     hdrs = ["code/au/apply_rational_magnitude_to_integral.hh"],
     includes = ["code"],
-    deps = [":magnitude"],
+    deps = [
+        ":magnitude",
+        ":utility",
+    ],
 )
 
 cc_test(
