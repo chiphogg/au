@@ -17,6 +17,7 @@
 #include <limits>
 
 #include "au/stdx/type_traits.hh"
+#include "au/utility/type_traits.hh"
 
 namespace au {
 namespace detail {
@@ -54,6 +55,13 @@ using MaxGood = typename MaxGoodImpl<Op>::type;
 //
 template <typename T, typename U>
 struct StaticCast {};
+
+//
+// `MultiplyTypeBy<T, M>` represents an operation that multiplies a value of type `T` by the
+// magnitude `M`.
+//
+template <typename T, typename M>
+struct MultiplyTypeBy {};
 
 //
 // `OpInput<Op>` and `OpOutput<Op>` are the input and output types of an operation.
@@ -328,6 +336,15 @@ struct MaxGoodImpl<StaticCast<T, U>>
     : std::conditional_t<std::is_arithmetic<T>::value,
                          MaxGoodImplForStaticCastFromArithmetic<T, U>,
                          MaxGoodImplForStaticCastFromNonArithmetic<T, U>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MultiplyTypeBy<T, M>` implementation.
+
+template <typename T, typename M>
+struct OpInputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
+
+template <typename T, typename M>
+struct OpOutputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<PromotedType<T>> {};
 
 }  // namespace detail
 }  // namespace au
