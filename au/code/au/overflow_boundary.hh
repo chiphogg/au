@@ -26,10 +26,10 @@ namespace detail {
 // `MinGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the minimum value
 // that does not overflow.
 //
-template <typename Op>
+template <typename Op, typename Limit>
 struct MinGoodImpl;
-template <typename Op>
-using MinGood = typename MinGoodImpl<Op>::type;
+template <typename Op, typename Limit = void>
+using MinGood = typename MinGoodImpl<Op, Limit>::type;
 
 //
 // `MaxGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the maximum value
@@ -86,6 +86,28 @@ using OpOutput = typename OpOutputImpl<Op>::type;
 // (U) = unsigned integral
 // (X) = any type
 
+// `LowerLimit<T, Limit>::value()` returns `Limit::value()` (assumed to be of type `T`), unless
+// `Limit` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limit>
+struct LowerLimit {
+    static constexpr T value() { return Limit::value(); }
+};
+template <typename T>
+struct LowerLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
+
+// `UpperLimit<T, Limit>::value()` returns `Limit::value()` (assumed to be of type `T`), unless
+// `Limit` is `void`, in which case it means "no limit" and we return the highest possible value.
+template <typename T, typename Limit>
+struct UpperLimit {
+    static constexpr T value() { return Limit::value(); }
+};
+template <typename T>
+struct UpperLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+
 // Inherit from this struct to produce a compiler error in case we try to use a combination of types
 // that isn't yet supported.
 template <typename T>
@@ -114,11 +136,11 @@ struct ValueIsHighest {
 };
 
 // A type whose `::value()` function returns the lowest value of `U`, expressed in `T`.
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct ValueIsLowestInDestination {
-    static constexpr T value() { return static_cast<T>(std::numeric_limits<U>::lowest()); }
+    static constexpr T value() { return static_cast<T>(LowerLimit<U, ULimit>::value()); }
 
-    static_assert(static_cast<U>(value()) == std::numeric_limits<U>::lowest(),
+    static_assert(static_cast<U>(value()) == LowerLimit<U, ULimit>::value(),
                   "This utility assumes lossless round trips");
 };
 
@@ -196,75 +218,77 @@ struct OpOutputImpl<StaticCast<T, U>> : stdx::type_identity<U> {};
 //
 
 // (N) -> (X) (placeholder)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromNonArithmetic
     : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
 
 // (A) -> (N) (placeholder)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromArithmeticToNonArithmetic
     : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
 
 // (S) -> (S)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromSignedToSigned
-    : std::conditional<sizeof(T) <= sizeof(U), ValueIsLowest<T>, ValueIsLowestInDestination<T, U>> {
-};
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueIsLowest<T>,
+                       ValueIsLowestInDestination<T, U, ULimit>> {};
 
 // (S) -> (I)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromSignedToIntegral
     : std::conditional_t<std::is_unsigned<U>::value,
                          stdx::type_identity<ValueIsZero<T>>,
-                         MinGoodImplForStaticCastFromSignedToSigned<T, U>> {};
+                         MinGoodImplForStaticCastFromSignedToSigned<T, U, ULimit>> {};
 
 // (S) -> (A)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromSignedToArithmetic
     : std::conditional_t<std::is_floating_point<U>::value,
                          stdx::type_identity<ValueIsLowest<T>>,
-                         MinGoodImplForStaticCastFromSignedToIntegral<T, U>> {};
+                         MinGoodImplForStaticCastFromSignedToIntegral<T, U, ULimit>> {};
 
 // (I) -> (A)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromIntegralToArithmetic
     : std::conditional_t<std::is_unsigned<T>::value,
                          stdx::type_identity<ValueIsLowest<T>>,
-                         MinGoodImplForStaticCastFromSignedToArithmetic<T, U>> {};
+                         MinGoodImplForStaticCastFromSignedToArithmetic<T, U, ULimit>> {};
 
 // (F) -> (F)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromFloatingPointToFloatingPoint
-    : std::conditional<sizeof(T) <= sizeof(U), ValueIsLowest<T>, ValueIsLowestInDestination<T, U>> {
-};
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueIsLowest<T>,
+                       ValueIsLowestInDestination<T, U, ULimit>> {};
 
 // (F) -> (A)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromFloatingPointToArithmetic
     : std::conditional_t<std::is_floating_point<U>::value,
-                         MinGoodImplForStaticCastFromFloatingPointToFloatingPoint<T, U>,
-                         stdx::type_identity<ValueIsLowestInDestination<T, U>>> {};
+                         MinGoodImplForStaticCastFromFloatingPointToFloatingPoint<T, U, ULimit>,
+                         stdx::type_identity<ValueIsLowestInDestination<T, U, ULimit>>> {};
 
 // (A) -> (A)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromArithmeticToArithmetic
     : std::conditional_t<std::is_integral<T>::value,
-                         MinGoodImplForStaticCastFromIntegralToArithmetic<T, U>,
-                         MinGoodImplForStaticCastFromFloatingPointToArithmetic<T, U>> {};
+                         MinGoodImplForStaticCastFromIntegralToArithmetic<T, U, ULimit>,
+                         MinGoodImplForStaticCastFromFloatingPointToArithmetic<T, U, ULimit>> {};
 
 // (A) -> (X)
-template <typename T, typename U>
+template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromArithmetic
     : std::conditional_t<std::is_arithmetic<U>::value,
-                         MinGoodImplForStaticCastFromArithmeticToArithmetic<T, U>,
-                         MinGoodImplForStaticCastFromArithmeticToNonArithmetic<T, U>> {};
+                         MinGoodImplForStaticCastFromArithmeticToArithmetic<T, U, ULimit>,
+                         MinGoodImplForStaticCastFromArithmeticToNonArithmetic<T, U, ULimit>> {};
 
 // (X) -> (X)
-template <typename T, typename U>
-struct MinGoodImpl<StaticCast<T, U>>
+template <typename T, typename U, typename ULimit>
+struct MinGoodImpl<StaticCast<T, U>, ULimit>
     : std::conditional_t<std::is_arithmetic<T>::value,
-                         MinGoodImplForStaticCastFromArithmetic<T, U>,
-                         MinGoodImplForStaticCastFromNonArithmetic<T, U>> {};
+                         MinGoodImplForStaticCastFromArithmetic<T, U, ULimit>,
+                         MinGoodImplForStaticCastFromNonArithmetic<T, U, ULimit>> {};
 
 //
 // `MaxGood<StaticCast<T, U>>` implementation cluster.

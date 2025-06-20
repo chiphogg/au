@@ -106,6 +106,103 @@ TEST(StaticCast, MinGoodIsLowestFromAnySignedToAnyFloatingPoint) {
                 Eq(std::numeric_limits<int64_t>::lowest()));
 }
 
+TEST(StaticCast, MinGoodUnchangedWithExplicitLimitOfLowestInTargetType) {
+    // What all these test cases have in common is that the destination type is already the most
+    // constraining factor.  Therefore, the only way to add an _explicit_ limit, which nevertheless
+    // does _not_ constrain the answer, is to make that explicit limit equal to the implicit limit:
+    // that is, the lowest value of the destination type.
+
+    EXPECT_THAT((MinGood<StaticCast<int8_t, int8_t>, ValueIsLowest<int8_t>>::value()),
+                Eq(MinGood<StaticCast<int8_t, int8_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<uint16_t, uint16_t>, ValueIsLowest<uint16_t>>::value()),
+                Eq(MinGood<StaticCast<uint16_t, uint16_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<float, float>, ValueIsLowest<float>>::value()),
+                Eq(MinGood<StaticCast<float, float>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<uint32_t, int32_t>, ValueIsLowest<int32_t>>::value()),
+                Eq(MinGood<StaticCast<uint32_t, int32_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int64_t, uint64_t>, ValueIsLowest<uint64_t>>::value()),
+                Eq(MinGood<StaticCast<int64_t, uint64_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<double, float>, ValueIsLowest<float>>::value()),
+                Eq(MinGood<StaticCast<double, float>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<float, uint64_t>, ValueIsLowest<uint64_t>>::value()),
+                Eq(MinGood<StaticCast<float, uint64_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<float, int64_t>, ValueIsLowest<int64_t>>::value()),
+                Eq(MinGood<StaticCast<float, int64_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<float, int32_t>, ValueIsLowest<int32_t>>::value()),
+                Eq(MinGood<StaticCast<float, int32_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<uint32_t, uint16_t>, ValueIsLowest<uint16_t>>::value()),
+                Eq(MinGood<StaticCast<uint32_t, uint16_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<uint32_t, int8_t>, ValueIsLowest<int8_t>>::value()),
+                Eq(MinGood<StaticCast<uint32_t, int8_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int64_t, int32_t>, ValueIsLowest<int32_t>>::value()),
+                Eq(MinGood<StaticCast<int64_t, int32_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int64_t, uint32_t>, ValueIsLowest<uint32_t>>::value()),
+                Eq(MinGood<StaticCast<int64_t, uint32_t>>::value()));
+}
+
+TEST(StaticCast, MinGoodUnchangedWithExplicitLimitLessConstrainingThanExistingResult) {
+    // In these cases, we are applying a non-trivial lower limit (i.e., it is higher than the
+    // `lowest()` value), but it does not constrain the result enough to change it.
+
+    struct DoubleLimitTwiceFloatLowest {
+        static constexpr double value() {
+            return static_cast<double>(std::numeric_limits<float>::lowest()) * 2.0;
+        }
+    };
+
+    EXPECT_THAT((MinGood<StaticCast<float, double>, DoubleLimitTwiceFloatLowest>::value()),
+                Eq(MinGood<StaticCast<float, double>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int32_t, double>, DoubleLimitTwiceFloatLowest>::value()),
+                Eq(MinGood<StaticCast<int32_t, double>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<uint16_t, double>, DoubleLimitTwiceFloatLowest>::value()),
+                Eq(MinGood<StaticCast<uint16_t, double>>::value()));
+
+    struct FloatLimitHalfFloatLowest {
+        static constexpr float value() { return std::numeric_limits<float>::lowest() / 2.0f; }
+    };
+
+    EXPECT_THAT((MinGood<StaticCast<uint64_t, float>, FloatLimitHalfFloatLowest>::value()),
+                Eq(MinGood<StaticCast<uint64_t, float>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int64_t, float>, FloatLimitHalfFloatLowest>::value()),
+                Eq(MinGood<StaticCast<int64_t, float>>::value()));
+
+    struct SignedLimitHalfInt64Lowest {
+        static constexpr int64_t value() { return std::numeric_limits<int64_t>::lowest() / 2; }
+    };
+
+    EXPECT_THAT((MinGood<StaticCast<uint32_t, int64_t>, SignedLimitHalfInt64Lowest>::value()),
+                Eq(MinGood<StaticCast<uint32_t, int64_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int32_t, int64_t>, SignedLimitHalfInt64Lowest>::value()),
+                Eq(MinGood<StaticCast<int32_t, int64_t>>::value()));
+}
+
+TEST(StaticCast, MinGoodUnchangedForUnsignedDestinationAndExplicitLimitOfZero) {
+    EXPECT_THAT((MinGood<StaticCast<uint8_t, uint16_t>, ValueIsZero<uint16_t>>::value()),
+                Eq(MinGood<StaticCast<uint8_t, uint16_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<int32_t, uint64_t>, ValueIsZero<uint64_t>>::value()),
+                Eq(MinGood<StaticCast<int32_t, uint64_t>>::value()));
+
+    EXPECT_THAT((MinGood<StaticCast<double, uint32_t>, ValueIsZero<uint32_t>>::value()),
+                Eq(MinGood<StaticCast<double, uint32_t>>::value()));
+}
+
 //
 // `MaxGood`:
 //
