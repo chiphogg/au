@@ -32,6 +32,11 @@ struct NoUpperLimit {
 };
 
 template <typename T>
+struct NoLowerLimit {
+    static constexpr T lower() { return std::numeric_limits<T>::lowest(); }
+};
+
+template <typename T>
 struct LowerLimitIsZero : NoUpperLimit<T> {
     static constexpr T lower() { return T{0}; }
 };
@@ -459,6 +464,210 @@ TEST(StaticCast, MaxGoodIsHighestFromAnyIntegralToAnyFloatingPoint) {
 
     EXPECT_THAT((MaxGood<StaticCast<uint64_t, float>>::value()),
                 Eq(std::numeric_limits<uint64_t>::max()));
+}
+
+TEST(StaticCast, MaxGoodUnchangedWithExplicitLimitOfHighestInTargetType) {
+    // What all these test cases have in common is that the destination type is already the most
+    // constraining factor.  Therefore, the only way to add an _explicit_ limit, which nevertheless
+    // does _not_ constrain the answer, is to make that explicit limit equal to the implicit limit:
+    // that is, the highest value of the destination type.
+
+    EXPECT_THAT((MaxGood<StaticCast<int8_t, int8_t>, ImplicitLimits<int8_t>>::value()),
+                Eq(MaxGood<StaticCast<int8_t, int8_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, uint16_t>, ImplicitLimits<uint16_t>>::value()),
+                Eq(MaxGood<StaticCast<uint16_t, uint16_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, float>, ImplicitLimits<float>>::value()),
+                Eq(MaxGood<StaticCast<float, float>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, int32_t>, ImplicitLimits<int32_t>>::value()),
+                Eq(MaxGood<StaticCast<uint32_t, int32_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, float>, ImplicitLimits<float>>::value()),
+                Eq(MaxGood<StaticCast<double, float>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, uint64_t>, ImplicitLimits<uint64_t>>::value()),
+                Eq(MaxGood<StaticCast<float, uint64_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, int64_t>, ImplicitLimits<int64_t>>::value()),
+                Eq(MaxGood<StaticCast<float, int64_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, int32_t>, ImplicitLimits<int32_t>>::value()),
+                Eq(MaxGood<StaticCast<double, int32_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, uint32_t>, ImplicitLimits<uint32_t>>::value()),
+                Eq(MaxGood<StaticCast<double, uint32_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, uint16_t>, ImplicitLimits<uint16_t>>::value()),
+                Eq(MaxGood<StaticCast<uint32_t, uint16_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, int8_t>, ImplicitLimits<int8_t>>::value()),
+                Eq(MaxGood<StaticCast<uint32_t, int8_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, int32_t>, ImplicitLimits<int32_t>>::value()),
+                Eq(MaxGood<StaticCast<int64_t, int32_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, uint32_t>, ImplicitLimits<uint32_t>>::value()),
+                Eq(MaxGood<StaticCast<int64_t, uint32_t>>::value()));
+}
+
+TEST(StaticCast, MaxGoodUnchangedWithExplicitLimitLessConstrainingThanExistingResult) {
+    // In these cases, we are applying a non-trivial upper limit (i.e., it is lower than the
+    // `max()` value), but it does not constrain the result enough to change it.
+
+    struct DoubleLimitTwiceFloatMax : NoLowerLimit<double> {
+        static constexpr double upper() {
+            return static_cast<double>(std::numeric_limits<float>::max()) * 2.0;
+        }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<float, double>, DoubleLimitTwiceFloatMax>::value()),
+                Eq(MaxGood<StaticCast<float, double>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, double>, DoubleLimitTwiceFloatMax>::value()),
+                Eq(MaxGood<StaticCast<int32_t, double>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, double>, DoubleLimitTwiceFloatMax>::value()),
+                Eq(MaxGood<StaticCast<uint16_t, double>>::value()));
+
+    struct FloatLimitHalfFloatMax : NoLowerLimit<float> {
+        static constexpr float upper() { return std::numeric_limits<float>::max() / 2.0f; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, float>, FloatLimitHalfFloatMax>::value()),
+                Eq(MaxGood<StaticCast<uint64_t, float>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, float>, FloatLimitHalfFloatMax>::value()),
+                Eq(MaxGood<StaticCast<int64_t, float>>::value()));
+
+    struct SignedLimitHalfInt64Max : NoLowerLimit<int64_t> {
+        static constexpr int64_t upper() { return std::numeric_limits<int64_t>::max() / 2; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, int64_t>, SignedLimitHalfInt64Max>::value()),
+                Eq(MaxGood<StaticCast<uint32_t, int64_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, int64_t>, SignedLimitHalfInt64Max>::value()),
+                Eq(MaxGood<StaticCast<int32_t, int64_t>>::value()));
+
+    struct UnsignedLimitUint64MaxMinusTwo : NoLowerLimit<uint64_t> {
+        static constexpr uint64_t upper() { return std::numeric_limits<uint64_t>::max() - 2; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, uint64_t>, UnsignedLimitUint64MaxMinusTwo>::value()),
+                Eq(MaxGood<StaticCast<uint32_t, uint64_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint64_t>, UnsignedLimitUint64MaxMinusTwo>::value()),
+                Eq(MaxGood<StaticCast<int32_t, uint64_t>>::value()));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, uint64_t>, UnsignedLimitUint64MaxMinusTwo>::value()),
+                Eq(MaxGood<StaticCast<int64_t, uint64_t>>::value()));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitFloatLimit) {
+    struct FloatUpperLimitOne : NoLowerLimit<float> {
+        static constexpr float upper() { return 1.0f; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<int16_t, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(int16_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint16_t, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(uint16_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(int64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(uint64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(1.0f));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, float>, FloatUpperLimitOne>::value()),
+                SameTypeAndValue(1.0));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitDoubleLimit) {
+    struct DoubleUpperLimitOne : NoLowerLimit<double> {
+        static constexpr double upper() { return 1.0; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<float, double>, DoubleUpperLimitOne>::value()),
+                SameTypeAndValue(1.0f));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitU64Limit) {
+    struct U64UpperLimitOne : NoLowerLimit<uint64_t> {
+        static constexpr uint64_t upper() { return 1; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, uint64_t>, U64UpperLimitOne>::value()),
+                SameTypeAndValue(uint32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint64_t>, U64UpperLimitOne>::value()),
+                SameTypeAndValue(int32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, uint64_t>, U64UpperLimitOne>::value()),
+                SameTypeAndValue(uint64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, uint64_t>, U64UpperLimitOne>::value()),
+                SameTypeAndValue(int64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, uint64_t>, U64UpperLimitOne>::value()),
+                SameTypeAndValue(1.0f));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitI64Limit) {
+    struct I64UpperLimitOne : NoLowerLimit<int64_t> {
+        static constexpr int64_t upper() { return 1; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, int64_t>, I64UpperLimitOne>::value()),
+                SameTypeAndValue(uint32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, int64_t>, I64UpperLimitOne>::value()),
+                SameTypeAndValue(int32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint64_t, int64_t>, I64UpperLimitOne>::value()),
+                SameTypeAndValue(uint64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<int64_t, int64_t>, I64UpperLimitOne>::value()),
+                SameTypeAndValue(int64_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<float, int64_t>, I64UpperLimitOne>::value()),
+                SameTypeAndValue(1.0f));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitI16Limit) {
+    struct I16UpperLimitOne : NoLowerLimit<int16_t> {
+        static constexpr int16_t upper() { return 1; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, int16_t>, I16UpperLimitOne>::value()),
+                SameTypeAndValue(int32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, int16_t>, I16UpperLimitOne>::value()),
+                SameTypeAndValue(uint32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, int16_t>, I16UpperLimitOne>::value()),
+                SameTypeAndValue(1.0));
+}
+
+TEST(StaticCast, MaxGoodCappedByExplicitU16Limit) {
+    struct U16UpperLimitOne : NoLowerLimit<uint16_t> {
+        static constexpr uint16_t upper() { return 1; }
+    };
+
+    EXPECT_THAT((MaxGood<StaticCast<int32_t, uint16_t>, U16UpperLimitOne>::value()),
+                SameTypeAndValue(int32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<uint32_t, uint16_t>, U16UpperLimitOne>::value()),
+                SameTypeAndValue(uint32_t{1}));
+
+    EXPECT_THAT((MaxGood<StaticCast<double, uint16_t>, U16UpperLimitOne>::value()),
+                SameTypeAndValue(1.0));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
