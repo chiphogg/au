@@ -24,7 +24,7 @@ namespace detail {
 
 //
 // `MinGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the minimum value
-// that does not overflow.
+// that does not overflow.  It must always be non-positive.
 //
 template <typename Op, typename Limits>
 struct MinGoodImpl;
@@ -33,7 +33,7 @@ using MinGood = typename MinGoodImpl<Op, Limits>::type;
 
 //
 // `MaxGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the maximum value
-// that does not overflow.
+// that does not overflow.  It must always be non-negative.
 //
 template <typename Op, typename Limits = void>
 struct MaxGoodImpl;
@@ -118,12 +118,9 @@ struct OverflowBoundaryNotYetImplemented {
 };
 
 // A type whose `::value()` function returns `0`, expressed in `T`.
-template <typename T, typename U, typename ULimit>
-struct ValueIsZeroUnlessDestLimitIsHigher {
-    static constexpr T value() {
-        constexpr auto U_LIMIT = LowerLimit<U, ULimit>::value();
-        return (U_LIMIT > 0) ? static_cast<T>(U_LIMIT) : T{0};
-    }
+template <typename T>
+struct ValueIsZero {
+    static constexpr T value() { return T{0}; }
 };
 
 // A type whose `::value()` function returns the higher of `std::numeric_limits<T>::lowest()`, or
@@ -256,7 +253,7 @@ struct MinGoodImplForStaticCastFromSignedToSigned
 template <typename T, typename U, typename ULimit>
 struct MinGoodImplForStaticCastFromSignedToIntegral
     : std::conditional_t<std::is_unsigned<U>::value,
-                         stdx::type_identity<ValueIsZeroUnlessDestLimitIsHigher<T, U, ULimit>>,
+                         stdx::type_identity<ValueIsZero<T>>,
                          MinGoodImplForStaticCastFromSignedToSigned<T, U, ULimit>> {};
 
 // (S) -> (A)

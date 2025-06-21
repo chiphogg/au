@@ -225,108 +225,57 @@ TEST(StaticCast, MinGoodUnchangedForUnsignedDestinationAndExplicitLimitOfZero) {
 }
 
 TEST(StaticCast, MinGoodCappedByExplicitFloatLimit) {
-    struct FloatLowerLimitOne : NoUpperLimit<float> {
-        static constexpr float lower() { return 1.0f; }
+    struct FloatLowerLimitMinusOne : NoUpperLimit<float> {
+        static constexpr float lower() { return -1.0f; }
     };
 
-    EXPECT_THAT((MinGood<StaticCast<int16_t, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(int16_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<int16_t, float>, FloatLowerLimitMinusOne>::value()),
+                SameTypeAndValue(int16_t{-1}));
 
-    EXPECT_THAT((MinGood<StaticCast<uint16_t, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(uint16_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<int64_t, float>, FloatLowerLimitMinusOne>::value()),
+                SameTypeAndValue(int64_t{-1}));
 
-    EXPECT_THAT((MinGood<StaticCast<int64_t, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(int64_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<float, float>, FloatLowerLimitMinusOne>::value()),
+                SameTypeAndValue(-1.0f));
 
-    EXPECT_THAT((MinGood<StaticCast<uint64_t, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(uint64_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<float, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(1.0f));
-
-    EXPECT_THAT((MinGood<StaticCast<double, float>, FloatLowerLimitOne>::value()),
-                SameTypeAndValue(1.0));
+    EXPECT_THAT((MinGood<StaticCast<double, float>, FloatLowerLimitMinusOne>::value()),
+                SameTypeAndValue(-1.0));
 }
 
 TEST(StaticCast, MinGoodCappedByExplicitDoubleLimit) {
-    struct DoubleLowerLimitOne : NoUpperLimit<double> {
-        static constexpr double lower() { return 1.0; }
+    struct DoubleLowerLimitMinusOne : NoUpperLimit<double> {
+        static constexpr double lower() { return -1.0; }
     };
 
-    EXPECT_THAT((MinGood<StaticCast<float, double>, DoubleLowerLimitOne>::value()),
-                SameTypeAndValue(1.0f));
-}
-
-TEST(StaticCast, MinGoodCappedByExplicitU64Limit) {
-    struct U64LowerLimitOne : NoUpperLimit<uint64_t> {
-        static constexpr uint64_t lower() { return 1; }
-    };
-
-    EXPECT_THAT((MinGood<StaticCast<uint32_t, uint64_t>, U64LowerLimitOne>::value()),
-                SameTypeAndValue(uint32_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<int32_t, uint64_t>, U64LowerLimitOne>::value()),
-                SameTypeAndValue(int32_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<uint64_t, uint64_t>, U64LowerLimitOne>::value()),
-                SameTypeAndValue(uint64_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<int64_t, uint64_t>, U64LowerLimitOne>::value()),
-                SameTypeAndValue(int64_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<float, uint64_t>, U64LowerLimitOne>::value()),
-                SameTypeAndValue(1.0f));
+    EXPECT_THAT((MinGood<StaticCast<float, double>, DoubleLowerLimitMinusOne>::value()),
+                SameTypeAndValue(-1.0f));
 }
 
 TEST(StaticCast, MinGoodCappedByExplicitI64Limit) {
-    struct I64LowerLimitOne : NoUpperLimit<int64_t> {
-        static constexpr int64_t lower() { return 1; }
+    struct I64LowerLimitMinusOne : NoUpperLimit<int64_t> {
+        static constexpr int64_t lower() { return -1; }
     };
 
-    EXPECT_THAT((MinGood<StaticCast<uint32_t, int64_t>, I64LowerLimitOne>::value()),
-                SameTypeAndValue(uint32_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<int32_t, int64_t>, I64LowerLimitMinusOne>::value()),
+                SameTypeAndValue(int32_t{-1}));
 
-    EXPECT_THAT((MinGood<StaticCast<int32_t, int64_t>, I64LowerLimitOne>::value()),
-                SameTypeAndValue(int32_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<int64_t, int64_t>, I64LowerLimitMinusOne>::value()),
+                SameTypeAndValue(int64_t{-1}));
 
-    EXPECT_THAT((MinGood<StaticCast<uint64_t, int64_t>, I64LowerLimitOne>::value()),
-                SameTypeAndValue(uint64_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<int64_t, int64_t>, I64LowerLimitOne>::value()),
-                SameTypeAndValue(int64_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<float, int64_t>, I64LowerLimitOne>::value()),
-                SameTypeAndValue(1.0f));
+    EXPECT_THAT((MinGood<StaticCast<float, int64_t>, I64LowerLimitMinusOne>::value()),
+                SameTypeAndValue(-1.0f));
 }
 
 TEST(StaticCast, MinGoodCappedByExplicitI16Limit) {
-    struct I16LowerLimitOne : NoUpperLimit<int16_t> {
-        static constexpr int16_t lower() { return 1; }
+    struct I16LowerLimitMinusOne : NoUpperLimit<int16_t> {
+        static constexpr int16_t lower() { return -1; }
     };
 
-    EXPECT_THAT((MinGood<StaticCast<int32_t, int16_t>, I16LowerLimitOne>::value()),
-                SameTypeAndValue(int32_t{1}));
+    EXPECT_THAT((MinGood<StaticCast<int32_t, int16_t>, I16LowerLimitMinusOne>::value()),
+                SameTypeAndValue(int32_t{-1}));
 
-    EXPECT_THAT((MinGood<StaticCast<uint32_t, int16_t>, I16LowerLimitOne>::value()),
-                SameTypeAndValue(uint32_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<double, int16_t>, I16LowerLimitOne>::value()),
-                SameTypeAndValue(1.0));
-}
-
-TEST(StaticCast, MinGoodCappedByExplicitU16Limit) {
-    struct U16LowerLimitOne : NoUpperLimit<uint16_t> {
-        static constexpr uint16_t lower() { return 1; }
-    };
-
-    EXPECT_THAT((MinGood<StaticCast<int32_t, uint16_t>, U16LowerLimitOne>::value()),
-                SameTypeAndValue(int32_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<uint32_t, uint16_t>, U16LowerLimitOne>::value()),
-                SameTypeAndValue(uint32_t{1}));
-
-    EXPECT_THAT((MinGood<StaticCast<double, uint16_t>, U16LowerLimitOne>::value()),
-                SameTypeAndValue(1.0));
+    EXPECT_THAT((MinGood<StaticCast<double, int16_t>, I16LowerLimitMinusOne>::value()),
+                SameTypeAndValue(-1.0));
 }
 
 //
