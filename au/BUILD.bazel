@@ -432,7 +432,6 @@ cc_library(
     deps = [
         ":magnitude",
         ":stdx",
-        ":utility",
         ":zero",
     ],
 )

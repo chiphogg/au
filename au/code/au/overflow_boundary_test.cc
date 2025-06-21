@@ -628,17 +628,9 @@ TEST(MultiplyTypeBy, InputTypeIsTypeParameter) {
                        uint32_t>();
 }
 
-TEST(MultiplyTypeBy, OutputTypeForFloatingPointIsInputType) {
-    StaticAssertTypeEq<OpOutput<MultiplyTypeBy<float, decltype(mag<2>())>>, float>();
+TEST(MultiplyTypeBy, OutputTypeIsTypeParameter) {
+    StaticAssertTypeEq<OpOutput<MultiplyTypeBy<int16_t, decltype(mag<2>())>>, int16_t>();
     StaticAssertTypeEq<OpOutput<MultiplyTypeBy<double, decltype(mag<3>() / mag<4>())>>, double>();
-}
-
-TEST(MultiplyTypeBy, OutputTypeIsSubjectToIntegerPromotion) {
-    using T = int8_t;
-    using Promoted = decltype(int8_t{} * int8_t{});
-    ASSERT_THAT((std::is_same<T, Promoted>::value), IsFalse());
-
-    StaticAssertTypeEq<OpOutput<MultiplyTypeBy<T, decltype(mag<2>())>>, Promoted>();
 }
 
 }  // namespace

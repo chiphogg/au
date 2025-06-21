@@ -17,7 +17,6 @@
 #include <limits>
 
 #include "au/stdx/type_traits.hh"
-#include "au/utility/type_traits.hh"
 
 namespace au {
 namespace detail {
@@ -381,7 +380,7 @@ template <typename T, typename M>
 struct OpInputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
 
 template <typename T, typename M>
-struct OpOutputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<PromotedType<T>> {};
+struct OpOutputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
 
 }  // namespace detail
 }  // namespace au
