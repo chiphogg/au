@@ -19,12 +19,16 @@
 #include "gtest/gtest.h"
 
 using ::testing::Eq;
+using ::testing::FloatEq;
 using ::testing::IsFalse;
+using ::testing::IsTrue;
 using ::testing::StaticAssertTypeEq;
 
 namespace au {
 namespace detail {
 namespace {
+
+constexpr auto PI = Magnitude<Pi>{};
 
 template <typename T>
 struct NoUpperLimit {
@@ -47,6 +51,86 @@ struct ImplicitLimits {
     static constexpr T upper() { return std::numeric_limits<T>::max(); }
 };
 
+template <typename T, typename M>
+MultiplyTypeBy<T, M> multiply_type_by(M) {
+    return MultiplyTypeBy<T, M>{};
+}
+
+template <typename Op>
+auto min_good_value(Op) {
+    return MinGood<Op>::value();
+}
+
+template <typename Op, typename Limits>
+auto min_good_value(Op, Limits) {
+    return MinGood<Op, Limits>::value();
+}
+
+// Handy little utility to turn an arbitrary floating point number into a Magnitude.
+template <typename T, typename ValConst>
+struct MagFromFloatingPointConstantImpl {
+    static_assert(std::is_floating_point<T>::value,
+                  "Must be floating point (internal library error)");
+
+    struct Breakdown {
+        bool is_positive = true;
+        uint64_t coeff = 0u;
+        int64_t exp = 0;
+
+        constexpr Breakdown() = default;
+    };
+
+    static constexpr Breakdown breakdown() {
+        T x = ValConst::value();
+
+        Breakdown result;
+
+        result.is_positive = (x >= T{0});
+        if (!result.is_positive) {
+            x = -x;
+        }
+
+        while (x > static_cast<T>(std::numeric_limits<uint64_t>::max())) {
+            x /= T{2};
+            ++result.exp;
+        }
+        while (result.exp > 64 && static_cast<T>(static_cast<uint64_t>(x)) != x) {
+            x *= T{2};
+            --result.exp;
+        }
+
+        result.coeff = static_cast<uint64_t>(x);
+        return result;
+    }
+
+    template <bool IsPositive>
+    static constexpr auto mag_sign() {
+        return Magnitude<>{};
+    }
+
+    template <>
+    static constexpr auto mag_sign<false>() {
+        return Magnitude<Negative>{};
+    }
+
+    static constexpr auto value() {
+        constexpr auto params = breakdown();
+        return mag_sign<params.is_positive>() * mag<params.coeff>() * pow<params.exp>(mag<2>());
+    }
+
+    using type = decltype(value() * mag<1>());  // Multiply by 1 to remove `const`.
+};
+
+template <typename Float>
+constexpr auto lowest_floating_point_as_mag() {
+    return MagFromFloatingPointConstantImpl<Float, ValueIsLowestInDestination<Float>>::value();
+}
+
+template <typename Float>
+constexpr auto highest_floating_point_as_mag() {
+    return MagFromFloatingPointConstantImpl<Float, ValueIsHighestInDestination<Float>>::value();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `StaticCast` section:
 
@@ -56,7 +140,7 @@ TEST(StaticCast, HasExpectedInputAndOutputTypes) {
 }
 
 //
-// `MinGood`:
+// `MinGood<StaticCast>`:
 //
 
 TEST(StaticCast, MinGoodIsLowestIfDestinationEqualsSource) {
@@ -279,7 +363,7 @@ TEST(StaticCast, MinGoodCappedByExplicitI16Limit) {
 }
 
 //
-// `MaxGood`:
+// `MaxGood<StaticCast>`:
 //
 
 TEST(StaticCast, MaxGoodIsHighestIfDestinationEqualsSource) {
@@ -326,7 +410,7 @@ TEST(StaticCast, MaxGoodIsHighestInDestinationFromUnsignedToSignedOfSameSize) {
                 SameTypeAndValue(static_cast<uint64_t>(std::numeric_limits<int64_t>::max())));
 }
 
-TEST(StaticCast, MaxGoodIsHighestFromAnyIntegerToAnyLargerInteger) {
+TEST(StaticCast, MaxGoodIsHighestFromAnyIntToAnyLargerInt) {
     EXPECT_THAT((MaxGood<StaticCast<uint8_t, int16_t>>::value()),
                 Eq(std::numeric_limits<uint8_t>::max()));
 
@@ -334,7 +418,7 @@ TEST(StaticCast, MaxGoodIsHighestFromAnyIntegerToAnyLargerInteger) {
                 Eq(std::numeric_limits<int32_t>::max()));
 }
 
-TEST(StaticCast, MaxGoodIsHighestInDestinationFromAnyIntegerToAnySmallerInteger) {
+TEST(StaticCast, MaxGoodIsHighestInDestinationFromAnyIntToAnySmallerInt) {
     EXPECT_THAT((MaxGood<StaticCast<uint16_t, uint8_t>>::value()),
                 SameTypeAndValue(static_cast<uint16_t>(std::numeric_limits<uint8_t>::max())));
     EXPECT_THAT((MaxGood<StaticCast<int32_t, uint16_t>>::value()),
@@ -631,6 +715,271 @@ TEST(MultiplyTypeBy, InputTypeIsTypeParameter) {
 TEST(MultiplyTypeBy, OutputTypeIsTypeParameter) {
     StaticAssertTypeEq<OpOutput<MultiplyTypeBy<int16_t, decltype(mag<2>())>>, int16_t>();
     StaticAssertTypeEq<OpOutput<MultiplyTypeBy<double, decltype(mag<3>() / mag<4>())>>, double>();
+}
+
+//
+// `MinGood<MultiplyTypeBy>`:
+//
+
+TEST(MultiplyTypeBy, MinGoodForUnsignedIsAlwaysZero) {
+    EXPECT_THAT(min_good_value(multiply_type_by<uint8_t>(mag<1>())), SameTypeAndValue(uint8_t{0}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<uint16_t>(mag<123>())),
+                SameTypeAndValue(uint16_t{0}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<uint32_t>(mag<1>() / mag<234>())),
+                SameTypeAndValue(uint32_t{0}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<uint64_t>(-mag<1>())),
+                SameTypeAndValue(uint64_t{0}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<uint64_t>(-mag<543>())),
+                SameTypeAndValue(uint64_t{0}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<uint64_t>(-mag<1>() / mag<2>())),
+                SameTypeAndValue(uint64_t{0}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedSignedTimesPosIntIsLowerLimitDivByMag) {
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(mag<1>())), SameTypeAndValue(int8_t{-128}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(mag<64>())), SameTypeAndValue(int8_t{-2}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(mag<65>())), SameTypeAndValue(int8_t{-1}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(mag<127>())), SameTypeAndValue(int8_t{-1}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedSignedTimesNegativeIntIsUpperLimitDivByMag) {
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<1>())),
+                SameTypeAndValue(int8_t{-127}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<63>())), SameTypeAndValue(int8_t{-2}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<64>())), SameTypeAndValue(int8_t{-1}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedFloatTimesPosIrrationalBiggerThanOneIsLowerLimitDivByMag) {
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(PI)),
+                FloatEq(std::numeric_limits<float>::lowest() / get_value<float>(PI)));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedFloatTimesNegIrrationalBiggerThanOneIsUpperLimitDivByMag) {
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-PI)),
+                FloatEq(std::numeric_limits<float>::max() / get_value<float>(-PI)));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedFloatTimesPosIrrationalSmallerThanOneIsLowerLimit) {
+    constexpr auto m = mag<1>() / PI;
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m)),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedFloatTimesNegIrrationalSmallerThanOneIsNegUpperLimit) {
+    constexpr auto m = -mag<1>() / PI;
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m)),
+                SameTypeAndValue(-std::numeric_limits<float>::max()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForSignedTimesPosIntIsLowerLimitDivByMag) {
+    struct I32LowerLimitMinus24 : NoUpperLimit<int32_t> {
+        static constexpr int32_t lower() { return -24; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(mag<1>()), I32LowerLimitMinus24{}),
+                SameTypeAndValue(int32_t{-24}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(mag<8>()), I32LowerLimitMinus24{}),
+                SameTypeAndValue(int32_t{-3}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(mag<24>()), I32LowerLimitMinus24{}),
+                SameTypeAndValue(int32_t{-1}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(mag<25>()), I32LowerLimitMinus24{}),
+                SameTypeAndValue(int32_t{0}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForSignedTimesNegIntIsUpperLimitDivByMag) {
+    struct I32UpperLimit24 : NoLowerLimit<int32_t> {
+        static constexpr int32_t upper() { return 24; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(-mag<1>()), I32UpperLimit24{}),
+                SameTypeAndValue(int32_t{-24}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(-mag<8>()), I32UpperLimit24{}),
+                SameTypeAndValue(int32_t{-3}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(-mag<24>()), I32UpperLimit24{}),
+                SameTypeAndValue(int32_t{-1}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(-mag<25>()), I32UpperLimit24{}),
+                SameTypeAndValue(int32_t{0}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesPosIntIsLowerLimitDivByMag) {
+    struct FloatLowerLimitMinus64 : NoUpperLimit<float> {
+        static constexpr float lower() { return -64.0f; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(mag<1>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(-64.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(mag<8>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(-8.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(mag<64>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(-1.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(mag<128>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(-0.5f));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesNegIntIsUpperLimitDivByMag) {
+    struct FloatUpperLimit64 : NoLowerLimit<float> {
+        static constexpr float upper() { return 64.0f; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<1>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-64.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<8>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-8.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<64>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-1.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<128>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-0.5f));
+}
+
+TEST(MultiplyTypeBy, MinGoodForSignedDivByPosIntIsCappedLowerLimitTimesMagInv) {
+    struct I8LowerLimitMinus16 : NoUpperLimit<int8_t> {
+        static constexpr int8_t lower() { return -16; }
+    };
+
+    EXPECT_THAT(
+        min_good_value(multiply_type_by<int8_t>(mag<1>() / mag<2>()), I8LowerLimitMinus16{}),
+        SameTypeAndValue(int8_t{-32}));
+
+    EXPECT_THAT(
+        min_good_value(multiply_type_by<int8_t>(mag<1>() / mag<8>()), I8LowerLimitMinus16{}),
+        SameTypeAndValue(int8_t{-128}));
+
+    // Clamped case.
+    EXPECT_THAT(
+        min_good_value(multiply_type_by<int8_t>(mag<1>() / mag<9>()), I8LowerLimitMinus16{}),
+        SameTypeAndValue(int8_t{-128}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForSignedDivByNegativeIntIsCappedUpperLimitTimesMagInv) {
+    struct I8UpperLimit16 : NoLowerLimit<int8_t> {
+        static constexpr int8_t upper() { return 16; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<1>() / mag<2>()), I8UpperLimit16{}),
+                SameTypeAndValue(int8_t{-32}));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<1>() / mag<8>()), I8UpperLimit16{}),
+                SameTypeAndValue(int8_t{-128}));
+
+    // Clamped case.
+    EXPECT_THAT(min_good_value(multiply_type_by<int8_t>(-mag<1>() / mag<9>()), I8UpperLimit16{}),
+                SameTypeAndValue(int8_t{-128}));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatDivByPosIntIsCappedLowerLimitTimesMagInv) {
+    struct FloatLowerLimitMinus64 : NoUpperLimit<float> {
+        static constexpr float lower() { return -64.0f; }
+    };
+
+    EXPECT_THAT(
+        min_good_value(multiply_type_by<float>(mag<1>() / mag<2>()), FloatLowerLimitMinus64{}),
+        SameTypeAndValue(-128.0f));
+
+    EXPECT_THAT(
+        min_good_value(multiply_type_by<float>(mag<1>() / mag<8>()), FloatLowerLimitMinus64{}),
+        SameTypeAndValue(-512.0f));
+
+    // Clamped cases.
+    constexpr auto m = mag<64>() / highest_floating_point_as_mag<float>();
+    ASSERT_THAT(is_integer(inverse(m)), IsTrue());
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m * mag<2>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest() / 2.0f));
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m / mag<2>()), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatDivByNegIntIsCappedUpperLimitTimesMagInv) {
+    struct FloatUpperLimit64 : NoLowerLimit<float> {
+        static constexpr float upper() { return 64.0f; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<1>() / mag<2>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-128.0f));
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-mag<1>() / mag<8>()), FloatUpperLimit64{}),
+                SameTypeAndValue(-512.0f));
+
+    // Clamped cases.
+    constexpr auto m = mag<64>() / lowest_floating_point_as_mag<float>();
+    ASSERT_THAT(is_integer(inverse(m)), IsTrue());
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m * mag<2>()), FloatUpperLimit64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest() / 2.0f));
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m), FloatUpperLimit64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m / mag<2>()), FloatUpperLimit64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesPosIrrationalBiggerThanOneIsLowerLimitDivByMag) {
+    struct FloatLowerLimitMinus64 : NoUpperLimit<float> {
+        static constexpr float lower() { return -64.0f; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(PI), FloatLowerLimitMinus64{}),
+                FloatEq(-64.0f / get_value<float>(PI)));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesNegIrrationalBiggerThanOneIsUpperLimitDivByMag) {
+    struct FloatUpperLimit64 : NoLowerLimit<float> {
+        static constexpr float upper() { return 64.0f; }
+    };
+
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(-PI), FloatUpperLimit64{}),
+                FloatEq(64.0f / get_value<float>(-PI)));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesPosIrrationalSmallerThanOneIsClampedLowerLimit) {
+    struct FloatLowerLimitMinus64 : NoUpperLimit<float> {
+        static constexpr float lower() { return -64.0f; }
+    };
+
+    constexpr auto m_no_clamping = mag<1>() / PI;
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m_no_clamping), FloatLowerLimitMinus64{}),
+                FloatEq(-64.0f / get_value<float>(m_no_clamping)));
+
+    constexpr auto m_clamping = mag<16>() * PI / highest_floating_point_as_mag<float>();
+    ASSERT_THAT(is_positive(m_clamping), IsTrue());
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m_clamping), FloatLowerLimitMinus64{}),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForFloatTimesNegIrrationalSmallerThanOneIsClampedUpperLimit) {
+    struct FloatUpperLimit64 : NoLowerLimit<float> {
+        static constexpr float upper() { return 64.0f; }
+    };
+
+    constexpr auto m_no_clamping = -mag<1>() / PI;
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m_no_clamping), FloatUpperLimit64{}),
+                FloatEq(64.0f / get_value<float>(m_no_clamping)));
+
+    constexpr auto m_clamping = mag<16>() * PI / lowest_floating_point_as_mag<float>();
+    ASSERT_THAT(is_positive(m_clamping), IsFalse());
+    EXPECT_THAT(min_good_value(multiply_type_by<float>(m_clamping), FloatUpperLimit64{}),
+                SameTypeAndValue(-std::numeric_limits<float>::max()));
 }
 
 }  // namespace
