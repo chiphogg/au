@@ -79,6 +79,20 @@ struct OpOutputImpl;
 template <typename Op>
 using OpOutput = typename OpOutputImpl<Op>::type;
 
+//
+// `CanOverflowBelow<Op>::value` is `true` if there is any value in `OpInput<Op>` that can cause the
+// operation to exceed its bounds.
+//
+template <typename Op>
+struct CanOverflowBelow;
+
+//
+// `CanOverflowAbove<Op>::value` is `true` if there is any value in `OpInput<Op>` that can cause the
+// operation to exceed its bounds.
+//
+template <typename Op>
+struct CanOverflowAbove;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // IMPLEMENTATION DETAILS
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -281,6 +295,37 @@ struct ClampLowestOfLimitsTimesInverseValue {
     }
 };
 
+template <typename T, typename MagT, MagRepresentationOutcome>
+struct MagHelper {
+    static constexpr bool equal(const T &, const T &) { return false; }
+    static constexpr T div(const T &, const T &) {
+        // We assume the most likely reason to be here is that the magnitude was too large to
+        // represent in the type, so we treat this as a "divide by infinity" and return zero.
+        //
+        // Really, this should probably just not be called, but it definitely needs to exist for the
+        // code to compile.
+        return T{0};
+    }
+};
+
+template <typename T, typename MagT>
+struct MagHelper<T, MagT, MagRepresentationOutcome::OK> {
+    static constexpr bool equal(const T &x, const T &value) { return x == value; }
+    static constexpr T div(const T &a, const T &b) { return a / b; }
+};
+
+template <typename T, typename... BPs>
+constexpr bool mag_representation_equals(const T &x, Magnitude<BPs...> m) {
+    constexpr auto result = get_value_result<T>(m);
+    return MagHelper<T, Magnitude<BPs...>, result.outcome>::equal(x, result.value);
+}
+
+template <typename T, typename... BPs>
+constexpr T divide_by_mag(const T &x, Magnitude<BPs...> m) {
+    constexpr auto result = get_value_result<T>(m);
+    return MagHelper<T, Magnitude<BPs...>, result.outcome>::div(x, result.value);
+}
+
 // Name reads as "highest of (limits divided by value)".  Remember that the value can be negative,
 // so we just take whichever limit is larger _after_ dividing.  And since `Abs<M>` can be assumed to
 // be greater than one, we know that dividing by `M` will shrink values, so we don't risk overflow.
@@ -291,7 +336,7 @@ struct HighestOfLimitsDividedByValue {
             IsPositive<M>::value ? UpperLimit<T, Limits>::value() : LowerLimit<T, Limits>::value();
 
         // Special handling for signed int min being slightly more negative than max is positive.
-        if (get_value<T>(M{}) == std::numeric_limits<T>::lowest()) {
+        if (mag_representation_equals(std::numeric_limits<T>::lowest(), M{})) {
             return T{1};
         }
         if (M{} == -mag<1>() &&
@@ -301,7 +346,7 @@ struct HighestOfLimitsDividedByValue {
             return std::numeric_limits<T>::max();
         }
 
-        return RELEVANT_LIMIT / get_value<T>(M{});
+        return divide_by_mag(RELEVANT_LIMIT, M{});
     }
 };
 
@@ -593,6 +638,20 @@ struct MaxGoodImpl<OpSequence<Op1, Op2, Ops...>, Limits>
     static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
                   "Output of each op in sequence must match input of next op");
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowBelow<Op>` implementation.
+
+template <typename Op>
+struct CanOverflowBelow
+    : stdx::bool_constant<(MinGood<Op>::value() > std::numeric_limits<OpInput<Op>>::lowest())> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowAbove<Op>` implementation.
+
+template <typename Op>
+struct CanOverflowAbove
+    : stdx::bool_constant<(MaxGood<Op>::value() < std::numeric_limits<OpInput<Op>>::max())> {};
 
 }  // namespace detail
 }  // namespace au

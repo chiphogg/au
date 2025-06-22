@@ -16,6 +16,7 @@
 
 #include "au/apply_rational_magnitude_to_integral.hh"
 #include "au/magnitude.hh"
+#include "au/overflow_boundary.hh"
 
 namespace au {
 namespace detail {
@@ -45,18 +46,38 @@ constexpr ApplyAs categorize_magnitude(Magnitude<BPs...>) {
 template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
 struct ApplyMagnitudeImpl;
 
-template <typename T, MagRepresentationOutcome>
-struct OverflowChecker {
-    // Default case: magnitude cannot be represented in the type; therefore, the only possible value
-    // that would not overflow is zero.
-    static constexpr bool would_product_overflow(T x, T) { return (x != T{0}); }
+// `MinValueChecker<Op>::is_too_small(x)` checks whether the value `x` is small enough to overflow
+// the bounds of the operation.
+template <typename Op, bool IsOverflowPossible>
+struct MinValueCheckerImpl {
+    static constexpr bool is_too_small(const OpInput<Op> &x) { return x < MinGood<Op>::value(); }
 };
+template <typename Op>
+struct MinValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_small(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MinValueChecker : MinValueCheckerImpl<Op, CanOverflowBelow<Op>::value> {};
 
-template <typename T>
-struct OverflowChecker<T, MagRepresentationOutcome::OK> {
-    static constexpr bool would_product_overflow(T x, T mag_value) {
-        return (x > (std::numeric_limits<T>::max() / mag_value)) ||
-               (x < (std::numeric_limits<T>::lowest() / mag_value));
+// `MaxValueChecker<Op>::is_too_large(x)` checks whether the value `x` is large enough to overflow
+// the bounds of the operation.
+template <typename Op, bool IsOverflowPossible>
+struct MaxValueCheckerImpl {
+    static constexpr bool is_too_large(const OpInput<Op> &x) { return x > MaxGood<Op>::value(); }
+};
+template <typename Op>
+struct MaxValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_large(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MaxValueChecker : MaxValueCheckerImpl<Op, CanOverflowAbove<Op>::value> {};
+
+// `NewOverflowChecker<Op>::would_product_overflow(x)` checks whether the value `x` would exceed the
+// bounds of the operation `Op`.
+template <typename Op>
+struct NewOverflowChecker {
+    static constexpr bool would_product_overflow(const OpInput<Op> &x) {
+        return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
     }
 };
 
@@ -103,9 +124,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_MULTIPLY, T, is_T_integral> {
     constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
-            x, mag_value_result.value);
+        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }
@@ -188,9 +207,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, false> {
     constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
-            x, mag_value_result.value);
+        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }
@@ -209,9 +226,7 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::IRRATIONAL_MULTIPLY, T, is_T_integral> {
     constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
 
     static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
-            x, mag_value_result.value);
+        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }

@@ -192,6 +192,7 @@ cc_library(
     deps = [
         ":apply_rational_magnitude_to_integral",
         ":magnitude",
+        ":overflow_boundary",
     ],
 )
 

@@ -81,6 +81,16 @@ auto op_sequence(Ops...) {
     return OpSequence<Ops...>{};
 }
 
+template <typename Op>
+bool can_overflow_below(Op) {
+    return CanOverflowBelow<Op>::value;
+}
+
+template <typename Op>
+bool can_overflow_above(Op) {
+    return CanOverflowAbove<Op>::value;
+}
+
 // Handy little utility to turn an arbitrary floating point number into a Magnitude.
 template <typename T, typename ValConst>
 struct MagFromFloatingPointConstantImpl {
@@ -1386,6 +1396,30 @@ TEST(OpSequence, MaxGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplica
                                            StaticCast<double, uint8_t>{},
                                            StaticCast<uint8_t, int32_t>{})),
                 SameTypeAndValue(int64_t{0}));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowBelow` section:
+
+TEST(CanOverflowBelow, TrueIfValueCanBeSmallEnoughToGoOutsideBounds) {
+    EXPECT_THAT(can_overflow_below(multiply_type_by<int8_t>(mag<2>())), IsTrue());
+}
+
+TEST(CanOverflowBelow, FalseIfValueCannotBeSmallEnoughToGoOutsideBounds) {
+    EXPECT_THAT(can_overflow_below(multiply_type_by<uint8_t>(mag<8>())), IsFalse());
+    EXPECT_THAT(can_overflow_below(multiply_type_by<double>(mag<1>() / PI)), IsFalse());
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowAbove` section:
+
+TEST(CanOverflowAbove, TrueIfValueCanBeBigEnoughToGoOutsideBounds) {
+    EXPECT_THAT(can_overflow_above(multiply_type_by<int8_t>(mag<2>())), IsTrue());
+}
+
+TEST(CanOverflowAbove, FalseIfValueCannotBeBigEnoughToGoOutsideBounds) {
+    EXPECT_THAT(can_overflow_above(multiply_type_by<uint8_t>(mag<1>() / mag<8>())), IsFalse());
+    EXPECT_THAT(can_overflow_above(multiply_type_by<double>(-mag<1>() / PI)), IsFalse());
 }
 
 }  // namespace
