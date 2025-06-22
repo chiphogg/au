@@ -16,6 +16,7 @@
 
 #include <limits>
 
+#include "au/abstract_operations.hh"
 #include "au/magnitude.hh"
 #include "au/stdx/type_traits.hh"
 
@@ -43,41 +44,6 @@ template <typename Op, typename Limits = void>
 struct MaxGoodImpl;
 template <typename Op, typename Limits = void>
 using MaxGood = typename MaxGoodImpl<Op, Limits>::type;
-
-//
-// `StaticCast<T, U>` represents an operation that converts from `T` to `U` via `static_cast`.
-//
-template <typename T, typename U>
-struct StaticCast {};
-
-//
-// `MultiplyTypeBy<T, M>` represents an operation that multiplies a value of type `T` by the
-// magnitude `M`.
-//
-template <typename T, typename M>
-struct MultiplyTypeBy {};
-
-//
-// `OpSequence<Ops...>` represents an ordered sequence of operations.
-//
-// We require that the output type of each operation is the same as the input type of the next one
-// (see below for `OpInput` and `OpOutput`).
-//
-template <typename... Ops>
-struct OpSequence {};
-
-//
-// `OpInput<Op>` and `OpOutput<Op>` are the input and output types of an operation.
-//
-template <typename Op>
-struct OpInputImpl;
-template <typename Op>
-using OpInput = typename OpInputImpl<Op>::type;
-
-template <typename Op>
-struct OpOutputImpl;
-template <typename Op>
-using OpOutput = typename OpOutputImpl<Op>::type;
 
 //
 // `CanOverflowBelow<Op>::value` is `true` if there is any value in `OpInput<Op>` that can cause the
@@ -379,11 +345,6 @@ struct ClampHighestOfLimitsTimesInverseValue {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `StaticCast<T, U>` implementation.
 
-template <typename T, typename U>
-struct OpInputImpl<StaticCast<T, U>> : stdx::type_identity<T> {};
-template <typename T, typename U>
-struct OpOutputImpl<StaticCast<T, U>> : stdx::type_identity<U> {};
-
 //
 // `MinGood<StaticCast<T, U>>` implementation cluster.
 //
@@ -535,12 +496,6 @@ struct MaxGoodImpl<StaticCast<T, U>, ULimit>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `MultiplyTypeBy<T, M>` implementation.
 
-template <typename T, typename M>
-struct OpInputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
-
-template <typename T, typename M>
-struct OpOutputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
-
 //
 // `MinGood<StaticCast<T, U>>` implementation cluster.
 //
@@ -602,14 +557,6 @@ struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence<Ops...>` implementation.
-
-template <typename Op, typename... Ops>
-struct OpInputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpInput<Op>> {};
-
-template <typename Op, typename... Ops>
-struct OpOutputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpOutput<OpSequence<Ops...>>> {};
-template <typename OnlyOp>
-struct OpOutputImpl<OpSequence<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
 
 //
 // `MinGood<OpSequence<Ops...>>` implementation cluster.

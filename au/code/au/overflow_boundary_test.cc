@@ -159,11 +159,6 @@ constexpr auto highest_floating_point_as_mag() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `StaticCast` section:
 
-TEST(StaticCast, HasExpectedInputAndOutputTypes) {
-    StaticAssertTypeEq<OpInput<StaticCast<int16_t, float>>, int16_t>();
-    StaticAssertTypeEq<OpOutput<StaticCast<int16_t, float>>, float>();
-}
-
 //
 // `MinGood<StaticCast>`:
 //
@@ -731,17 +726,6 @@ TEST(StaticCast, MaxGoodCappedByExplicitU16Limit) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `MultiplyTypeBy` section:
 
-TEST(MultiplyTypeBy, InputTypeIsTypeParameter) {
-    StaticAssertTypeEq<OpInput<MultiplyTypeBy<int16_t, decltype(mag<2>())>>, int16_t>();
-    StaticAssertTypeEq<OpInput<MultiplyTypeBy<uint32_t, decltype(mag<3>() / mag<4>())>>,
-                       uint32_t>();
-}
-
-TEST(MultiplyTypeBy, OutputTypeIsTypeParameter) {
-    StaticAssertTypeEq<OpOutput<MultiplyTypeBy<int16_t, decltype(mag<2>())>>, int16_t>();
-    StaticAssertTypeEq<OpOutput<MultiplyTypeBy<double, decltype(mag<3>() / mag<4>())>>, double>();
-}
-
 //
 // `MinGood<MultiplyTypeBy>`:
 //
@@ -1289,26 +1273,6 @@ TEST(MultiplyTypeBy, MaxGoodForFloatTimesNegIrrationalSmallerThanOneIsClampedLow
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence` section:
-
-TEST(OpSequence, InputTypeIsInputTypeOfFirstOperation) {
-    StaticAssertTypeEq<OpInput<OpSequence<MultiplyTypeBy<uint32_t, decltype(mag<3>() / mag<4>())>>>,
-                       uint32_t>();
-
-    StaticAssertTypeEq<OpInput<OpSequence<StaticCast<int16_t, uint16_t>,
-                                          MultiplyTypeBy<uint16_t, decltype(mag<2>())>>>,
-                       int16_t>();
-}
-
-TEST(OpSequence, OutputTypeIsOutputTypeOfLastOperation) {
-    StaticAssertTypeEq<
-        OpOutput<OpSequence<MultiplyTypeBy<uint32_t, decltype(mag<3>() / mag<4>())>>>,
-        uint32_t>();
-
-    StaticAssertTypeEq<OpOutput<OpSequence<StaticCast<int16_t, uint16_t>,
-                                           MultiplyTypeBy<uint16_t, decltype(mag<2>())>,
-                                           StaticCast<uint16_t, double>>>,
-                       double>();
-}
 
 //
 // `MinGood<OpSequence>`:

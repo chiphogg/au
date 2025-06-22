@@ -186,6 +186,24 @@ cc_test(
 # Implementation detail libraries and tests
 
 cc_library(
+    name = "abstract_operations",
+    hdrs = ["code/au/abstract_operations.hh"],
+    includes = ["code"],
+    deps = [":magnitude"],
+)
+
+cc_test(
+    name = "abstract_operations_test",
+    size = "small",
+    srcs = ["code/au/abstract_operations_test.cc"],
+    deps = [
+        ":abstract_operations",
+        ":magnitude",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "apply_magnitude",
     hdrs = ["code/au/apply_magnitude.hh"],
     includes = ["code"],
@@ -431,6 +449,7 @@ cc_library(
     hdrs = ["code/au/overflow_boundary.hh"],
     includes = ["code"],
     deps = [
+        ":abstract_operations",
         ":magnitude",
         ":stdx",
         ":zero",
