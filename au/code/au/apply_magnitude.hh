@@ -45,22 +45,19 @@ constexpr ApplyAs categorize_magnitude(Magnitude<BPs...>) {
 template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
 struct ApplyMagnitudeImpl;
 
-template <typename T, bool IsMagnitudeValid>
+template <typename T, MagRepresentationOutcome>
 struct OverflowChecker {
-    // Default case: `IsMagnitudeValid` is true.
+    // Default case: magnitude cannot be represented in the type; therefore, the only possible value
+    // that would not overflow is zero.
+    static constexpr bool would_product_overflow(T x, T) { return (x != T{0}); }
+};
+
+template <typename T>
+struct OverflowChecker<T, MagRepresentationOutcome::OK> {
     static constexpr bool would_product_overflow(T x, T mag_value) {
         return (x > (std::numeric_limits<T>::max() / mag_value)) ||
                (x < (std::numeric_limits<T>::lowest() / mag_value));
     }
-};
-
-template <typename T>
-struct OverflowChecker<T, false> {
-    // Specialization for when `IsMagnitudeValid` is false.
-    //
-    // This means that the magnitude itself could not fit inside of the type; therefore, the only
-    // possible value that would not overflow is zero.
-    static constexpr bool would_product_overflow(T x, T) { return (x != T{0}); }
 };
 
 template <typename T, bool IsTIntegral>
@@ -107,8 +104,8 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_MULTIPLY, T, is_T_integral> {
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
+        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
+            x, mag_value_result.value);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }
@@ -192,8 +189,8 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, false> {
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
+        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
+            x, mag_value_result.value);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }
@@ -213,8 +210,8 @@ struct ApplyMagnitudeImpl<Mag, ApplyAs::IRRATIONAL_MULTIPLY, T, is_T_integral> {
 
     static constexpr bool would_overflow(const T &x) {
         constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
+        return OverflowChecker<T, mag_value_result.outcome>::would_product_overflow(
+            x, mag_value_result.value);
     }
 
     static constexpr bool would_truncate(const T &) { return false; }
