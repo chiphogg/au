@@ -76,6 +76,11 @@ auto max_good_value(Op, Limits) {
     return MaxGood<Op, Limits>::value();
 }
 
+template <typename... Ops>
+auto op_sequence(Ops...) {
+    return OpSequence<Ops...>{};
+}
+
 // Handy little utility to turn an arbitrary floating point number into a Magnitude.
 template <typename T, typename ValConst>
 struct MagFromFloatingPointConstantImpl {
@@ -1270,6 +1275,117 @@ TEST(MultiplyTypeBy, MaxGoodForFloatTimesNegIrrationalSmallerThanOneIsClampedLow
     ASSERT_THAT(is_positive(m_clamping), IsFalse());
     EXPECT_THAT(max_good_value(multiply_type_by<float>(m_clamping), FloatLowerLimitMinus64{}),
                 SameTypeAndValue(-std::numeric_limits<float>::lowest()));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `OpSequence` section:
+
+TEST(OpSequence, InputTypeIsInputTypeOfFirstOperation) {
+    StaticAssertTypeEq<OpInput<OpSequence<MultiplyTypeBy<uint32_t, decltype(mag<3>() / mag<4>())>>>,
+                       uint32_t>();
+
+    StaticAssertTypeEq<OpInput<OpSequence<StaticCast<int16_t, uint16_t>,
+                                          MultiplyTypeBy<uint16_t, decltype(mag<2>())>>>,
+                       int16_t>();
+}
+
+TEST(OpSequence, OutputTypeIsOutputTypeOfLastOperation) {
+    StaticAssertTypeEq<
+        OpOutput<OpSequence<MultiplyTypeBy<uint32_t, decltype(mag<3>() / mag<4>())>>>,
+        uint32_t>();
+
+    StaticAssertTypeEq<OpOutput<OpSequence<StaticCast<int16_t, uint16_t>,
+                                           MultiplyTypeBy<uint16_t, decltype(mag<2>())>,
+                                           StaticCast<uint16_t, double>>>,
+                       double>();
+}
+
+//
+// `MinGood<OpSequence>`:
+//
+
+TEST(OpSequence, MinGoodForSequenceOfSingleOpIsMinGoodForThatOp) {
+    auto expect_min_good_for_sequence_of_only_this_is_min_good_for_this = [](auto op) {
+        EXPECT_THAT(min_good_value(op_sequence(op)), SameTypeAndValue(min_good_value(op)));
+    };
+
+    expect_min_good_for_sequence_of_only_this_is_min_good_for_this(
+        multiply_type_by<uint8_t>(mag<1>()));
+
+    expect_min_good_for_sequence_of_only_this_is_min_good_for_this(StaticCast<int16_t, float>{});
+}
+
+TEST(OpSequence, MinGoodForDivideThenNarrowIsLimitsOfTypeIfDivisorIsBigEnough) {
+    EXPECT_THAT(min_good_value(op_sequence(multiply_type_by<int16_t>(mag<1>() / mag<1000>()),
+                                           StaticCast<int16_t, int8_t>{})),
+                SameTypeAndValue(std::numeric_limits<int16_t>::min()));
+}
+
+TEST(OpSequence, MinGoodForDivideThenNarrowIsScaledUpDestinationBoundIfDivisorIsSmallEnough) {
+    EXPECT_THAT(min_good_value(op_sequence(multiply_type_by<int16_t>(mag<1>() / mag<10>()),
+                                           StaticCast<int16_t, int8_t>{})),
+                SameTypeAndValue(int16_t{-1280}));
+}
+
+TEST(OpSequence, MinGoodOfStaticCastSequenceIsMostConstrainingType) {
+    EXPECT_THAT(min_good_value(op_sequence(StaticCast<int64_t, float>{},
+                                           StaticCast<float, int32_t>{},
+                                           StaticCast<int32_t, int16_t>{},
+                                           StaticCast<int16_t, double>{})),
+                SameTypeAndValue(static_cast<int64_t>(std::numeric_limits<int16_t>::min())));
+}
+
+TEST(OpSequence, MinGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplication) {
+    EXPECT_THAT(min_good_value(op_sequence(StaticCast<int64_t, float>{},
+                                           StaticCast<float, uint32_t>{},
+                                           StaticCast<uint32_t, int16_t>{},
+                                           multiply_type_by<int16_t>(-mag<1>() / mag<234>()),
+                                           StaticCast<int16_t, double>{},
+                                           StaticCast<double, uint8_t>{},
+                                           StaticCast<uint8_t, int32_t>{})),
+                SameTypeAndValue(int64_t{0}));
+}
+
+TEST(OpSequence, MaxGoodForSequenceOfSingleOpIsMaxGoodForThatOp) {
+    auto expect_max_good_for_sequence_of_only_this_is_max_good_for_this = [](auto op) {
+        EXPECT_THAT(max_good_value(op_sequence(op)), SameTypeAndValue(max_good_value(op)));
+    };
+
+    expect_max_good_for_sequence_of_only_this_is_max_good_for_this(
+        multiply_type_by<uint8_t>(mag<1>()));
+
+    expect_max_good_for_sequence_of_only_this_is_max_good_for_this(StaticCast<int16_t, float>{});
+}
+
+TEST(OpSequence, MaxGoodForDivideThenNarrowIsLimitsOfTypeIfDivisorIsBigEnough) {
+    EXPECT_THAT(max_good_value(op_sequence(multiply_type_by<uint16_t>(mag<1>() / mag<1000>()),
+                                           StaticCast<uint16_t, uint8_t>{})),
+                SameTypeAndValue(std::numeric_limits<uint16_t>::max()));
+}
+
+TEST(OpSequence, MaxGoodForDivideThenNarrowIsScaledDownDestinationBoundIfDivisorIsSmallEnough) {
+    EXPECT_THAT(max_good_value(op_sequence(multiply_type_by<uint16_t>(mag<1>() / mag<10>()),
+                                           StaticCast<uint16_t, uint8_t>{})),
+                SameTypeAndValue(uint16_t{2550}));
+}
+
+TEST(OpSequence, MaxGoodOfStaticCastSequenceIsMostConstrainingType) {
+    EXPECT_THAT(max_good_value(op_sequence(StaticCast<int64_t, float>{},
+                                           StaticCast<float, uint32_t>{},
+                                           StaticCast<uint32_t, int16_t>{},
+                                           StaticCast<int16_t, double>{})),
+                SameTypeAndValue(static_cast<int64_t>(std::numeric_limits<int16_t>::max())));
+}
+
+TEST(OpSequence, MaxGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplication) {
+    EXPECT_THAT(max_good_value(op_sequence(StaticCast<int64_t, float>{},
+                                           StaticCast<float, uint32_t>{},
+                                           StaticCast<uint32_t, int16_t>{},
+                                           multiply_type_by<int16_t>(-mag<1>() / mag<234>()),
+                                           StaticCast<int16_t, double>{},
+                                           StaticCast<double, uint8_t>{},
+                                           StaticCast<uint8_t, int32_t>{})),
+                SameTypeAndValue(int64_t{0}));
 }
 
 }  // namespace

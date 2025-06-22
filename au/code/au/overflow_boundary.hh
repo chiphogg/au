@@ -58,6 +58,15 @@ template <typename T, typename M>
 struct MultiplyTypeBy {};
 
 //
+// `OpSequence<Ops...>` represents an ordered sequence of operations.
+//
+// We require that the output type of each operation is the same as the input type of the next one
+// (see below for `OpInput` and `OpOutput`).
+//
+template <typename... Ops>
+struct OpSequence {};
+
+//
 // `OpInput<Op>` and `OpOutput<Op>` are the input and output types of an operation.
 //
 template <typename Op>
@@ -115,6 +124,13 @@ struct UpperLimit {
 template <typename T>
 struct UpperLimit<T, void> {
     static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+
+// `LimitsFor<Op, Limits>` produces a type which can be the `Limits` argument for some other op.
+template <typename Op, typename Limits>
+struct LimitsFor {
+    static constexpr OpInput<Op> lower() { return MinGood<Op, Limits>::value(); }
+    static constexpr OpInput<Op> upper() { return MaxGood<Op, Limits>::value(); }
 };
 
 // Inherit from this struct to produce a compiler error in case we try to use a combination of types
@@ -538,6 +554,45 @@ struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
           (is_definitely_unsigned<T>() && !IsPositive<M>::value),
           stdx::type_identity<ValueIsZero<T>>,
           MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor<T, M, Limits>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `OpSequence<Ops...>` implementation.
+
+template <typename Op, typename... Ops>
+struct OpInputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpInput<Op>> {};
+
+template <typename Op, typename... Ops>
+struct OpOutputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpOutput<OpSequence<Ops...>>> {};
+template <typename OnlyOp>
+struct OpOutputImpl<OpSequence<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
+
+//
+// `MinGood<OpSequence<Ops...>>` implementation cluster.
+//
+
+template <typename OnlyOp, typename Limits>
+struct MinGoodImpl<OpSequence<OnlyOp>, Limits> : stdx::type_identity<MinGood<OnlyOp, Limits>> {};
+
+template <typename Op1, typename Op2, typename... Ops, typename Limits>
+struct MinGoodImpl<OpSequence<Op1, Op2, Ops...>, Limits>
+    : stdx::type_identity<MinGood<Op1, LimitsFor<OpSequence<Op2, Ops...>, Limits>>> {
+    static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
+                  "Output of each op in sequence must match input of next op");
+};
+
+//
+// `MaxGood<OpSequence<Ops...>>` implementation cluster.
+//
+
+template <typename OnlyOp, typename Limits>
+struct MaxGoodImpl<OpSequence<OnlyOp>, Limits> : stdx::type_identity<MaxGood<OnlyOp, Limits>> {};
+
+template <typename Op1, typename Op2, typename... Ops, typename Limits>
+struct MaxGoodImpl<OpSequence<Op1, Op2, Ops...>, Limits>
+    : stdx::type_identity<MaxGood<Op1, LimitsFor<OpSequence<Op2, Ops...>, Limits>>> {
+    static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
+                  "Output of each op in sequence must match input of next op");
+};
 
 }  // namespace detail
 }  // namespace au
