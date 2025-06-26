@@ -72,6 +72,11 @@ struct MaxValueCheckerImpl<Op, false> {
 template <typename Op>
 struct MaxValueChecker : MaxValueCheckerImpl<Op, CanOverflowAbove<Op>::value> {};
 
+template <typename Op>
+constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
+    return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
+}
+
 // `NewOverflowChecker<Op>::would_product_overflow(x)` checks whether the value `x` would exceed the
 // bounds of the operation `Op`.
 template <typename Op>
@@ -247,6 +252,70 @@ template <typename T, typename... BPs>
 constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
     return ApplyMagnitudeT<T, Magnitude<BPs...>>{}(x);
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Newer ideas below
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//
+// `ApplicationStrategyFor`
+//
+
+template <typename T, typename Mag, ApplyAs>
+struct ApplicationStrategyForImpl : stdx::type_identity<MultiplyTypeBy<T, Mag>> {};
+template <typename T, typename Mag>
+using ApplicationStrategyFor =
+    typename ApplicationStrategyForImpl<T, Mag, categorize_magnitude(Mag{})>::type;
+
+template <typename T, typename Mag>
+struct ApplicationStrategyForImpl<T, Mag, ApplyAs::RATIONAL_MULTIPLY>
+    : std::conditional<
+          std::is_integral<T>::value,
+          OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeBy<T, DenominatorT<Mag>>>,
+          MultiplyTypeBy<T, Mag>> {};
+
+//
+// more
+//
+
+//
+// `ConversionForRepsAndFactor<OldRep, NewRep, Factor>` is the operation that takes a value of
+// `OldRep`, and produces the application of the magnitude `Factor` in the type `NewRep`.
+//
+template <typename OldRep, typename NewRep, typename Factor>
+struct ConversionForRepsAndFactorImpl;
+template <typename OldRep, typename NewRep, typename Factor>
+using ConversionForRepsAndFactor =
+    typename ConversionForRepsAndFactorImpl<OldRep, NewRep, Factor>::type;
+
+// `ConversionInSameRep<Rep, PromotedType<Rep>, Factor>` is the operation that applies `Factor`
+// without changing the rep.  (If `Rep` isn't subject to promotion, this just trivially reduces to
+// applying `Factor`.)
+template <typename Rep, typename PromotedRep, typename Factor>
+struct ConversionInSameRep
+    : stdx::type_identity<OpSequence<StaticCast<Rep, PromotedRep>,
+                                     ApplicationStrategyFor<PromotedRep, Factor>,
+                                     StaticCast<PromotedRep, Rep>>> {};
+template <typename Rep, typename Factor>
+struct ConversionInSameRep<Rep, Rep, Factor>
+    : stdx::type_identity<ApplicationStrategyFor<Rep, Factor>> {};
+
+// `ConversionForRepsAndFactorImpl<Rep, Rep, Factor>` handles the case where we don't want to change
+// the rep.  (We just delegate to a bespoke implementation for this.)
+template <typename Rep, typename Factor>
+struct ConversionForRepsAndFactorImpl<Rep, Rep, Factor>
+    : ConversionInSameRep<Rep, PromotedType<Rep>, Factor> {};
+
+template <typename OldRep, typename PromotedCommon, typename NewRep, typename Factor>
+struct FullConversionImpl
+    : stdx::type_identity<OpSequence<StaticCast<OldRep, PromotedCommon>,
+                                     ApplicationStrategyFor<PromotedCommon, Factor>,
+                                     StaticCast<PromotedCommon, NewRep>>> {};
+
+template <typename OldRep, typename NewRep, typename Factor>
+struct ConversionForRepsAndFactorImpl
+    : FullConversionImpl<OldRep, PromotedType<std::common_type_t<OldRep, NewRep>>, NewRep, Factor> {
+};
 
 }  // namespace detail
 }  // namespace au

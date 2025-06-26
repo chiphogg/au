@@ -199,6 +199,7 @@ cc_test(
     deps = [
         ":abstract_operations",
         ":magnitude",
+        ":testing",
         "@com_google_googletest//:gtest_main",
     ],
 )

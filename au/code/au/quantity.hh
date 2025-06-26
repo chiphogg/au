@@ -177,11 +177,11 @@ class Quantity {
               typename NewUnit,
               typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
     constexpr auto as(NewUnit) const {
-        using Common = std::common_type_t<Rep, NewRep>;
-        using Factor = UnitRatioT<AssociatedUnitT<Unit>, AssociatedUnitT<NewUnit>>;
-
         return make_quantity<AssociatedUnitT<NewUnit>>(
-            static_cast<NewRep>(detail::apply_magnitude(static_cast<Common>(value_), Factor{})));
+            detail::ConversionForRepsAndFactor<
+                Rep,
+                NewRep,
+                UnitRatioT<AssociatedUnitT<Unit>, AssociatedUnitT<NewUnit>>>::apply_to(value_));
     }
 
     template <typename NewUnit,
@@ -198,7 +198,11 @@ class Quantity {
             IMPLICIT_OK,
             "Dangerous conversion for integer Rep!  See: "
             "https://aurora-opensource.github.io/au/main/troubleshooting/#dangerous-conversion");
-        return as<Rep>(u);
+        return make_quantity<AssociatedUnitT<NewUnit>>(
+            detail::ConversionForRepsAndFactor<
+                Rep,
+                Rep,
+                UnitRatioT<AssociatedUnitT<Unit>, AssociatedUnitT<NewUnit>>>::apply_to(value_));
     }
 
     template <typename NewRep,
@@ -662,31 +666,18 @@ constexpr auto root(QuantityMaker<Unit>) {
 
 // Check conversion for overflow (no change of rep).
 template <typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    using Ratio = decltype(unit_ratio(U{}, target_unit));
-    static_assert(IsPositive<Ratio>::value,
-                  "Runtime conversion checkers don't yet support negative units");
-    return detail::ApplyMagnitudeT<R, Ratio>::would_overflow(q.in(U{}));
+constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
+    using Op =
+        detail::ConversionForRepsAndFactor<R, R, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::would_input_produce_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for overflow (new rep).
 template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
 constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    // TODO(#349): Someday, we would like a more efficient implementation --- one that simply
-    // computes, at compile time, the smallest value that would overflow, and then compares against
-    // that.  This version will at least let us get off the ground for now.
-    using Common = std::common_type_t<R, TargetRep>;
-    if (detail::will_static_cast_overflow<Common>(q.in(U{}))) {
-        return true;
-    }
-
-    const auto to_common = rep_cast<Common>(q);
-    if (will_conversion_overflow(to_common, target_unit)) {
-        return true;
-    }
-
-    const auto converted_but_not_narrowed = to_common.coerce_in(target_unit);
-    return detail::will_static_cast_overflow<TargetRep>(converted_but_not_narrowed);
+    using Op = detail::
+        ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::would_input_produce_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for truncation (no change of rep).

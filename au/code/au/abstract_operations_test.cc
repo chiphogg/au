@@ -14,6 +14,7 @@
 
 #include "au/abstract_operations.hh"
 
+#include "au/testing.hh"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -31,6 +32,10 @@ TEST(StaticCast, HasExpectedInputAndOutputTypes) {
     StaticAssertTypeEq<OpOutput<StaticCast<int16_t, float>>, float>();
 }
 
+TEST(StaticCast, PerformsStaticCast) {
+    EXPECT_THAT((StaticCast<int16_t, float>::apply_to(int16_t{123})), SameTypeAndValue(123.0f));
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `MultiplyTypeBy` section:
 
@@ -43,6 +48,24 @@ TEST(MultiplyTypeBy, InputTypeIsTypeParameter) {
 TEST(MultiplyTypeBy, OutputTypeIsTypeParameter) {
     StaticAssertTypeEq<OpOutput<MultiplyTypeBy<int16_t, decltype(mag<2>())>>, int16_t>();
     StaticAssertTypeEq<OpOutput<MultiplyTypeBy<double, decltype(mag<3>() / mag<4>())>>, double>();
+}
+
+TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByIntegerMag) {
+    EXPECT_THAT((MultiplyTypeBy<int16_t, decltype(mag<2>())>::apply_to(int16_t{3})),
+                SameTypeAndValue(int16_t{6}));
+}
+
+TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByInverseIntegerMag) {
+    EXPECT_THAT((MultiplyTypeBy<uint16_t, decltype(mag<1>() / mag<3>())>::apply_to(uint16_t{6})),
+                SameTypeAndValue(uint16_t{2}));
+}
+
+TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByInverseIntegerTooBigToRepresent) {
+    EXPECT_THAT((MultiplyTypeBy<uint8_t, decltype(mag<1>() / mag<256>())>::apply_to(uint8_t{1})),
+                SameTypeAndValue(uint8_t{0}));
+
+    EXPECT_THAT((MultiplyTypeBy<float, decltype(-pow<-40>(mag<10>()))>::apply_to(float{1.0f})),
+                SameTypeAndValue(0.0f));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,6 +89,13 @@ TEST(OpSequence, OutputTypeIsOutputTypeOfLastOperation) {
                                            MultiplyTypeBy<uint16_t, decltype(mag<2>())>,
                                            StaticCast<uint16_t, double>>>,
                        double>();
+}
+
+TEST(OpSequence, AppliesOperationsInSequence) {
+    EXPECT_THAT((OpSequence<StaticCast<float, int>,
+                            MultiplyTypeBy<int, decltype(mag<3>())>,
+                            StaticCast<int, double>>::apply_to(2.9f)),
+                SameTypeAndValue(6.0));
 }
 
 }  // namespace

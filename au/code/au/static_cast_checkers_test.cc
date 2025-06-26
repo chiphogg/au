@@ -24,44 +24,6 @@ using ::testing::IsTrue;
 
 namespace detail {
 
-TEST(WillStaticCastOverflow, DependsOnValueForUnsignedToNonContainingSigned) {
-    EXPECT_THAT(will_static_cast_overflow<int8_t>(uint8_t{127}), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<int8_t>(uint8_t{128}), IsTrue());
-}
-
-TEST(WillStaticCastOverflow, AlwaysFalseForUnsignedToContainingSigned) {
-    EXPECT_THAT(will_static_cast_overflow<int>(uint8_t{124}), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<int>(uint8_t{125}), IsFalse());
-}
-
-TEST(WillStaticCastOverflow, ChecksLimitForNonContainingSameSignedness) {
-    EXPECT_THAT(will_static_cast_overflow<int8_t>(127), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<int8_t>(128), IsTrue());
-}
-
-TEST(WillStaticCastOverflow, TrueForNegativeInputAndUnsignedDestination) {
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(-1), IsTrue());
-    EXPECT_THAT(will_static_cast_overflow<unsigned int>(int8_t{-1}), IsTrue());
-}
-
-TEST(WillStaticCastOverflow, FalseWhenDestBoundsContainsSourceBounds) {
-    EXPECT_THAT(will_static_cast_overflow<float>(std::numeric_limits<uint64_t>::max()), IsFalse());
-}
-
-TEST(WillStaticCastOverflow, DependsOnTypeLimitsForFloatToInt) {
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(-0.0001), IsTrue());
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(0.0000), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(0.0001), IsFalse());
-
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(254.9999), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(255.0000), IsFalse());
-    EXPECT_THAT(will_static_cast_overflow<uint8_t>(255.0001), IsTrue());
-}
-
-TEST(WillStaticCastOverflow, TrueForReallyBigDoubleGoingToFloat) {
-    EXPECT_THAT(will_static_cast_overflow<float>(1e200), IsTrue());
-}
-
 TEST(WillStaticCastTruncate, IntToFloatFalseForIntTypeThatCanFitInFloat) {
     EXPECT_THAT(will_static_cast_truncate<float>(uint8_t{124}), IsFalse());
     EXPECT_THAT(will_static_cast_truncate<double>(124), IsFalse());

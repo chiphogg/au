@@ -26,11 +26,6 @@ template <typename Source, typename Dest>
 struct StaticCastChecker;
 
 template <typename Dest, typename Source>
-constexpr bool will_static_cast_overflow(Source x) {
-    return StaticCastChecker<Source, Dest>::will_static_cast_overflow(x);
-}
-
-template <typename Dest, typename Source>
 constexpr bool will_static_cast_truncate(Source x) {
     return StaticCastChecker<Source, Dest>::will_static_cast_truncate(x);
 }
@@ -98,52 +93,6 @@ constexpr OverflowSituation categorize_overflow_situation() {
     return OverflowSituation::UNEXPLORED;
 }
 
-template <typename Source, typename Dest, OverflowSituation Cat>
-struct StaticCastOverflowImpl;
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS> {
-    static constexpr bool will_static_cast_overflow(Source) { return false; }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::UNSIGNED_TO_INTEGRAL> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        // Note that we know that the max value of `Dest` can fit into `Source`, because otherwise,
-        // this would have been categorized as `DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS` rather than
-        // `UNSIGNED_TO_INTEGRAL`.
-        return x > static_cast<Source>(std::numeric_limits<Dest>::max());
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::SIGNED_TO_UNSIGNED> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        return (x < 0) ||
-               (static_cast<std::make_unsigned_t<Source>>(x) >
-                static_cast<std::make_unsigned_t<Source>>(std::numeric_limits<Dest>::max()));
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::SIGNED_TO_SIGNED> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        return (x < static_cast<Source>(std::numeric_limits<Dest>::lowest())) ||
-               (x > static_cast<Source>(std::numeric_limits<Dest>::max()));
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::FLOAT_TO_ANYTHING> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        // It's pretty safe to assume that `Source` can hold the limits of `Dest`, because otherwise
-        // this would have been categorized as `DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS` rather than
-        // `FLOAT_TO_ANYTHING`.
-        return (x < static_cast<Source>(std::numeric_limits<Dest>::lowest())) ||
-               (x > static_cast<Source>(std::numeric_limits<Dest>::max()));
-    }
-};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Truncation checking:
 
@@ -201,8 +150,7 @@ struct StaticCastTruncateImpl<Source, Dest, TruncationSituation::FLOAT_TO_INTEGR
 
 template <typename Source, typename Dest>
 struct StaticCastChecker
-    : StaticCastOverflowImpl<Source, Dest, categorize_overflow_situation<Source, Dest>()>,
-      StaticCastTruncateImpl<Source, Dest, categorize_truncation_situation<Source, Dest>()> {};
+    : StaticCastTruncateImpl<Source, Dest, categorize_truncation_situation<Source, Dest>()> {};
 
 }  // namespace detail
 }  // namespace au
