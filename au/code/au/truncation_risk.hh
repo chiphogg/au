@@ -26,16 +26,13 @@ template <typename T>
 struct NoTruncationRisk {};
 
 template <typename T>
-struct AllNonzeroValues {};
+struct ValueIsNotZero {};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotInteger {};
 
 template <typename T>
-struct NonIntegerValues {};
-
-template <typename T, typename M>
-struct ValuesNotSomeIntegerTimes {};
-
-template <typename T, typename M>
-struct ValuesNotSomeIntegerDividedBy {};
+using ValueIsNotInteger = ValueTimesRatioIsNotInteger<T, Magnitude<>>;
 
 template <typename T, typename Op>
 struct CannotAssessTruncationRiskFor {};
@@ -51,7 +48,7 @@ struct CannotAssessTruncationRiskFor {};
 template <typename T, typename U>
 struct TruncationRiskForStaticCastFromArithmeticToArithmetic
     : std::conditional<stdx::conjunction<std::is_floating_point<T>, std::is_integral<U>>::value,
-                       NonIntegerValues<T>,
+                       ValueIsNotInteger<T>,
                        NoTruncationRisk<T>> {};
 
 // (A) -> (X)
@@ -78,40 +75,34 @@ struct TruncationRiskForImpl<StaticCast<T, U>>
 // `MultiplyTypeBy<T, M>` section:
 
 template <typename T, typename M>
-struct TruncationRiskForMultiplyArithmeticByNonIntegerRational
-    : std::conditional<std::is_integral<T>::value,
-                       ValuesNotSomeIntegerTimes<T, DenominatorT<M>>,
-                       NoTruncationRisk<T>> {};
-
-template <typename T, typename M>
-struct TruncationRiskForMultiplyNonArithmeticByNonIntegerRational
-    : stdx::type_identity<CannotAssessTruncationRiskFor<T, MultiplyTypeBy<T, M>>> {};
-
-template <typename T, typename M>
 struct TruncationRiskForMultiplyArithmeticByIrrational
-    : std::conditional<std::is_integral<T>::value, AllNonzeroValues<T>, NoTruncationRisk<T>> {};
+    : std::conditional<std::is_integral<T>::value, ValueIsNotZero<T>, NoTruncationRisk<T>> {};
 
 template <typename T, typename M>
 struct TruncationRiskForMultiplyNonArithmeticByIrrational
     : stdx::type_identity<CannotAssessTruncationRiskFor<T, MultiplyTypeBy<T, M>>> {};
 
 template <typename T, typename M>
-struct TruncationRiskForMultiplyByNonIntegerRational
-    : std::conditional_t<std::is_arithmetic<T>::value,
-                         TruncationRiskForMultiplyArithmeticByNonIntegerRational<T, M>,
-                         TruncationRiskForMultiplyNonArithmeticByNonIntegerRational<T, M>> {};
-
-template <typename T, typename M>
-struct TruncationRiskForMultiplyByRational
-    : std::conditional_t<IsInteger<M>::value,
-                         stdx::type_identity<NoTruncationRisk<T>>,
-                         TruncationRiskForMultiplyByNonIntegerRational<T, M>> {};
+struct TruncationRiskForMultiplyNonArithmeticByRational
+    : stdx::type_identity<CannotAssessTruncationRiskFor<T, MultiplyTypeBy<T, M>>> {};
 
 template <typename T, typename M>
 struct TruncationRiskForMultiplyByIrrational
     : std::conditional_t<std::is_arithmetic<T>::value,
                          TruncationRiskForMultiplyArithmeticByIrrational<T, M>,
                          TruncationRiskForMultiplyNonArithmeticByIrrational<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyArithmeticByRational
+    : std::conditional<stdx::disjunction<IsInteger<M>, std::is_floating_point<T>>::value,
+                       NoTruncationRisk<T>,
+                       ValueTimesRatioIsNotInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyByRational
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForMultiplyArithmeticByRational<T, M>,
+                         TruncationRiskForMultiplyNonArithmeticByRational<T, M>> {};
 
 template <typename T, typename M>
 struct TruncationRiskForImpl<MultiplyTypeBy<T, M>>
@@ -146,21 +137,19 @@ template <template <class> class Risk, typename T, typename U>
 struct UpdateRiskImpl<StaticCast<T, U>, Risk<U>> : stdx::type_identity<Risk<T>> {};
 
 template <typename T, typename U, typename M>
-struct UpdateRiskImpl<StaticCast<T, U>, ValuesNotSomeIntegerTimes<U, M>>
-    : stdx::type_identity<ValuesNotSomeIntegerTimes<T, M>> {};
-
-template <typename T, typename U, typename M>
-struct UpdateRiskImpl<StaticCast<T, U>, ValuesNotSomeIntegerDividedBy<U, M>>
-    : stdx::type_identity<ValuesNotSomeIntegerDividedBy<T, M>> {};
+struct UpdateRiskImpl<StaticCast<T, U>, ValueTimesRatioIsNotInteger<U, M>>
+    : std::conditional<stdx::conjunction<IsInteger<M>, std::is_integral<T>>::value,
+                       NoTruncationRisk<T>,
+                       ValueTimesRatioIsNotInteger<T, M>> {};
 
 template <template <class> class Risk, typename T, typename M>
 struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<T>> : stdx::type_identity<Risk<T>> {};
 
-template <typename T, typename M>
-struct UpdateRiskImpl<MultiplyTypeBy<T, M>, NonIntegerValues<T>>
-    : std::conditional_t<IsRational<M>::value,
-                         UpdateNonIntegerRiskForMultiplyByRational<T, M>,
-                         stdx::type_identity<AllNonzeroValues<T>>> {};
+template <typename T, typename M1, typename M2>
+struct UpdateRiskImpl<MultiplyTypeBy<T, M1>, ValueTimesRatioIsNotInteger<T, M2>>
+    : std::conditional<IsRational<M1>::value,
+                       ValueTimesRatioIsNotInteger<T, MagProductT<M1, M2>>,
+                       ValueIsNotZero<T>> {};
 
 template <typename Op, typename OldOp>
 struct UpdateRiskImpl<Op, CannotAssessTruncationRiskFor<OpOutput<Op>, OldOp>>
