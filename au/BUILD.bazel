@@ -656,6 +656,28 @@ cc_test(
 )
 
 cc_library(
+    name = "truncation_risk",
+    hdrs = ["code/au/truncation_risk.hh"],
+    includes = ["code"],
+    deps = [
+        ":abstract_operations",
+        ":magnitude",
+    ],
+)
+
+cc_test(
+    name = "truncation_risk_test",
+    size = "small",
+    srcs = ["code/au/truncation_risk_test.cc"],
+    deps = [
+        ":magnitude",
+        ":testing",
+        ":truncation_risk",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "unit_of_measure",
     hdrs = ["code/au/unit_of_measure.hh"],
     includes = ["code"],
