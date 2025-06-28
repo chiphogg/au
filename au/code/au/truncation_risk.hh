@@ -32,7 +32,10 @@ template <typename T>
 struct NonIntegerValues {};
 
 template <typename T, typename M>
-struct ValuesNotDivisibleBy {};
+struct ValuesNotSomeIntegerTimes {};
+
+template <typename T, typename M>
+struct ValuesNotSomeIntegerDividedBy {};
 
 template <typename T, typename Op>
 struct CannotAssessTruncationRiskFor {};
@@ -77,7 +80,7 @@ struct TruncationRiskForImpl<StaticCast<T, U>>
 template <typename T, typename M>
 struct TruncationRiskForMultiplyArithmeticByNonIntegerRational
     : std::conditional<std::is_integral<T>::value,
-                       ValuesNotDivisibleBy<T, DenominatorT<M>>,
+                       ValuesNotSomeIntegerTimes<T, DenominatorT<M>>,
                        NoTruncationRisk<T>> {};
 
 template <typename T, typename M>
@@ -132,7 +135,7 @@ struct PrependToOpSequenceImpl<Op1, OpSequence<Ops...>>
 // `UpdateRisk<Op, Risk>` adapts a "downstream" risk to the "upstream" interface.
 //
 // At minimum, this updates the input type to `OpInput<Op>`.  But it may also tweak the parameters
-// (e.g., for `ValuesNotDivisibleBy`), or even change the risk type entirely.
+// (e.g., for `ValuesNotSomeIntegerTimes`), or even change the risk type entirely.
 //
 template <typename Op, typename Risk>
 struct UpdateRiskImpl;
@@ -143,8 +146,21 @@ template <template <class> class Risk, typename T, typename U>
 struct UpdateRiskImpl<StaticCast<T, U>, Risk<U>> : stdx::type_identity<Risk<T>> {};
 
 template <typename T, typename U, typename M>
-struct UpdateRiskImpl<StaticCast<T, U>, ValuesNotDivisibleBy<U, M>>
-    : stdx::type_identity<ValuesNotDivisibleBy<T, M>> {};
+struct UpdateRiskImpl<StaticCast<T, U>, ValuesNotSomeIntegerTimes<U, M>>
+    : stdx::type_identity<ValuesNotSomeIntegerTimes<T, M>> {};
+
+template <typename T, typename U, typename M>
+struct UpdateRiskImpl<StaticCast<T, U>, ValuesNotSomeIntegerDividedBy<U, M>>
+    : stdx::type_identity<ValuesNotSomeIntegerDividedBy<T, M>> {};
+
+template <template <class> class Risk, typename T, typename M>
+struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<T>> : stdx::type_identity<Risk<T>> {};
+
+template <typename T, typename M>
+struct UpdateRiskImpl<MultiplyTypeBy<T, M>, NonIntegerValues<T>>
+    : std::conditional_t<IsRational<M>::value,
+                         UpdateNonIntegerRiskForMultiplyByRational<T, M>,
+                         stdx::type_identity<AllNonzeroValues<T>>> {};
 
 template <typename Op, typename OldOp>
 struct UpdateRiskImpl<Op, CannotAssessTruncationRiskFor<OpOutput<Op>, OldOp>>
