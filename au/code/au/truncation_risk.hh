@@ -122,6 +122,15 @@ template <typename Op1, typename... Ops>
 struct PrependToOpSequenceImpl<Op1, OpSequence<Ops...>>
     : stdx::type_identity<OpSequence<Op1, Ops...>> {};
 
+template <typename T, typename M>
+struct ReduceValueTimesRatioIsNotIntegerImpl
+    : std::conditional<stdx::conjunction<IsInteger<M>, std::is_integral<T>>::value,
+                       NoTruncationRisk<T>,
+                       ValueTimesRatioIsNotInteger<T, M>> {};
+template <typename T, typename M>
+using ReduceValueTimesRatioIsNotInteger =
+    typename ReduceValueTimesRatioIsNotIntegerImpl<T, M>::type;
+
 //
 // `UpdateRisk<Op, Risk>` adapts a "downstream" risk to the "upstream" interface.
 //
@@ -140,7 +149,7 @@ template <typename T, typename U, typename M>
 struct UpdateRiskImpl<StaticCast<T, U>, ValueTimesRatioIsNotInteger<U, M>>
     : std::conditional<stdx::conjunction<IsInteger<M>, std::is_integral<T>>::value,
                        NoTruncationRisk<T>,
-                       ValueTimesRatioIsNotInteger<T, M>> {};
+                       ReduceValueTimesRatioIsNotInteger<T, M>> {};
 
 template <template <class> class Risk, typename T, typename M>
 struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<T>> : stdx::type_identity<Risk<T>> {};
@@ -148,7 +157,7 @@ struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<T>> : stdx::type_identity<Risk<
 template <typename T, typename M1, typename M2>
 struct UpdateRiskImpl<MultiplyTypeBy<T, M1>, ValueTimesRatioIsNotInteger<T, M2>>
     : std::conditional<IsRational<M1>::value,
-                       ValueTimesRatioIsNotInteger<T, MagProductT<M1, M2>>,
+                       ReduceValueTimesRatioIsNotInteger<T, MagProductT<M1, M2>>,
                        ValueIsNotZero<T>> {};
 
 template <typename Op, typename OldOp>
