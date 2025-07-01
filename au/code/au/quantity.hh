@@ -23,6 +23,7 @@
 #include "au/rep.hh"
 #include "au/static_cast_checkers.hh"
 #include "au/stdx/functional.hh"
+#include "au/truncation_risk.hh"
 #include "au/unit_of_measure.hh"
 #include "au/utility/type_traits.hh"
 #include "au/zero.hh"
@@ -186,7 +187,7 @@ class Quantity {
 
     template <typename NewUnit,
               typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
-    constexpr auto as(NewUnit u) const {
+    constexpr auto as(NewUnit) const {
         constexpr bool IMPLICIT_OK =
             implicit_rep_permitted_from_source_to_target<Rep>(unit, NewUnit{});
         constexpr bool INTEGRAL_REP = std::is_integral<Rep>::value;
@@ -674,7 +675,7 @@ constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
 
 // Check conversion for overflow (new rep).
 template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_unit) {
+constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
     using Op = detail::
         ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
     return detail::would_input_produce_overflow<Op>(q.in(U{}));
@@ -682,11 +683,10 @@ constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_
 
 // Check conversion for truncation (no change of rep).
 template <typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    using Ratio = decltype(unit_ratio(U{}, target_unit));
-    static_assert(IsPositive<Ratio>::value,
-                  "Runtime conversion checkers don't yet support negative units");
-    return detail::ApplyMagnitudeT<R, Ratio>::would_truncate(q.in(U{}));
+constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot) {
+    using Op =
+        detail::ConversionForRepsAndFactor<R, R, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::TruncationRiskFor<Op>::would_value_truncate(q.in(U{}));
 }
 
 // Check conversion for truncation (new rep).

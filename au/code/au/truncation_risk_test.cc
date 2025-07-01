@@ -121,6 +121,11 @@ TEST(TruncationRiskFor, DivideIntByIntTruncatesNumbersNotDivisibleByIt) {
                        ValueDivIntIsNotInteger<uint32_t, decltype(mag<432>())>>();
 }
 
+TEST(TruncationRiskFor, DivideIntByTooBigIntGivesValuesIsNotZero) {
+    StaticAssertTypeEq<TruncationRiskFor<MultiplyTypeBy<uint8_t, decltype(mag<1>() / mag<256>())>>,
+                       ValueIsNotZero<uint8_t>>();
+}
+
 //
 // `OpSequence` section:
 //
@@ -199,48 +204,48 @@ TEST(TruncationRiskFor, CollectsDenominatorFactors) {
 // `WillValueTruncate` section:
 
 TEST(WillValueTruncate, AlwaysFalseForNoTruncationRisk) {
-    EXPECT_THAT(NoTruncationRisk<float>::will_value_truncate(3.1415f), IsFalse());
-    EXPECT_THAT(NoTruncationRisk<int8_t>::will_value_truncate(int8_t{-128}), IsFalse());
+    EXPECT_THAT(NoTruncationRisk<float>::would_value_truncate(3.1415f), IsFalse());
+    EXPECT_THAT(NoTruncationRisk<int8_t>::would_value_truncate(int8_t{-128}), IsFalse());
 }
 
 TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroFloat) {
-    EXPECT_THAT(ValueIsNotZero<float>::will_value_truncate(-1.23456e7f), IsTrue());
-    EXPECT_THAT(ValueIsNotZero<float>::will_value_truncate(-9.87e-12), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(-1.23456e7f), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(-9.87e-12), IsTrue());
 
-    EXPECT_THAT(ValueIsNotZero<float>::will_value_truncate(0.0f), IsFalse());
+    EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(0.0f), IsFalse());
 
-    EXPECT_THAT(ValueIsNotZero<float>::will_value_truncate(9.87e-12), IsTrue());
-    EXPECT_THAT(ValueIsNotZero<float>::will_value_truncate(1.23456e7f), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(9.87e-12), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(1.23456e7f), IsTrue());
 }
 
 TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroInt) {
-    EXPECT_THAT(ValueIsNotZero<int8_t>::will_value_truncate(int8_t{-128}), IsTrue());
-    EXPECT_THAT(ValueIsNotZero<int8_t>::will_value_truncate(int8_t{-1}), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{-128}), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{-1}), IsTrue());
 
-    EXPECT_THAT(ValueIsNotZero<int8_t>::will_value_truncate(int8_t{0}), IsFalse());
+    EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{0}), IsFalse());
 
-    EXPECT_THAT(ValueIsNotZero<int8_t>::will_value_truncate(int8_t{1}), IsTrue());
-    EXPECT_THAT(ValueIsNotZero<int8_t>::will_value_truncate(int8_t{127}), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{1}), IsTrue());
+    EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{127}), IsTrue());
 }
 
 TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerUsesModOfDenominatorForIntegerTypes) {
     using IntDiv3IsNotInteger = ValueTimesRatioIsNotInteger<int, decltype(mag<2>() / mag<3>())>;
 
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(-1000000), IsTrue());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(-999999), IsFalse());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(-999998), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(-1000000), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(-999999), IsFalse());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(-999998), IsTrue());
 
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(-1), IsTrue());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(0), IsFalse());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(1), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(-1), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(0), IsFalse());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(1), IsTrue());
 
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(2), IsTrue());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(3), IsFalse());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(4), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(2), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(3), IsFalse());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(4), IsTrue());
 
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(299), IsTrue());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(300), IsFalse());
-    EXPECT_THAT(IntDiv3IsNotInteger::will_value_truncate(301), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(299), IsTrue());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(300), IsFalse());
+    EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(301), IsTrue());
 }
 
 TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatTypes) {
@@ -248,11 +253,13 @@ TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatT
         ValueTimesRatioIsNotInteger<float, decltype(mag<1>() / mag<7>())>;
     for (int i = 0; i < 1000; ++i) {
         const auto f = static_cast<float>(i) * 7.f;
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::will_value_truncate(f), IsFalse())
+        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f), IsFalse())
             << "i = " << i << ", f = " << f;
 
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::will_value_truncate(f - 1.f), IsTrue());
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::will_value_truncate(f + 1.f), IsTrue());
+        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f - 1.f),
+                    IsTrue());
+        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f + 1.f),
+                    IsTrue());
     }
 }
 
@@ -260,9 +267,9 @@ TEST(WillValueTruncate, AssumedAlwaysTrueIfCannotAssessTruncationRisk) {
     using WeirdOp = UnknownOp<int>;
     using CannotAssessRisk = CannotAssessTruncationRiskFor<int, WeirdOp>;
 
-    EXPECT_THAT(CannotAssessRisk::will_value_truncate(0), IsTrue());
-    EXPECT_THAT(CannotAssessRisk::will_value_truncate(1), IsTrue());
-    EXPECT_THAT(CannotAssessRisk::will_value_truncate(-1), IsTrue());
+    EXPECT_THAT(CannotAssessRisk::would_value_truncate(0), IsTrue());
+    EXPECT_THAT(CannotAssessRisk::would_value_truncate(1), IsTrue());
+    EXPECT_THAT(CannotAssessRisk::would_value_truncate(-1), IsTrue());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

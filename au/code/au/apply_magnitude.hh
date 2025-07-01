@@ -17,34 +17,10 @@
 #include "au/apply_rational_magnitude_to_integral.hh"
 #include "au/magnitude.hh"
 #include "au/overflow_boundary.hh"
+#include "au/truncation_risk.hh"
 
 namespace au {
 namespace detail {
-
-// The various categories by which a magnitude can be applied to a numeric quantity.
-enum class ApplyAs {
-    INTEGER_MULTIPLY,
-    INTEGER_DIVIDE,
-    RATIONAL_MULTIPLY,
-    IRRATIONAL_MULTIPLY,
-};
-
-template <typename... BPs>
-constexpr ApplyAs categorize_magnitude(Magnitude<BPs...>) {
-    if (IsInteger<Magnitude<BPs...>>::value) {
-        return ApplyAs::INTEGER_MULTIPLY;
-    }
-
-    if (IsInteger<MagInverseT<Magnitude<BPs...>>>::value) {
-        return ApplyAs::INTEGER_DIVIDE;
-    }
-
-    return IsRational<Magnitude<BPs...>>::value ? ApplyAs::RATIONAL_MULTIPLY
-                                                : ApplyAs::IRRATIONAL_MULTIPLY;
-}
-
-template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl;
 
 // `MinValueChecker<Op>::is_too_small(x)` checks whether the value `x` is small enough to overflow
 // the bounds of the operation.
@@ -77,182 +53,6 @@ constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
     return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
 }
 
-// `NewOverflowChecker<Op>::would_product_overflow(x)` checks whether the value `x` would exceed the
-// bounds of the operation `Op`.
-template <typename Op>
-struct NewOverflowChecker {
-    static constexpr bool would_product_overflow(const OpInput<Op> &x) {
-        return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
-    }
-};
-
-template <typename T, bool IsTIntegral>
-struct TruncationCheckerIfMagnitudeValid {
-    // Default case: T is integral.
-    static_assert(std::is_integral<T>::value && IsTIntegral,
-                  "Mismatched instantiation (should never be done manually)");
-
-    static constexpr bool would_truncate(T x, T mag_value) { return (x % mag_value != T{0}); }
-};
-
-template <typename T>
-struct TruncationCheckerIfMagnitudeValid<T, false> {
-    // Specialization for when T is not integral: by convention, assume no truncation for floats.
-    static_assert(!std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-    static constexpr bool would_truncate(T, T) { return false; }
-};
-
-template <typename T, bool IsMagnitudeValid>
-// Default case: `IsMagnitudeValid` is true.
-struct TruncationChecker : TruncationCheckerIfMagnitudeValid<T, std::is_integral<T>::value> {
-    static_assert(IsMagnitudeValid, "Mismatched instantiation (should never be done manually)");
-};
-
-template <typename T>
-struct TruncationChecker<T, false> {
-    // Specialization for when `IsMagnitudeValid` is false.
-    //
-    // This means that the magnitude itself could not fit inside of the type; therefore, the only
-    // possible value that would not truncate is zero.
-    static constexpr bool would_truncate(T x, T) { return (x != T{0}); }
-};
-
-// Multiplying by an integer, for any type T.
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_MULTIPLY, T, is_T_integral> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::INTEGER_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-// Dividing by an integer, for any type T.
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_DIVIDE, T, is_T_integral> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::INTEGER_DIVIDE,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x / get_value<RealPart<T>>(MagInverseT<Mag>{}); }
-
-    static constexpr bool would_overflow(const T &) { return false; }
-
-    static constexpr bool would_truncate(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(MagInverseT<Mag>{});
-        return TruncationChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_truncate(x, mag_value_result.value);
-    }
-};
-
-template <typename T, typename Mag, bool is_T_signed>
-struct RationalOverflowChecker;
-template <typename T, typename Mag>
-struct RationalOverflowChecker<T, Mag, true> {
-    static constexpr bool would_overflow(const T &x) {
-        static_assert(std::is_signed<T>::value,
-                      "Mismatched instantiation (should never be done manually)");
-        const bool safe = (x <= MaxNonOverflowingValue<T, Mag>::value()) &&
-                          (x >= MinNonOverflowingValue<T, Mag>::value());
-        return !safe;
-    }
-};
-template <typename T, typename Mag>
-struct RationalOverflowChecker<T, Mag, false> {
-    static constexpr bool would_overflow(const T &x) {
-        static_assert(!std::is_signed<T>::value,
-                      "Mismatched instantiation (should never be done manually)");
-        const bool safe = (x <= MaxNonOverflowingValue<T, Mag>::value());
-        return !safe;
-    }
-};
-
-// Applying a (non-integer, non-inverse-integer) rational, for any integral type T.
-template <typename Mag, typename T>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, true> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::RATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) {
-        using P = PromotedType<T>;
-        return static_cast<T>(x * get_value<RealPart<P>>(numerator(Mag{})) /
-                              get_value<RealPart<P>>(denominator(Mag{})));
-    }
-
-    static constexpr bool would_overflow(const T &x) {
-        return RationalOverflowChecker<T, Mag, std::is_signed<T>::value>::would_overflow(x);
-    }
-
-    static constexpr bool would_truncate(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(denominator(Mag{}));
-        return TruncationChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_truncate(x, mag_value_result.value);
-    }
-};
-
-// Applying a (non-integer, non-inverse-integer) rational, for any non-integral type T.
-template <typename Mag, typename T>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, false> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::RATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(!std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-// Applying an irrational for any type T (although only non-integral T makes sense).
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::IRRATIONAL_MULTIPLY, T, is_T_integral> {
-    static_assert(!std::is_integral<T>::value, "Cannot apply irrational magnitude to integer type");
-
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::IRRATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        return NewOverflowChecker<MultiplyTypeBy<T, Mag>>::would_product_overflow(x);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-template <typename T, typename MagT>
-struct ApplyMagnitudeType;
-template <typename T, typename MagT>
-using ApplyMagnitudeT = typename ApplyMagnitudeType<T, MagT>::type;
-template <typename T, typename... BPs>
-struct ApplyMagnitudeType<T, Magnitude<BPs...>>
-    : stdx::type_identity<ApplyMagnitudeImpl<Magnitude<BPs...>,
-                                             categorize_magnitude(Magnitude<BPs...>{}),
-                                             T,
-                                             std::is_integral<T>::value>> {};
-
-template <typename T, typename... BPs>
-constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
-    return ApplyMagnitudeT<T, Magnitude<BPs...>>{}(x);
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Newer ideas below
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -261,14 +61,28 @@ constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
 // `ApplicationStrategyFor`
 //
 
-template <typename T, typename Mag, ApplyAs>
+enum class MagKind {
+    DEFAULT,
+    NONTRIVIAL_RATIONAL,
+};
+
+template <typename M>
+constexpr MagKind mag_kind_for(M) {
+    return stdx::disjunction<IsInteger<M>,
+                             IsInteger<MagInverseT<M>>,
+                             stdx::negation<IsRational<M>>>::value
+               ? MagKind::DEFAULT
+               : MagKind::NONTRIVIAL_RATIONAL;
+}
+
+template <typename T, typename Mag, MagKind>
 struct ApplicationStrategyForImpl : stdx::type_identity<MultiplyTypeBy<T, Mag>> {};
 template <typename T, typename Mag>
 using ApplicationStrategyFor =
-    typename ApplicationStrategyForImpl<T, Mag, categorize_magnitude(Mag{})>::type;
+    typename ApplicationStrategyForImpl<T, Mag, mag_kind_for(Mag{})>::type;
 
 template <typename T, typename Mag>
-struct ApplicationStrategyForImpl<T, Mag, ApplyAs::RATIONAL_MULTIPLY>
+struct ApplicationStrategyForImpl<T, Mag, MagKind::NONTRIVIAL_RATIONAL>
     : std::conditional<
           std::is_integral<T>::value,
           OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeBy<T, DenominatorT<Mag>>>,
@@ -288,34 +102,33 @@ template <typename OldRep, typename NewRep, typename Factor>
 using ConversionForRepsAndFactor =
     typename ConversionForRepsAndFactorImpl<OldRep, NewRep, Factor>::type;
 
-// `ConversionInSameRep<Rep, PromotedType<Rep>, Factor>` is the operation that applies `Factor`
-// without changing the rep.  (If `Rep` isn't subject to promotion, this just trivially reduces to
-// applying `Factor`.)
-template <typename Rep, typename PromotedRep, typename Factor>
-struct ConversionInSameRep
-    : stdx::type_identity<OpSequence<StaticCast<Rep, PromotedRep>,
-                                     ApplicationStrategyFor<PromotedRep, Factor>,
-                                     StaticCast<PromotedRep, Rep>>> {};
-template <typename Rep, typename Factor>
-struct ConversionInSameRep<Rep, Rep, Factor>
-    : stdx::type_identity<ApplicationStrategyFor<Rep, Factor>> {};
-
-// `ConversionForRepsAndFactorImpl<Rep, Rep, Factor>` handles the case where we don't want to change
-// the rep.  (We just delegate to a bespoke implementation for this.)
-template <typename Rep, typename Factor>
-struct ConversionForRepsAndFactorImpl<Rep, Rep, Factor>
-    : ConversionInSameRep<Rep, PromotedType<Rep>, Factor> {};
-
 template <typename OldRep, typename PromotedCommon, typename NewRep, typename Factor>
 struct FullConversionImpl
     : stdx::type_identity<OpSequence<StaticCast<OldRep, PromotedCommon>,
                                      ApplicationStrategyFor<PromotedCommon, Factor>,
                                      StaticCast<PromotedCommon, NewRep>>> {};
 
+template <typename OldRepIsPromotedCommon, typename NewRep, typename Factor>
+struct FullConversionImpl<OldRepIsPromotedCommon, OldRepIsPromotedCommon, NewRep, Factor>
+    : stdx::type_identity<OpSequence<ApplicationStrategyFor<OldRepIsPromotedCommon, Factor>,
+                                     StaticCast<OldRepIsPromotedCommon, NewRep>>> {};
+
+template <typename OldRep, typename NewRepIsPromotedCommon, typename Factor>
+struct FullConversionImpl<OldRep, NewRepIsPromotedCommon, NewRepIsPromotedCommon, Factor>
+    : stdx::type_identity<OpSequence<StaticCast<OldRep, NewRepIsPromotedCommon>,
+                                     ApplicationStrategyFor<NewRepIsPromotedCommon, Factor>>> {};
+
+template <typename Rep, typename Factor>
+struct FullConversionImpl<Rep, Rep, Rep, Factor>
+    : stdx::type_identity<ApplicationStrategyFor<Rep, Factor>> {};
+
 template <typename OldRep, typename NewRep, typename Factor>
 struct ConversionForRepsAndFactorImpl
     : FullConversionImpl<OldRep, PromotedType<std::common_type_t<OldRep, NewRep>>, NewRep, Factor> {
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// New versions of old ideas
+////////////////////////////////////////////////////////////////////////////////////////////////////
 }  // namespace detail
 }  // namespace au

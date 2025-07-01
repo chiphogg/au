@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include "au/abstract_operations.hh"
 
 namespace au {
@@ -29,7 +31,7 @@ struct TruncationRiskClass {
 
 template <typename T>
 struct NoTruncationRisk : TruncationRiskClass<0> {
-    static constexpr bool will_value_truncate(const T &) { return false; }
+    static constexpr bool would_value_truncate(const T &) { return false; }
 };
 
 template <typename T, typename M>
@@ -43,12 +45,12 @@ using ValueIsNotInteger = ValueTimesRatioIsNotInteger<T, Magnitude<>>;
 
 template <typename T>
 struct ValueIsNotZero : TruncationRiskClass<20> {
-    static constexpr bool will_value_truncate(const T &x) { return x != T{0}; }
+    static constexpr bool would_value_truncate(const T &x) { return x != T{0}; }
 };
 
 template <typename T, typename Op>
 struct CannotAssessTruncationRiskFor : TruncationRiskClass<1000> {
-    static constexpr bool will_value_truncate(const T &) { return true; }
+    static constexpr bool would_value_truncate(const T &) { return true; }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,10 +109,18 @@ struct TruncationRiskForMultiplyByIrrational
                          TruncationRiskForMultiplyNonArithmeticByIrrational<T, M>> {};
 
 template <typename T, typename M>
-struct TruncationRiskForMultiplyArithmeticByRational
-    : std::conditional<stdx::disjunction<IsInteger<M>, std::is_floating_point<T>>::value,
-                       NoTruncationRisk<T>,
+struct TruncationRiskForMultiplyArithmeticByRationalNontrivialDenominator
+    : std::conditional<(get_value_result<RealPart<T>>(DenominatorT<M>{}).outcome ==
+                        MagRepresentationOutcome::ERR_CANNOT_FIT),
+                       ValueIsNotZero<T>,
                        ValueTimesRatioIsNotInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyArithmeticByRational
+    : std::conditional_t<stdx::disjunction<IsInteger<M>, std::is_floating_point<T>>::value,
+                         stdx::type_identity<NoTruncationRisk<T>>,
+                         TruncationRiskForMultiplyArithmeticByRationalNontrivialDenominator<T, M>> {
+};
 
 template <typename T, typename M>
 struct TruncationRiskForMultiplyByRational
@@ -128,12 +138,12 @@ struct TruncationRiskForImpl<MultiplyTypeBy<T, M>>
 // `OpSequence<...>` section:
 
 template <typename Op1, typename Op2>
-struct PrependToOpSequenceImpl : stdx::type_identity<OpSequence<Op1, Op2>> {};
+struct PrependToOpSequenceImpl : stdx::type_identity<OpSequenceImpl<Op1, Op2>> {};
 template <typename Op1, typename Op2>
 using PrependToOpSequence = typename PrependToOpSequenceImpl<Op1, Op2>::type;
 template <typename Op1, typename... Ops>
 
-struct PrependToOpSequenceImpl<Op1, OpSequence<Ops...>>
+struct PrependToOpSequenceImpl<Op1, OpSequenceImpl<Ops...>>
     : stdx::type_identity<OpSequence<Op1, Ops...>> {};
 
 // A little helper to simplify instances of `ValueTimesRatioIsNotInteger` that turn out to be
@@ -226,26 +236,38 @@ struct BiggestRiskImpl
 //
 
 template <typename Op>
-struct TruncationRiskForImpl<OpSequence<Op>> : TruncationRiskForImpl<Op> {};
+struct TruncationRiskForImpl<OpSequenceImpl<Op>> : TruncationRiskForImpl<Op> {};
 
 template <typename Op, typename... Ops>
-struct TruncationRiskForImpl<OpSequence<Op, Ops...>>
-    : BiggestRiskImpl<UpdateRisk<Op, TruncationRiskFor<OpSequence<Ops...>>>,
+struct TruncationRiskForImpl<OpSequenceImpl<Op, Ops...>>
+    : BiggestRiskImpl<UpdateRisk<Op, TruncationRiskFor<OpSequenceImpl<Ops...>>>,
                       TruncationRiskFor<Op>> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `ValueTimesRatioIsNotInteger` section:
 
 template <typename T, typename M>
-struct ValueTimesRatioIsNotIntegerImplForInt {
-    static constexpr bool will_value_truncate(const T &value) {
+struct ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorDoesNotFit {
+    static constexpr bool would_value_truncate(const T &value) { return value != T{0}; }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorFits {
+    static constexpr bool would_value_truncate(const T &value) {
         return (value % get_value<RealPart<T>>(DenominatorT<M>{})) != T{0};
     }
 };
 
 template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForInt
+    : std::conditional_t<get_value_result<RealPart<T>>(DenominatorT<M>{}).outcome ==
+                             MagRepresentationOutcome::ERR_CANNOT_FIT,
+                         ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorDoesNotFit<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorFits<T, M>> {};
+
+template <typename T, typename M>
 struct ValueTimesRatioIsNotIntegerImplForFloat {
-    static constexpr bool will_value_truncate(const T &value) {
+    static constexpr bool would_value_truncate(const T &value) {
         const auto result = value * get_value<RealPart<T>>(NumeratorT<M>{}) /
                             get_value<RealPart<T>>(DenominatorT<M>{});
         return std::trunc(result) != result;

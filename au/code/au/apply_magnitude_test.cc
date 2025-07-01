@@ -25,6 +25,76 @@ using ::testing::Not;
 
 namespace au {
 namespace detail {
+
+// The various categories by which a magnitude can be applied to a numeric quantity.
+enum class ApplyAs {
+    INTEGER_MULTIPLY,
+    INTEGER_DIVIDE,
+    RATIONAL_MULTIPLY,
+    IRRATIONAL_MULTIPLY,
+};
+
+template <typename... BPs>
+constexpr ApplyAs categorize_magnitude(Magnitude<BPs...>) {
+    if (IsInteger<Magnitude<BPs...>>::value) {
+        return ApplyAs::INTEGER_MULTIPLY;
+    }
+
+    if (IsInteger<MagInverseT<Magnitude<BPs...>>>::value) {
+        return ApplyAs::INTEGER_DIVIDE;
+    }
+
+    return IsRational<Magnitude<BPs...>>::value ? ApplyAs::RATIONAL_MULTIPLY
+                                                : ApplyAs::IRRATIONAL_MULTIPLY;
+}
+
+template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
+struct ApplyMagnitudeImpl;
+
+// `NewOverflowChecker<Op>::would_product_overflow(x)` checks whether the value `x` would exceed the
+// bounds of the operation `Op`.
+template <typename Op>
+struct NewOverflowChecker {
+    static constexpr bool would_product_overflow(const OpInput<Op> &x) {
+        return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
+    }
+};
+
+template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
+struct ApplyMagnitudeImpl {
+    using Op = ConversionForRepsAndFactor<T, T, Mag>;
+    constexpr T operator()(const T &x) { return Op::apply_to(x); }
+
+    static constexpr bool would_overflow(const T &x) {
+        return NewOverflowChecker<Op>::would_product_overflow(x);
+    }
+
+    static constexpr bool would_truncate(const T &x) {
+        return TruncationRiskFor<Op>::would_value_truncate(x);
+    }
+};
+
+template <typename T, typename MagT>
+struct ApplyMagnitudeType;
+template <typename T, typename MagT>
+using ApplyMagnitudeT = typename ApplyMagnitudeType<T, MagT>::type;
+template <typename T, typename... BPs>
+struct ApplyMagnitudeType<T, Magnitude<BPs...>>
+    : stdx::type_identity<ApplyMagnitudeImpl<Magnitude<BPs...>,
+                                             categorize_magnitude(Magnitude<BPs...>{}),
+                                             T,
+                                             std::is_integral<T>::value>> {};
+
+template <typename T, typename... BPs>
+constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
+    return ApplyMagnitudeT<T, Magnitude<BPs...>>{}(x);
+}
+
+}  // namespace detail
+}  // namespace au
+
+namespace au {
+namespace detail {
 namespace {
 constexpr auto PI = Magnitude<Pi>{};
 

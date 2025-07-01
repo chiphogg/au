@@ -58,7 +58,9 @@ using DivideTypeBy = MultiplyTypeBy<T, MagInverseT<M>>;
 // (see below for `OpInput` and `OpOutput`).
 //
 template <typename... Ops>
-struct OpSequence;
+struct OpSequenceImpl;
+template <typename... Ops>
+using OpSequence = FlattenAs<OpSequenceImpl, Ops...>;
 
 //
 // `MultiplyWithPromotionAndStaticCast<T, M, U>` represents a sequence of operations:
@@ -135,7 +137,7 @@ struct MultiplyTypeByImpl<T, Mag, MagMultiplyApproach::MULTIPLY>
 template <typename T, typename Divisor, MagRepresentationOutcome MagOutcome>
 struct DivideTypeByInt {
     static constexpr T apply_to(T value) {
-        static_assert(MagOutcome == MagRepresentationOutcome::OK);
+        static_assert(MagOutcome == MagRepresentationOutcome::OK, "Internal library error");
         return static_cast<T>(value / get_value<RealPart<T>>(Divisor{}));
     }
 };
@@ -143,7 +145,7 @@ struct DivideTypeByInt {
 template <typename T, typename Divisor>
 struct DivideTypeByInt<T, Divisor, MagRepresentationOutcome::ERR_CANNOT_FIT> {
     // If a number is too big to fit in the type, then dividing by it should produce 0.
-    static constexpr T apply_to(T value) { return T{0}; }
+    static constexpr T apply_to(T) { return T{0}; }
 };
 
 template <typename T, typename Mag>
@@ -160,23 +162,24 @@ struct MultiplyTypeBy : MultiplyTypeByImpl<T, M, approach_for_multiplying_by_mag
 
 // `OpInput`:
 template <typename Op, typename... Ops>
-struct OpInputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpInput<Op>> {};
+struct OpInputImpl<OpSequenceImpl<Op, Ops...>> : stdx::type_identity<OpInput<Op>> {};
 
 // `OpOutput`:
 template <typename Op, typename... Ops>
-struct OpOutputImpl<OpSequence<Op, Ops...>> : stdx::type_identity<OpOutput<OpSequence<Ops...>>> {};
+struct OpOutputImpl<OpSequenceImpl<Op, Ops...>>
+    : stdx::type_identity<OpOutput<OpSequence<Ops...>>> {};
 template <typename OnlyOp>
-struct OpOutputImpl<OpSequence<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
+struct OpOutputImpl<OpSequenceImpl<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
 
 template <typename Op>
-struct OpSequence<Op> {
-    static constexpr auto apply_to(OpInput<OpSequence> value) { return Op::apply_to(value); }
+struct OpSequenceImpl<Op> {
+    static constexpr auto apply_to(OpInput<OpSequenceImpl> value) { return Op::apply_to(value); }
 };
 
 template <typename Op, typename... Ops>
-struct OpSequence<Op, Ops...> {
-    static constexpr auto apply_to(OpInput<OpSequence> value) {
-        return OpSequence<Ops...>::apply_to(Op::apply_to(value));
+struct OpSequenceImpl<Op, Ops...> {
+    static constexpr auto apply_to(OpInput<OpSequenceImpl> value) {
+        return OpSequenceImpl<Ops...>::apply_to(Op::apply_to(value));
     }
 };
 

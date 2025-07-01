@@ -212,6 +212,7 @@ cc_library(
         ":apply_rational_magnitude_to_integral",
         ":magnitude",
         ":overflow_boundary",
+        ":truncation_risk",
     ],
 )
 
@@ -541,6 +542,7 @@ cc_library(
         ":operators",
         ":rep",
         ":static_cast_checkers",
+        ":truncation_risk",
         ":unit_of_measure",
         ":utility",
         ":zero",
