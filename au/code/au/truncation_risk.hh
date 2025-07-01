@@ -28,19 +28,28 @@ struct TruncationRiskClass {
 };
 
 template <typename T>
-struct NoTruncationRisk : TruncationRiskClass<0> {};
+struct NoTruncationRisk : TruncationRiskClass<0> {
+    static constexpr bool will_value_truncate(const T &) { return false; }
+};
 
 template <typename T, typename M>
-struct ValueTimesRatioIsNotInteger : TruncationRiskClass<10> {};
+struct ValueTimesRatioIsNotIntegerImpl;
+template <typename T, typename M>
+struct ValueTimesRatioIsNotInteger : ValueTimesRatioIsNotIntegerImpl<T, M>,
+                                     TruncationRiskClass<10> {};
 
 template <typename T>
 using ValueIsNotInteger = ValueTimesRatioIsNotInteger<T, Magnitude<>>;
 
 template <typename T>
-struct ValueIsNotZero : TruncationRiskClass<20> {};
+struct ValueIsNotZero : TruncationRiskClass<20> {
+    static constexpr bool will_value_truncate(const T &x) { return x != T{0}; }
+};
 
 template <typename T, typename Op>
-struct CannotAssessTruncationRiskFor : TruncationRiskClass<1000> {};
+struct CannotAssessTruncationRiskFor : TruncationRiskClass<1000> {
+    static constexpr bool will_value_truncate(const T &) { return true; }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // IMPLEMENTATION DETAILS (`truncation_risk.hh`):
@@ -223,6 +232,31 @@ template <typename Op, typename... Ops>
 struct TruncationRiskForImpl<OpSequence<Op, Ops...>>
     : BiggestRiskImpl<UpdateRisk<Op, TruncationRiskFor<OpSequence<Ops...>>>,
                       TruncationRiskFor<Op>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `ValueTimesRatioIsNotInteger` section:
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForInt {
+    static constexpr bool will_value_truncate(const T &value) {
+        return (value % get_value<RealPart<T>>(DenominatorT<M>{})) != T{0};
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloat {
+    static constexpr bool will_value_truncate(const T &value) {
+        const auto result = value * get_value<RealPart<T>>(NumeratorT<M>{}) /
+                            get_value<RealPart<T>>(DenominatorT<M>{});
+        return std::trunc(result) != result;
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImpl
+    : std::conditional_t<std::is_integral<T>::value,
+                         ValueTimesRatioIsNotIntegerImplForInt<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForFloat<T, M>> {};
 
 }  // namespace detail
 }  // namespace au
