@@ -21,37 +21,6 @@
 namespace au {
 namespace detail {
 
-// `MinValueChecker<Op>::is_too_small(x)` checks whether the value `x` is small enough to overflow
-// the bounds of the operation.
-template <typename Op, bool IsOverflowPossible>
-struct MinValueCheckerImpl {
-    static constexpr bool is_too_small(const OpInput<Op> &x) { return x < MinGood<Op>::value(); }
-};
-template <typename Op>
-struct MinValueCheckerImpl<Op, false> {
-    static constexpr bool is_too_small(const OpInput<Op> &) { return false; }
-};
-template <typename Op>
-struct MinValueChecker : MinValueCheckerImpl<Op, CanOverflowBelow<Op>::value> {};
-
-// `MaxValueChecker<Op>::is_too_large(x)` checks whether the value `x` is large enough to overflow
-// the bounds of the operation.
-template <typename Op, bool IsOverflowPossible>
-struct MaxValueCheckerImpl {
-    static constexpr bool is_too_large(const OpInput<Op> &x) { return x > MaxGood<Op>::value(); }
-};
-template <typename Op>
-struct MaxValueCheckerImpl<Op, false> {
-    static constexpr bool is_too_large(const OpInput<Op> &) { return false; }
-};
-template <typename Op>
-struct MaxValueChecker : MaxValueCheckerImpl<Op, CanOverflowAbove<Op>::value> {};
-
-template <typename Op>
-constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
-    return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Newer ideas below
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -79,6 +79,23 @@ struct CanOverflowBelow;
 template <typename Op>
 struct CanOverflowAbove;
 
+// `MinValueChecker<Op>::is_too_small(x)` checks whether the value `x` is small enough to overflow
+// the bounds of the operation.
+template <typename Op>
+struct MinValueChecker;
+
+// `MaxValueChecker<Op>::is_too_large(x)` checks whether the value `x` is large enough to overflow
+// the bounds of the operation.
+template <typename Op>
+struct MaxValueChecker;
+
+// `would_input_produce_overflow<Op>(x)` checks whether the value `x` would exceed the bounds of the
+// operation at any stage.
+template <typename Op>
+constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
+    return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // IMPLEMENTATION DETAILS
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -762,6 +779,31 @@ struct CanOverflowBelow : stdx::bool_constant<(MinGood<Op>::value() > MinPossibl
 
 template <typename Op>
 struct CanOverflowAbove : stdx::bool_constant<(MaxGood<Op>::value() < MaxPossible<Op>::value())> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MinValueChecker<Op>` and `MaxValueChecker<Op>` implementation.
+
+template <typename Op, bool IsOverflowPossible>
+struct MinValueCheckerImpl {
+    static constexpr bool is_too_small(const OpInput<Op> &x) { return x < MinGood<Op>::value(); }
+};
+template <typename Op>
+struct MinValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_small(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MinValueChecker : MinValueCheckerImpl<Op, CanOverflowBelow<Op>::value> {};
+
+template <typename Op, bool IsOverflowPossible>
+struct MaxValueCheckerImpl {
+    static constexpr bool is_too_large(const OpInput<Op> &x) { return x > MaxGood<Op>::value(); }
+};
+template <typename Op>
+struct MaxValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_large(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MaxValueChecker : MaxValueCheckerImpl<Op, CanOverflowAbove<Op>::value> {};
 
 }  // namespace detail
 }  // namespace au
