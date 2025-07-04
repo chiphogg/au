@@ -21,7 +21,6 @@
 #include "au/fwd.hh"
 #include "au/operators.hh"
 #include "au/rep.hh"
-#include "au/static_cast_checkers.hh"
 #include "au/stdx/functional.hh"
 #include "au/truncation_risk.hh"
 #include "au/unit_of_measure.hh"
@@ -691,19 +690,10 @@ constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot) {
 
 // Check conversion for truncation (new rep).
 template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    using Common = std::common_type_t<R, TargetRep>;
-    if (detail::will_static_cast_truncate<Common>(q.in(U{}))) {
-        return true;
-    }
-
-    const auto to_common = rep_cast<Common>(q);
-    if (will_conversion_truncate(to_common, target_unit)) {
-        return true;
-    }
-
-    const auto converted_but_not_narrowed = to_common.coerce_in(target_unit);
-    return detail::will_static_cast_truncate<TargetRep>(converted_but_not_narrowed);
+constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot) {
+    using Op = detail::
+        ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::TruncationRiskFor<Op>::would_value_truncate(q.in(U{}));
 }
 
 // Check for any lossiness in conversion (no change of rep).
