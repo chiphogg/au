@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "au/apply_rational_magnitude_to_integral.hh"
-
 #include "au/overflow_boundary.hh"
 #include "au/testing.hh"
 #include "gtest/gtest.h"
@@ -29,6 +27,38 @@ using ::testing::StaticAssertTypeEq;
 namespace au {
 namespace detail {
 namespace {
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// `is_abs_known_to_be_less_than_one(MagT)` is true if the absolute value of the magnitude `MagT` is
+// purely rational; its numerator is representable in `std::uintmax_t`; and, it is less than 1.
+//
+
+enum class IsAbsMagLessThanOne {
+    DEFINITELY,
+    MAYBE_NOT,
+};
+
+template <typename... BPs>
+constexpr IsAbsMagLessThanOne is_abs_known_to_be_less_than_one(Magnitude<BPs...>) {
+    using MagT = Abs<Magnitude<BPs...>>;
+    static_assert(is_rational(MagT{}), "Magnitude must be rational");
+
+    constexpr auto num_result = get_value_result<std::uintmax_t>(numerator(MagT{}));
+    static_assert(num_result.outcome == MagRepresentationOutcome::OK,
+                  "Numerator must be representable in std::uintmax_t");
+
+    constexpr auto den_result = get_value_result<std::uintmax_t>(denominator(MagT{}));
+    static_assert(
+        den_result.outcome == MagRepresentationOutcome::OK ||
+            den_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT,
+        "Denominator must either be representable in std::uintmax_t, or fail due to overflow");
+
+    return (den_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT ||
+            num_result.value < den_result.value)
+               ? IsAbsMagLessThanOne::DEFINITELY
+               : IsAbsMagLessThanOne::MAYBE_NOT;
+}
 
 template <typename... BPs>
 constexpr void ensure_relevant_kind_of_magnitude(Magnitude<BPs...> m) {
@@ -122,6 +152,19 @@ struct TestSpec {
     NumFitsInPromotedType num_fits;
     DenFitsInPromotedType den_fits;
 };
+
+//
+// `MinNonOverflowingValue<T, MagT>` is the minimum (i.e., most-negative) value of type `T` that can
+// have `MagT` applied as numerator-and-denominator without overflowing (i.e., becoming too-negative
+// to represent).  We require that `T` is some integral arithmetic type, and that `MagT` is a
+// rational magnitude that is neither purely integral nor purely inverse-integral.
+//
+// This implementation has been migrated from the target (which no longer exists) that this test was
+// for.  We hollowed it out and replaced it with a simple implementation that delegates to the
+// replacement library.  This lets us get coverage from all of our old test cases.
+//
+template <typename T, typename MagT>
+struct MinNonOverflowingValue : MinGood<ConversionForRepsAndFactor<T, T, MagT>> {};
 
 template <typename T, typename MagT>
 void validate_spec(TestSpec spec) {
@@ -249,19 +292,6 @@ TEST(MaxNonOverflowingValue,
             mag<3>() / pow<400>(mag<10>()),
             max_i8);
         EXPECT_THAT(max_i8, Eq(127));
-
-        using O1 = StaticCast<int8_t, int>;
-        using O2 = MultiplyTypeBy<int, au::Magnitude<au::Prime<3>>>;
-        using O3 =
-            MultiplyTypeBy<int,
-                           au::Magnitude<au::Pow<au::Prime<2>, -400>, au::Pow<au::Prime<5>, -400>>>;
-        using O4 = StaticCast<int, int8_t>;
-        std::cout << "            O4 limits: " << int{MaxGood<OpSequence<O4>>::value()} << std::endl
-                  << "        O3, O4 limits: " << MaxGood<OpSequence<O3, O4>>::value() << std::endl
-                  << "    O2, O3, O4 limits: " << MaxGood<OpSequence<O2, O3, O4>>::value()
-                  << std::endl
-                  << "O1, O2, O3, O4 limits: " << int{MaxGood<OpSequence<O1, O2, O3, O4>>::value()}
-                  << std::endl;
     }
 
     {

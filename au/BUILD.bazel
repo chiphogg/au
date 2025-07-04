@@ -209,7 +209,6 @@ cc_library(
     hdrs = ["code/au/apply_magnitude.hh"],
     includes = ["code"],
     deps = [
-        ":apply_rational_magnitude_to_integral",
         ":magnitude",
         ":overflow_boundary",
         ":truncation_risk",
@@ -227,22 +226,11 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "apply_rational_magnitude_to_integral",
-    hdrs = ["code/au/apply_rational_magnitude_to_integral.hh"],
-    includes = ["code"],
-    deps = [
-        ":magnitude",
-        ":utility",
-    ],
-)
-
 cc_test(
     name = "apply_rational_magnitude_to_integral_test",
     size = "small",
     srcs = ["code/au/apply_rational_magnitude_to_integral_test.cc"],
     deps = [
-        ":apply_rational_magnitude_to_integral",
         ":conversion_policy",
         ":testing",
         "@com_google_googletest//:gtest_main",

@@ -268,6 +268,31 @@ struct ValueIsMaxFloatNotExceedingMaxInt {
     }
 };
 
+template <typename T, typename MagT, MagRepresentationOutcome>
+struct MagHelper {
+    static constexpr bool equal(const T &, const T &) { return false; }
+    static constexpr T div(const T &, const T &) {
+        // We assume the most likely reason to be here is that the magnitude was too large to
+        // represent in the type, so we treat this as a "divide by infinity" and return zero.
+        //
+        // Really, this should probably just not be called, but it definitely needs to exist for the
+        // code to compile.
+        return T{0};
+    }
+};
+
+template <typename T, typename MagT>
+struct MagHelper<T, MagT, MagRepresentationOutcome::OK> {
+    static constexpr bool equal(const T &x, const T &value) { return x == value; }
+    static constexpr T div(const T &a, const T &b) { return a / b; }
+};
+
+template <typename T, typename... BPs>
+constexpr T divide_by_mag(const T &x, Magnitude<BPs...> m) {
+    constexpr auto result = get_value_result<T>(m);
+    return MagHelper<T, Magnitude<BPs...>, result.outcome>::div(x, result.value);
+}
+
 // Name reads as "lowest of (limits divided by value)".  Remember that the value can be negative, so
 // we just take whichever limit is smaller _after_ dividing.  And since `Abs<M>` can be assumed to
 // be greater than one, we know that dividing by `M` will shrink values, so we don't risk overflow.
@@ -276,7 +301,8 @@ struct LowestOfLimitsDividedByValue {
     static constexpr T value() {
         constexpr auto RELEVANT_LIMIT =
             IsPositive<M>::value ? LowerLimit<T, Limits>::value() : UpperLimit<T, Limits>::value();
-        return RELEVANT_LIMIT / get_value<T>(M{});
+
+        return divide_by_mag(RELEVANT_LIMIT, M{});
     }
 };
 
@@ -335,35 +361,10 @@ template <typename T, typename M, typename Limits>
 struct ClampLowestOfLimitsTimesInverseValue
     : ClampLowestOfLimitsTimesInverseValueIfClampableIs<IsClampable<T>::value, T, M, Limits> {};
 
-template <typename T, typename MagT, MagRepresentationOutcome>
-struct MagHelper {
-    static constexpr bool equal(const T &, const T &) { return false; }
-    static constexpr T div(const T &, const T &) {
-        // We assume the most likely reason to be here is that the magnitude was too large to
-        // represent in the type, so we treat this as a "divide by infinity" and return zero.
-        //
-        // Really, this should probably just not be called, but it definitely needs to exist for the
-        // code to compile.
-        return T{0};
-    }
-};
-
-template <typename T, typename MagT>
-struct MagHelper<T, MagT, MagRepresentationOutcome::OK> {
-    static constexpr bool equal(const T &x, const T &value) { return x == value; }
-    static constexpr T div(const T &a, const T &b) { return a / b; }
-};
-
 template <typename T, typename... BPs>
 constexpr bool mag_representation_equals(const T &x, Magnitude<BPs...> m) {
     constexpr auto result = get_value_result<T>(m);
     return MagHelper<T, Magnitude<BPs...>, result.outcome>::equal(x, result.value);
-}
-
-template <typename T, typename... BPs>
-constexpr T divide_by_mag(const T &x, Magnitude<BPs...> m) {
-    constexpr auto result = get_value_result<T>(m);
-    return MagHelper<T, Magnitude<BPs...>, result.outcome>::div(x, result.value);
 }
 
 // Name reads as "highest of (limits divided by value)".  Remember that the value can be negative,
