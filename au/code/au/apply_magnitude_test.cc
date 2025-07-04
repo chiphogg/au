@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "au/apply_magnitude.hh"
-
+#include "au/magnitude.hh"
+#include "au/overflow_boundary.hh"
 #include "au/testing.hh"
+#include "au/truncation_risk.hh"
 #include "gtest/gtest.h"
 
 using ::testing::ElementsAreArray;

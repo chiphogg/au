@@ -204,23 +204,13 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "apply_magnitude",
-    hdrs = ["code/au/apply_magnitude.hh"],
-    includes = ["code"],
-    deps = [
-        ":magnitude",
-        ":overflow_boundary",
-        ":truncation_risk",
-    ],
-)
-
 cc_test(
     name = "apply_magnitude_test",
     size = "small",
     srcs = ["code/au/apply_magnitude_test.cc"],
     deps = [
-        ":apply_magnitude",
+        ":conversion_policy",
+        ":magnitude",
         ":testing",
         "@com_google_googletest//:gtest_main",
     ],
@@ -317,7 +307,6 @@ cc_library(
     includes = ["code"],
     deps = [
         ":abstract_operations",
-        ":apply_magnitude",
         ":magnitude",
         ":operators",
         ":overflow_boundary",
@@ -530,7 +519,6 @@ cc_library(
     hdrs = ["code/au/quantity.hh"],
     includes = ["code"],
     deps = [
-        ":apply_magnitude",
         ":conversion_policy",
         ":fwd",
         ":operators",

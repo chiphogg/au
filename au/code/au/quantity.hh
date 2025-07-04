@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "au/apply_magnitude.hh"
 #include "au/conversion_policy.hh"
 #include "au/fwd.hh"
 #include "au/operators.hh"
