@@ -14,6 +14,8 @@
 
 #include "au/overflow_boundary.hh"
 
+#include <complex>
+
 #include "au/testing.hh"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -154,6 +156,50 @@ constexpr auto lowest_floating_point_as_mag() {
 template <typename Float>
 constexpr auto highest_floating_point_as_mag() {
     return MagFromFloatingPointConstantImpl<Float, ValueIsHighestInDestination<Float>>::value();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MinPossible` section:
+
+TEST(MinPossible, GivesStdNumericLimitsLowestForSimpleTypes) {
+    EXPECT_THAT((MinPossible<StaticCast<uint64_t, int>>::value()),
+                SameTypeAndValue(std::numeric_limits<uint64_t>::lowest()));
+
+    EXPECT_THAT((MinPossible<StaticCast<int8_t, int32_t>>::value()),
+                SameTypeAndValue(std::numeric_limits<int8_t>::lowest()));
+
+    EXPECT_THAT((MinPossible<StaticCast<float, double>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+}
+
+TEST(MinPossible, GivesStdNumericLimitsLowestOfScalarTypeForCompoundTypes) {
+    EXPECT_THAT((MinPossible<StaticCast<std::complex<float>, std::complex<double>>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+
+    EXPECT_THAT((MinPossible<StaticCast<std::complex<double>, std::complex<float>>>::value()),
+                SameTypeAndValue(std::numeric_limits<double>::lowest()));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MaxPossible` section:
+
+TEST(MaxPossible, GivesStdNumericLimitsMaxForSimpleTypes) {
+    EXPECT_THAT((MaxPossible<StaticCast<uint64_t, int>>::value()),
+                SameTypeAndValue(std::numeric_limits<uint64_t>::max()));
+
+    EXPECT_THAT((MaxPossible<StaticCast<int8_t, int32_t>>::value()),
+                SameTypeAndValue(std::numeric_limits<int8_t>::max()));
+
+    EXPECT_THAT((MaxPossible<StaticCast<float, double>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::max()));
+}
+
+TEST(MaxPossible, GivesStdNumericLimitsMaxOfScalarTypeForCompoundTypes) {
+    EXPECT_THAT((MaxPossible<StaticCast<std::complex<float>, std::complex<double>>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::max()));
+
+    EXPECT_THAT((MaxPossible<StaticCast<std::complex<double>, std::complex<float>>>::value()),
+                SameTypeAndValue(std::numeric_limits<double>::max()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -380,6 +426,14 @@ TEST(StaticCast, MinGoodCappedByExplicitI16Limit) {
 
     EXPECT_THAT((MinGood<StaticCast<double, int16_t>, I16LowerLimitMinusOne>::value()),
                 SameTypeAndValue(-1.0));
+}
+
+TEST(StaticCast, MinGoodForComplexOfTProvidesAnswerAsT) {
+    EXPECT_THAT((MinGood<StaticCast<std::complex<float>, std::complex<double>>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::lowest()));
+
+    EXPECT_THAT((MinGood<StaticCast<std::complex<double>, std::complex<float>>>::value()),
+                SameTypeAndValue(static_cast<double>(std::numeric_limits<float>::lowest())));
 }
 
 //
@@ -723,6 +777,14 @@ TEST(StaticCast, MaxGoodCappedByExplicitU16Limit) {
                 SameTypeAndValue(1.0));
 }
 
+TEST(StaticCast, MaxGoodForComplexOfTProvidesAnswerAsT) {
+    EXPECT_THAT((MaxGood<StaticCast<std::complex<float>, std::complex<double>>>::value()),
+                SameTypeAndValue(std::numeric_limits<float>::max()));
+
+    EXPECT_THAT((MaxGood<StaticCast<std::complex<double>, std::complex<float>>>::value()),
+                SameTypeAndValue(static_cast<double>(std::numeric_limits<float>::max())));
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `MultiplyTypeBy` section:
 
@@ -788,6 +850,12 @@ TEST(MultiplyTypeBy, MinGoodForUnlimitedFloatTimesNegIrrationalSmallerThanOneIsN
     constexpr auto m = -mag<1>() / PI;
     EXPECT_THAT(min_good_value(multiply_type_by<float>(m)),
                 SameTypeAndValue(-std::numeric_limits<float>::max()));
+}
+
+TEST(MultiplyTypeBy, MinGoodForUnlimitedIntTimesPosIrrationalIsZeroAsAPlaceholder) {
+    // We can't even compute the overflow boundary for this kind of operation yet, so just return an
+    // extremely conservative result of 0.
+    EXPECT_THAT(min_good_value(multiply_type_by<int32_t>(PI)), SameTypeAndValue(int32_t{0}));
 }
 
 TEST(MultiplyTypeBy, MinGoodForSignedTimesPosIntIsLowerLimitDivByMag) {
@@ -991,6 +1059,11 @@ TEST(MultiplyTypeBy, MinGoodForFloatTimesNegIrrationalSmallerThanOneIsClampedUpp
                 SameTypeAndValue(-std::numeric_limits<float>::max()));
 }
 
+TEST(MultiplyTypeBy, MinGoodForComplexOfTProvidesAnswerAsT) {
+    EXPECT_THAT(min_good_value(multiply_type_by<std::complex<int32_t>>(mag<12>())),
+                SameTypeAndValue(min_good_value(multiply_type_by<int32_t>(mag<12>()))));
+}
+
 //
 // `MaxGood<MultiplyTypeBy>`:
 //
@@ -1041,6 +1114,11 @@ TEST(MultiplyTypeBy, MaxGoodForUnlimitedSignedTimesNegIntIsLowerLimitDivByMag) {
     EXPECT_THAT(max_good_value(multiply_type_by<int8_t>(-mag<127>())), SameTypeAndValue(int8_t{1}));
 
     EXPECT_THAT(max_good_value(multiply_type_by<int8_t>(-mag<128>())), SameTypeAndValue(int8_t{1}));
+}
+
+TEST(MultiplyTypeBy, MaxGoodForUnlimitedSignedDivNegIntIsClampedLowerLimit) {
+    EXPECT_THAT(max_good_value(multiply_type_by<int>(-mag<1>() / mag<12>())),
+                SameTypeAndValue(std::numeric_limits<int>::max()));
 }
 
 TEST(MultiplyTypeBy, MaxGoodForUnlimitedFloatTimesPosIrrationalBiggerThanOneIsUpperLimitDivByMag) {
@@ -1099,6 +1177,12 @@ TEST(MultiplyTypeBy, MaxGoodForSignedTimesNegIntIsLowerLimitDivByMag) {
 
     EXPECT_THAT(max_good_value(multiply_type_by<int32_t>(-mag<25>()), I32LowerLimitMinus24{}),
                 SameTypeAndValue(int32_t{0}));
+}
+
+TEST(MultiplyTypeBy, MaxGoodForUnlimitedIntTimesPosIrrationalIsZeroAsAPlaceholder) {
+    // We can't even compute the overflow boundary for this kind of operation yet, so just return an
+    // extremely conservative result of 0.
+    EXPECT_THAT(max_good_value(multiply_type_by<int32_t>(PI)), SameTypeAndValue(int32_t{0}));
 }
 
 TEST(MultiplyTypeBy, MaxGoodForFloatTimesPosIntIsUpperLimitDivByMag) {
@@ -1271,6 +1355,11 @@ TEST(MultiplyTypeBy, MaxGoodForFloatTimesNegIrrationalSmallerThanOneIsClampedLow
                 SameTypeAndValue(-std::numeric_limits<float>::lowest()));
 }
 
+TEST(MultiplyTypeBy, MaxGoodForComplexOfTProvidesAnswerAsT) {
+    EXPECT_THAT(max_good_value(multiply_type_by<std::complex<int32_t>>(mag<12>())),
+                SameTypeAndValue(max_good_value(multiply_type_by<int32_t>(mag<12>()))));
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence` section:
 
@@ -1369,6 +1458,10 @@ TEST(CanOverflowBelow, TrueIfValueCanBeSmallEnoughToGoOutsideBounds) {
     EXPECT_THAT(can_overflow_below(multiply_type_by<int8_t>(mag<2>())), IsTrue());
 }
 
+TEST(CanOverflowBelow, TrueForOverflowableStdComplex) {
+    EXPECT_THAT(can_overflow_below(multiply_type_by<std::complex<int8_t>>(mag<2>())), IsTrue());
+}
+
 TEST(CanOverflowBelow, FalseIfValueCannotBeSmallEnoughToGoOutsideBounds) {
     EXPECT_THAT(can_overflow_below(multiply_type_by<uint8_t>(mag<8>())), IsFalse());
     EXPECT_THAT(can_overflow_below(multiply_type_by<double>(mag<1>() / PI)), IsFalse());
@@ -1379,6 +1472,10 @@ TEST(CanOverflowBelow, FalseIfValueCannotBeSmallEnoughToGoOutsideBounds) {
 
 TEST(CanOverflowAbove, TrueIfValueCanBeBigEnoughToGoOutsideBounds) {
     EXPECT_THAT(can_overflow_above(multiply_type_by<int8_t>(mag<2>())), IsTrue());
+}
+
+TEST(CanOverflowAbove, TrueForOverflowableStdComplex) {
+    EXPECT_THAT(can_overflow_above(multiply_type_by<std::complex<int8_t>>(mag<2>())), IsTrue());
 }
 
 TEST(CanOverflowAbove, FalseIfValueCannotBeBigEnoughToGoOutsideBounds) {

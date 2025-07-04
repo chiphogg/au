@@ -14,6 +14,8 @@
 
 #include "au/truncation_risk.hh"
 
+#include <complex>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -23,12 +25,6 @@ using ::testing::StaticAssertTypeEq;
 
 namespace au {
 namespace detail {
-
-template <typename T>
-struct UnknownOp {};
-template <typename T>
-struct OpInputImpl<UnknownOp<T>> : stdx::type_identity<T> {};
-
 namespace {
 
 constexpr auto PI = Magnitude<Pi>{};
@@ -200,6 +196,14 @@ TEST(TruncationRiskFor, CollectsDenominatorFactors) {
         ValueDivIntIsNotInteger<float, decltype(mag<6>())>>();
 }
 
+TEST(TruncationRiskFor, UsesScalarTypeToAssessRisk) {
+    StaticAssertTypeEq<TruncationRiskFor<OpSequence<
+                           MultiplyTypeBy<std::complex<float>, decltype(mag<1>() / mag<2>())>,
+                           MultiplyTypeBy<std::complex<float>, decltype(mag<1>() / mag<3>())>,
+                           StaticCast<std::complex<float>, std::complex<int>>>>,
+                       ValueDivIntIsNotInteger<float, decltype(mag<6>())>>();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `WillValueTruncate` section:
 
@@ -264,8 +268,7 @@ TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatT
 }
 
 TEST(WillValueTruncate, AssumedAlwaysTrueIfCannotAssessTruncationRisk) {
-    using WeirdOp = UnknownOp<int>;
-    using CannotAssessRisk = CannotAssessTruncationRiskFor<int, WeirdOp>;
+    using CannotAssessRisk = CannotAssessTruncationRiskFor<int>;
 
     EXPECT_THAT(CannotAssessRisk::would_value_truncate(0), IsTrue());
     EXPECT_THAT(CannotAssessRisk::would_value_truncate(1), IsTrue());
@@ -299,17 +302,13 @@ TEST(UpdateRisk, StaticCastFloatToFloatPreservesRiskButChangesInputType) {
         ValueTimesRatioIsNotInteger<float, decltype(mag<3>() / mag<4>())>>();
 }
 
-TEST(UpdateRisk, AnyOpBeforeCannotAssessTruncationRiskUpdatesInputTypeAndPrependsOp) {
-    using Op1 = StaticCast<float, int>;
-    using Op2 = MultiplyTypeBy<int, decltype(mag<2>())>;
-    using WeirdOp = UnknownOp<int>;
-
-    StaticAssertTypeEq<UpdateRisk<Op1, CannotAssessTruncationRiskFor<int, WeirdOp>>,
-                       CannotAssessTruncationRiskFor<float, OpSequence<Op1, WeirdOp>>>();
+TEST(UpdateRisk, AnyOpBeforeCannotAssessTruncationRiskUpdatesInputType) {
+    StaticAssertTypeEq<UpdateRisk<StaticCast<float, int>, CannotAssessTruncationRiskFor<int>>,
+                       CannotAssessTruncationRiskFor<float>>();
 
     StaticAssertTypeEq<
-        UpdateRisk<Op1, CannotAssessTruncationRiskFor<int, OpSequence<Op2, WeirdOp>>>,
-        CannotAssessTruncationRiskFor<float, OpSequence<Op1, Op2, WeirdOp>>>();
+        UpdateRisk<MultiplyTypeBy<int, decltype(mag<2>())>, CannotAssessTruncationRiskFor<int>>,
+        CannotAssessTruncationRiskFor<int>>();
 }
 
 TEST(UpdateRisk, AnyOpBeforeValueIsNotZeroIsValueIsNotZero) {

@@ -38,13 +38,6 @@ struct Degrees : UnitImpl<Angle> {};
 struct EquivalentToDegrees : Degrees {};
 struct NegativeDegrees : decltype(Degrees{} * (-mag<1>())) {};
 
-TEST(CanScaleWithoutOverflow, DetectsOverflowLimits) {
-    EXPECT_THAT(can_scale_without_overflow<double>(mag<1000>(), 1e100), IsTrue());
-    EXPECT_THAT(
-        can_scale_without_overflow<double>(mag<1000>(), 0.5 * std::numeric_limits<double>::max()),
-        IsFalse());
-}
-
 TEST(ImplicitRepPermitted, TrueForIdentityMagnitude) {
     EXPECT_THAT((ImplicitRepPermitted<long double, Magnitude<>>::value), IsTrue());
     EXPECT_THAT((ImplicitRepPermitted<double, Magnitude<>>::value), IsTrue());
@@ -156,21 +149,6 @@ TEST(ConstructionPolicy, PermitsImplicitFromIntegralTypesIffTargetScaleDividesSo
     using grams_int_policy = ConstructionPolicy<Grams, int>;
     EXPECT_THAT((grams_int_policy::PermitImplicitFrom<Kilograms, int>::value), IsTrue());
     EXPECT_THAT((grams_int_policy::PermitImplicitFrom<Milligrams, int>::value), IsFalse());
-}
-
-TEST(ConstructionPolicy, ComplexToRealPreventsImplicitConversion) {
-    // `complex<int>` -> `float`: forbid, although `int` -> `float` is allowed.
-    using gigagrams_float_policy = ConstructionPolicy<Gigagrams, float>;
-    ASSERT_THAT((gigagrams_float_policy::PermitImplicitFrom<Grams, int>::value), IsTrue());
-    EXPECT_THAT((gigagrams_float_policy::PermitImplicitFrom<Grams, std::complex<int>>::value),
-                IsFalse());
-
-    // (`int` or `complex<int>`) -> `complex<float>`: both allowed.
-    using gigagrams_complex_float_policy = ConstructionPolicy<Gigagrams, std::complex<float>>;
-    EXPECT_THAT((gigagrams_complex_float_policy::PermitImplicitFrom<Grams, int>::value), IsTrue());
-    EXPECT_THAT(
-        (gigagrams_complex_float_policy::PermitImplicitFrom<Grams, std::complex<int>>::value),
-        IsTrue());
 }
 
 TEST(ConstructionPolicy, ForbidsImplicitConstructionOfIntegralTypeFromFloatingPtType) {

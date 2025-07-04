@@ -327,8 +327,13 @@ cc_library(
     hdrs = ["code/au/conversion_policy.hh"],
     includes = ["code"],
     deps = [
+        ":abstract_operations",
+        ":apply_magnitude",
         ":magnitude",
+        ":operators",
+        ":overflow_boundary",
         ":stdx",
+        ":truncation_risk",
         ":unit_of_measure",
     ],
 )

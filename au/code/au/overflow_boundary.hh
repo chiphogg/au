@@ -24,8 +24,28 @@ namespace au {
 namespace detail {
 
 //
-// `MinGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the minimum value
-// that does not overflow.
+// `MinPossible<Op>::value()` is the smallest allowable "scalar type" for `OpInput<Op>`.
+//
+// The "scalar type" of `T` is usually just `T`, but if `T` something like `std::complex<U>`, or
+// `Eigen::Vector<U, N>`, then it would be `U`.
+//
+template <typename Op>
+struct MinPossibleImpl;
+template <typename Op>
+using MinPossible = typename MinPossibleImpl<Op>::type;
+
+//
+// `MaxPossible<Op>::value()` is the largest allowable "scalar type" for `OpInput<Op>`.  (See
+// `MinPossible` above for what we mean by "scalar type".)
+//
+template <typename Op>
+struct MaxPossibleImpl;
+template <typename Op>
+using MaxPossible = typename MaxPossibleImpl<Op>::type;
+
+//
+// `MinGood<Op>::value()` is a constexpr constant of the "scalar type" for `OpInput<Op>` that is the
+// minimum value that does not overflow.
 //
 // IMPORTANT: the result must always be non-positive.  The code is structured on this assumption.
 //
@@ -35,8 +55,8 @@ template <typename Op, typename Limits = void>
 using MinGood = typename MinGoodImpl<Op, Limits>::type;
 
 //
-// `MaxGood<Op>::value()` is a constexpr constant of type `OpInput<Op>` that is the maximum value
-// that does not overflow.
+// `MaxGood<Op>::value()` is a constexpr constant of the "scalar type" for `OpInput<Op>` that is the
+// maximum value that does not overflow.
 //
 // IMPORTANT: the result must always be non-negative.  The code is structured on this assumption.
 //
@@ -63,6 +83,10 @@ struct CanOverflowAbove;
 // IMPLEMENTATION DETAILS
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+using IsClampable = stdx::conjunction<stdx::bool_constant<(std::numeric_limits<T>::is_specialized)>,
+                                      stdx::bool_constant<(std::numeric_limits<T>::is_bounded)>>;
+
 // The implementation strategy will be to decompose to increasingly specific cases, using
 // `std::conditional` constructs that are _at most one layer deep_.  This should keep every
 // individual piece as easy to understand as possible, although it does mean we'll tend to be
@@ -84,17 +108,6 @@ constexpr bool is_definitely_unsigned() {
     return std::numeric_limits<T>::is_specialized && !std::numeric_limits<T>::is_signed;
 }
 
-// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
-// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
-template <typename T, typename Limits>
-struct LowerLimit {
-    static constexpr T value() { return Limits::lower(); }
-};
-template <typename T>
-struct LowerLimit<T, void> {
-    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
-};
-
 // `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
 // `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
 template <typename T, typename Limits>
@@ -106,11 +119,43 @@ struct UpperLimit<T, void> {
     static constexpr T value() { return std::numeric_limits<T>::max(); }
 };
 
+// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limits>
+struct LowerLimit {
+    static constexpr T value() { return Limits::lower(); }
+};
+template <typename T>
+struct LowerLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
+
+// `NegativeLowerLimit<T, Limits>::value()` returns `-LowerLimit<T, Limits>::value()`, unless
+// `LowerLimit<T, Limits>::value()` is `std::numeric_limits<T>::lowest()` _and_ `T` is a signed
+// integral type, in which case it returns `std::numeric_limits<T>::max()`.
+template <bool ShouldJustUseMax, typename T, typename Limits>
+struct NegativeLowerLimitImplIfShouldJustUseMaxIs {
+    static constexpr T value() { return -LowerLimit<T, Limits>::value(); }
+};
+template <typename T, typename Limits>
+struct NegativeLowerLimitImplIfShouldJustUseMaxIs<true, T, Limits> {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+template <typename T, typename Limits>
+struct NegativeLowerLimit
+    : NegativeLowerLimitImplIfShouldJustUseMaxIs<
+          stdx::conjunction<std::is_signed<T>,
+                            std::is_integral<T>,
+                            stdx::bool_constant<(LowerLimit<T, Limits>::value() ==
+                                                 std::numeric_limits<T>::lowest())>>::value,
+          T,
+          Limits> {};
+
 // `LimitsFor<Op, Limits>` produces a type which can be the `Limits` argument for some other op.
 template <typename Op, typename Limits>
 struct LimitsFor {
-    static constexpr OpInput<Op> lower() { return MinGood<Op, Limits>::value(); }
-    static constexpr OpInput<Op> upper() { return MaxGood<Op, Limits>::value(); }
+    static constexpr RealPart<OpInput<Op>> lower() { return MinGood<Op, Limits>::value(); }
+    static constexpr RealPart<OpInput<Op>> upper() { return MaxGood<Op, Limits>::value(); }
 };
 
 // Inherit from this struct to produce a compiler error in case we try to use a combination of types
@@ -241,18 +286,20 @@ struct LowestOfLimitsDividedByValue {
 // can grow values, and we risk overflow.  Therefore, we have to start from the bounds of the type,
 // and back out the most extreme value for the limit that will _not_ overflow.
 template <typename T, typename M, typename Limits>
-struct ClampLowestOfLimitsTimesInverseValue {
+struct CommonVarsForClampLowestOfLimitsTimesInverseValue {
+    static constexpr T RELEVANT_LIMIT =
+        IsPositive<M>::value ? LowerLimit<T, Limits>::value() : -UpperLimit<T, Limits>::value();
+    static constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
+};
+template <bool IsClampable, typename T, typename M, typename Limits>
+struct ClampLowestOfLimitsTimesInverseValueIfClampableIs
+    : CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits> {
+    static_assert(IsClampable, "Wrong specialization (internal library error)");
+
+    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+
     static constexpr T value() {
-        constexpr T RELEVANT_LIMIT =
-            IsPositive<M>::value ? LowerLimit<T, Limits>::value() : -UpperLimit<T, Limits>::value();
-        constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
-
-        constexpr bool IS_CLAMPABLE =
-            std::numeric_limits<T>::is_specialized && std::numeric_limits<T>::is_bounded;
-        if (!IS_CLAMPABLE) {
-            return RELEVANT_LIMIT * ABS_DIVISOR;
-        }
-
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::lowest() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::max() / ABS_DIVISOR);
@@ -260,6 +307,17 @@ struct ClampLowestOfLimitsTimesInverseValue {
         return SHOULD_CLAMP ? std::numeric_limits<T>::lowest() : RELEVANT_LIMIT * ABS_DIVISOR;
     }
 };
+template <typename T, typename M, typename Limits>
+struct ClampLowestOfLimitsTimesInverseValueIfClampableIs<false, T, M, Limits>
+    : CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits> {
+    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    static constexpr T value() { return RELEVANT_LIMIT * ABS_DIVISOR; }
+};
+
+template <typename T, typename M, typename Limits>
+struct ClampLowestOfLimitsTimesInverseValue
+    : ClampLowestOfLimitsTimesInverseValueIfClampableIs<IsClampable<T>::value, T, M, Limits> {};
 
 template <typename T, typename MagT, MagRepresentationOutcome>
 struct MagHelper {
@@ -322,24 +380,63 @@ struct HighestOfLimitsDividedByValue {
 // means its inverse can grow values, and we risk overflow.  Therefore, we have to start from the
 // bounds of the type, and back out the most extreme value for the limit that will _not_ overflow.
 template <typename T, typename M, typename Limits>
-struct ClampHighestOfLimitsTimesInverseValue {
+struct CommonVarsForClampHighestOfLimitsTimesInverseValue {
+    static constexpr T RELEVANT_LIMIT = IsPositive<M>::value
+                                            ? UpperLimit<T, Limits>::value()
+                                            : NegativeLowerLimit<T, Limits>::value();
+    static constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
+};
+template <bool IsClampable, typename T, typename M, typename Limits>
+struct ClampHighestOfLimitsTimesInverseValueIfClampableIs
+    : CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits> {
+    static_assert(IsClampable, "Wrong specialization (internal library error)");
+
+    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+
     static constexpr T value() {
-        constexpr T RELEVANT_LIMIT =
-            IsPositive<M>::value ? UpperLimit<T, Limits>::value() : -LowerLimit<T, Limits>::value();
-        constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
-
-        constexpr bool IS_CLAMPABLE =
-            std::numeric_limits<T>::is_specialized && std::numeric_limits<T>::is_bounded;
-        if (!IS_CLAMPABLE) {
-            return RELEVANT_LIMIT * ABS_DIVISOR;
-        }
-
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::max() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::lowest() / ABS_DIVISOR);
         constexpr bool SHOULD_CLAMP = RELEVANT_BOUND <= RELEVANT_LIMIT;
         return SHOULD_CLAMP ? std::numeric_limits<T>::max() : RELEVANT_LIMIT * ABS_DIVISOR;
     }
+};
+template <typename T, typename M, typename Limits>
+struct ClampHighestOfLimitsTimesInverseValueIfClampableIs<false, T, M, Limits>
+    : CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits> {
+    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    static constexpr T value() { return RELEVANT_LIMIT * ABS_DIVISOR; }
+};
+
+template <typename T, typename M, typename Limits>
+struct ClampHighestOfLimitsTimesInverseValue
+    : ClampHighestOfLimitsTimesInverseValueIfClampableIs<IsClampable<T>::value, T, M, Limits> {};
+
+constexpr bool is_ok_or_err_cannot_fit(MagRepresentationOutcome outcome) {
+    return outcome == MagRepresentationOutcome::OK ||
+           outcome == MagRepresentationOutcome::ERR_CANNOT_FIT;
+}
+
+template <typename T, typename M>
+struct IsCompatibleApartFromMaybeOverflow
+    : stdx::bool_constant<is_ok_or_err_cannot_fit(get_value_result<T>(M{}).outcome)> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MinPossible<Op>` implementation.
+
+template <typename Op>
+struct MinPossibleImpl
+    : stdx::type_identity<LowestOfLimitsDividedByValue<RealPart<OpInput<Op>>, Magnitude<>, void>> {
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MaxPossible<Op>` implementation.
+
+template <typename Op>
+struct MaxPossibleImpl
+    : stdx::type_identity<HighestOfLimitsDividedByValue<RealPart<OpInput<Op>>, Magnitude<>, void>> {
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -421,10 +518,15 @@ struct MinGoodImplForStaticCastFromArithmetic
 
 // (X) -> (X)
 template <typename T, typename U, typename ULimit>
-struct MinGoodImpl<StaticCast<T, U>, ULimit>
-    : std::conditional_t<std::is_arithmetic<T>::value,
-                         MinGoodImplForStaticCastFromArithmetic<T, U, ULimit>,
-                         MinGoodImplForStaticCastFromNonArithmetic<T, U, ULimit>> {};
+struct MinGoodImplForStaticCastUsingRealPart
+    : std::conditional_t<
+          std::is_arithmetic<RealPart<T>>::value,
+          MinGoodImplForStaticCastFromArithmetic<RealPart<T>, RealPart<U>, ULimit>,
+          MinGoodImplForStaticCastFromNonArithmetic<RealPart<T>, RealPart<U>, ULimit>> {};
+
+template <typename T, typename U, typename ULimit>
+struct MinGoodImpl<StaticCast<T, U>, ULimit> : MinGoodImplForStaticCastUsingRealPart<T, U, ULimit> {
+};
 
 //
 // `MaxGood<StaticCast<T, U>>` implementation cluster.
@@ -488,25 +590,37 @@ struct MaxGoodImplForStaticCastFromArithmetic
 
 // (X) -> (X)
 template <typename T, typename U, typename ULimit>
-struct MaxGoodImpl<StaticCast<T, U>, ULimit>
-    : std::conditional_t<std::is_arithmetic<T>::value,
-                         MaxGoodImplForStaticCastFromArithmetic<T, U, ULimit>,
-                         MaxGoodImplForStaticCastFromNonArithmetic<T, U, ULimit>> {};
+struct MaxGoodImplForStaticCastUsingRealPart
+    : std::conditional_t<
+          std::is_arithmetic<RealPart<T>>::value,
+          MaxGoodImplForStaticCastFromArithmetic<RealPart<T>, RealPart<U>, ULimit>,
+          MaxGoodImplForStaticCastFromNonArithmetic<RealPart<T>, RealPart<U>, ULimit>> {};
+
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImpl<StaticCast<T, U>, ULimit> : MaxGoodImplForStaticCastUsingRealPart<T, U, ULimit> {
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `MultiplyTypeBy<T, M>` implementation.
 
 //
-// `MinGood<StaticCast<T, U>>` implementation cluster.
+// `MinGood<MultiplyTypeBy<T, M>>` implementation cluster.
 //
 
 // Assume `T` is non-integral, for now.  If `T` were integral, then (for now) we would only need to
 // cover multiplying or dividing by other integers, and other structs below cover these.
 template <typename T, typename M, typename Limits>
-struct MinGoodImplForMultiplyTypeByNeitherIntNorInverseInt
+struct MinGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt
     : std::conditional<(get_value<T>(Abs<M>{}) > T{1}),
                        LowestOfLimitsDividedByValue<T, M, Limits>,
                        ClampLowestOfLimitsTimesInverseValue<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForMultiplyTypeByNeitherIntNorInverseInt
+    : std::conditional_t<
+          IsCompatibleApartFromMaybeOverflow<T, M>::value,
+          MinGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt<T, M, Limits>,
+          stdx::type_identity<ValueIsZero<T>>> {};
 
 template <typename T, typename M, typename Limits>
 struct MinGoodImplForMultiplyTypeByNonInteger
@@ -521,20 +635,31 @@ struct MinGoodImplForMultiplyTypeByAssumingSigned
                          MinGoodImplForMultiplyTypeByNonInteger<T, M, Limits>> {};
 
 template <typename T, typename M, typename Limits>
-struct MinGoodImpl<MultiplyTypeBy<T, M>, Limits>
+struct MinGoodImplForMultiplyTypeByUsingRealPart
     : std::conditional_t<is_definitely_unsigned<T>(),
                          stdx::type_identity<ValueIsZero<T>>,
                          MinGoodImplForMultiplyTypeByAssumingSigned<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImpl<MultiplyTypeBy<T, M>, Limits>
+    : MinGoodImplForMultiplyTypeByUsingRealPart<RealPart<T>, M, Limits> {};
 
 //
 // `MaxGood<MultiplyTypeBy<T, M>>` implementation cluster.
 //
 
 template <typename T, typename M, typename Limits>
-struct MaxGoodImplForMultiplyTypeByNeitherIntNorInverseInt
+struct MaxGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt
     : std::conditional<(get_value<T>(Abs<M>{}) > T{1}),
                        HighestOfLimitsDividedByValue<T, M, Limits>,
                        ClampHighestOfLimitsTimesInverseValue<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForMultiplyTypeByNeitherIntNorInverseInt
+    : std::conditional_t<
+          IsCompatibleApartFromMaybeOverflow<T, M>::value,
+          MaxGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt<T, M, Limits>,
+          stdx::type_identity<ValueIsZero<T>>> {};
 
 template <typename T, typename M, typename Limits>
 struct MaxGoodImplForMultiplyTypeByNonInteger
@@ -549,11 +674,15 @@ struct MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor
                          MaxGoodImplForMultiplyTypeByNonInteger<T, M, Limits>> {};
 
 template <typename T, typename M, typename Limits>
-struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
+struct MaxGoodImplForMultiplyTypeByUsingRealPart
     : std::conditional_t<
           (is_definitely_unsigned<T>() && !IsPositive<M>::value),
           stdx::type_identity<ValueIsZero<T>>,
           MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
+    : MaxGoodImplForMultiplyTypeByUsingRealPart<RealPart<T>, M, Limits> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence<Ops...>` implementation.
@@ -592,15 +721,13 @@ struct MaxGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
 // `CanOverflowBelow<Op>` implementation.
 
 template <typename Op>
-struct CanOverflowBelow
-    : stdx::bool_constant<(MinGood<Op>::value() > std::numeric_limits<OpInput<Op>>::lowest())> {};
+struct CanOverflowBelow : stdx::bool_constant<(MinGood<Op>::value() > MinPossible<Op>::value())> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `CanOverflowAbove<Op>` implementation.
 
 template <typename Op>
-struct CanOverflowAbove
-    : stdx::bool_constant<(MaxGood<Op>::value() < std::numeric_limits<OpInput<Op>>::max())> {};
+struct CanOverflowAbove : stdx::bool_constant<(MaxGood<Op>::value() < MaxPossible<Op>::value())> {};
 
 }  // namespace detail
 }  // namespace au
