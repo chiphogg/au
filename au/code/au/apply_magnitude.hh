@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "au/apply_rational_magnitude_to_integral.hh"
 #include "au/magnitude.hh"
 #include "au/overflow_boundary.hh"
 #include "au/truncation_risk.hh"
@@ -130,5 +129,6 @@ struct ConversionForRepsAndFactorImpl
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // New versions of old ideas
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 }  // namespace detail
 }  // namespace au

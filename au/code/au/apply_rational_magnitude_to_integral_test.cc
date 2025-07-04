@@ -14,6 +14,7 @@
 
 #include "au/apply_rational_magnitude_to_integral.hh"
 
+#include "au/overflow_boundary.hh"
 #include "au/testing.hh"
 #include "gtest/gtest.h"
 
@@ -99,6 +100,19 @@ TEST(IsAbsKnownToBeLessThanOne, IgnoresSign) {
 //    the original type after dividing by `D`.  So the maximum non-overflowing value is the smaller
 //    of `PM` and `TM * D`, divided by `N`.  (We'll have to be careful that the `TM * D` itself
 //    doesn't overflow!  We'll cap it at `PM` if it does.)
+
+//
+// `MaxNonOverflowingValue<T, MagT>` is the maximum value of type `T` that can have `MagT` applied
+// as numerator-and-denominator without overflowing.  We require that `T` is some integral
+// arithmetic type, and that `MagT` is a rational magnitude that is neither purely integral nor
+// purely inverse-integral.
+//
+// This implementation has been migrated from the target (which no longer exists) that this test was
+// for.  We hollowed it out and replaced it with a simple implementation that delegates to the
+// replacement library.  This lets us get coverage from all of our old test cases.
+//
+template <typename T, typename MagT>
+struct MaxNonOverflowingValue : MaxGood<ConversionForRepsAndFactor<T, T, MagT>> {};
 
 enum class IsPromotable { NO, YES };
 enum class NumFitsInPromotedType { NO, YES };

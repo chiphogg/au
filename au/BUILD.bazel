@@ -243,6 +243,7 @@ cc_test(
     srcs = ["code/au/apply_rational_magnitude_to_integral_test.cc"],
     deps = [
         ":apply_rational_magnitude_to_integral",
+        ":conversion_policy",
         ":testing",
         "@com_google_googletest//:gtest_main",
     ],

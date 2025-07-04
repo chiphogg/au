@@ -280,26 +280,37 @@ struct LowestOfLimitsDividedByValue {
     }
 };
 
-// Name reads as "clamp lowest of (limits times inverse value)".  First, remember that the value can
-// be negative, so multiplying can sometimes switch the sign: we want whichever is smaller _after_
-// that operation.  Next, this is the version for when `Abs<M>` is _smaller_ than 1, so its inverse
-// can grow values, and we risk overflow.  Therefore, we have to start from the bounds of the type,
-// and back out the most extreme value for the limit that will _not_ overflow.
+// This section is for implementing `ClampLowestOfLimitsTimesInverseValue<T, M, Limits>`, including
+// various helper types.
+//
+// Read the name as "clamp lowest of (limits times inverse value)".  First, remember that the value
+// can be negative, so multiplying can sometimes switch the sign: we want whichever is smaller
+// _after_ that operation.  Next, this is the version for when `Abs<M>` is _smaller_ than 1, so its
+// inverse can grow values, and we risk overflow.  Therefore, we have to start from the bounds of
+// the type, and back out the most extreme value for the limit that will _not_ overflow.
 template <typename T, typename M, typename Limits>
-struct CommonVarsForClampLowestOfLimitsTimesInverseValue {
+struct CommonVarsForClampLowest {
     static constexpr T RELEVANT_LIMIT =
         IsPositive<M>::value ? LowerLimit<T, Limits>::value() : -UpperLimit<T, Limits>::value();
-    static constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
+    static constexpr MagRepresentationOrError<T> ABS_DIVISOR_RESULT =
+        get_value_result<T>(MagInverseT<Abs<M>>{});
 };
+
 template <bool IsClampable, typename T, typename M, typename Limits>
-struct ClampLowestOfLimitsTimesInverseValueIfClampableIs
-    : CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits> {
+struct ClampLowestOfLimitsTimesInverseValueIfClampableIs : CommonVarsForClampLowest<T, M, Limits> {
     static_assert(IsClampable, "Wrong specialization (internal library error)");
 
-    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
-    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    using CommonVarsForClampLowest<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampLowest<T, M, Limits>::ABS_DIVISOR_RESULT;
 
     static constexpr T value() {
+        if (ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT) {
+            return RELEVANT_LIMIT;
+        }
+
+        constexpr T ABS_DIVISOR = ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::OK
+                                      ? ABS_DIVISOR_RESULT.value
+                                      : T{1};
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::lowest() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::max() / ABS_DIVISOR);
@@ -307,11 +318,12 @@ struct ClampLowestOfLimitsTimesInverseValueIfClampableIs
         return SHOULD_CLAMP ? std::numeric_limits<T>::lowest() : RELEVANT_LIMIT * ABS_DIVISOR;
     }
 };
+
 template <typename T, typename M, typename Limits>
 struct ClampLowestOfLimitsTimesInverseValueIfClampableIs<false, T, M, Limits>
-    : CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits> {
-    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
-    using CommonVarsForClampLowestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    : CommonVarsForClampLowest<T, M, Limits> {
+    using CommonVarsForClampLowest<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampLowest<T, M, Limits>::ABS_DIVISOR;
     static constexpr T value() { return RELEVANT_LIMIT * ABS_DIVISOR; }
 };
 
@@ -374,27 +386,39 @@ struct HighestOfLimitsDividedByValue {
     }
 };
 
-// Name reads as "clamp highest of (limits times inverse value)".  First, remember that the value
+// This section is for implementing `ClampHighestOfLimitsTimesInverseValue<T, M, Limits>`, including
+// various helper types.
+//
+// Read the name as "clamp highest of (limits times inverse value)".  First, remember that the value
 // can be negative, so multiplying can sometimes switch the sign: we want whichever is larger
 // _after_ that operation.  Next, this is the version for when `Abs<M>` is _smaller_ than 1, which
 // means its inverse can grow values, and we risk overflow.  Therefore, we have to start from the
 // bounds of the type, and back out the most extreme value for the limit that will _not_ overflow.
 template <typename T, typename M, typename Limits>
-struct CommonVarsForClampHighestOfLimitsTimesInverseValue {
+struct CommonVarsForClampHighest {
     static constexpr T RELEVANT_LIMIT = IsPositive<M>::value
                                             ? UpperLimit<T, Limits>::value()
                                             : NegativeLowerLimit<T, Limits>::value();
-    static constexpr T ABS_DIVISOR = get_value<T>(MagInverseT<Abs<M>>{});
+    static constexpr MagRepresentationOrError<T> ABS_DIVISOR_RESULT =
+        get_value_result<T>(MagInverseT<Abs<M>>{});
 };
+
 template <bool IsClampable, typename T, typename M, typename Limits>
 struct ClampHighestOfLimitsTimesInverseValueIfClampableIs
-    : CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits> {
+    : CommonVarsForClampHighest<T, M, Limits> {
     static_assert(IsClampable, "Wrong specialization (internal library error)");
 
-    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
-    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    using CommonVarsForClampHighest<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampHighest<T, M, Limits>::ABS_DIVISOR_RESULT;
 
     static constexpr T value() {
+        if (ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT) {
+            return RELEVANT_LIMIT;
+        }
+
+        constexpr T ABS_DIVISOR = ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::OK
+                                      ? ABS_DIVISOR_RESULT.value
+                                      : T{1};
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::max() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::lowest() / ABS_DIVISOR);
@@ -402,11 +426,12 @@ struct ClampHighestOfLimitsTimesInverseValueIfClampableIs
         return SHOULD_CLAMP ? std::numeric_limits<T>::max() : RELEVANT_LIMIT * ABS_DIVISOR;
     }
 };
+
 template <typename T, typename M, typename Limits>
 struct ClampHighestOfLimitsTimesInverseValueIfClampableIs<false, T, M, Limits>
-    : CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits> {
-    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::RELEVANT_LIMIT;
-    using CommonVarsForClampHighestOfLimitsTimesInverseValue<T, M, Limits>::ABS_DIVISOR;
+    : CommonVarsForClampHighest<T, M, Limits> {
+    using CommonVarsForClampHighest<T, M, Limits>::RELEVANT_LIMIT;
+    using CommonVarsForClampHighest<T, M, Limits>::ABS_DIVISOR;
     static constexpr T value() { return RELEVANT_LIMIT * ABS_DIVISOR; }
 };
 
