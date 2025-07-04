@@ -249,6 +249,19 @@ TEST(MaxNonOverflowingValue,
             mag<3>() / pow<400>(mag<10>()),
             max_i8);
         EXPECT_THAT(max_i8, Eq(127));
+
+        using O1 = StaticCast<int8_t, int>;
+        using O2 = MultiplyTypeBy<int, au::Magnitude<au::Prime<3>>>;
+        using O3 =
+            MultiplyTypeBy<int,
+                           au::Magnitude<au::Pow<au::Prime<2>, -400>, au::Pow<au::Prime<5>, -400>>>;
+        using O4 = StaticCast<int, int8_t>;
+        std::cout << "            O4 limits: " << int{MaxGood<OpSequence<O4>>::value()} << std::endl
+                  << "        O3, O4 limits: " << MaxGood<OpSequence<O3, O4>>::value() << std::endl
+                  << "    O2, O3, O4 limits: " << MaxGood<OpSequence<O2, O3, O4>>::value()
+                  << std::endl
+                  << "O1, O2, O3, O4 limits: " << int{MaxGood<OpSequence<O1, O2, O3, O4>>::value()}
+                  << std::endl;
     }
 
     {

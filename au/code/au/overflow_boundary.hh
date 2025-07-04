@@ -305,12 +305,16 @@ struct ClampLowestOfLimitsTimesInverseValueIfClampableIs : CommonVarsForClampLow
 
     static constexpr T value() {
         if (ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT) {
-            return RELEVANT_LIMIT;
+            return std::numeric_limits<T>::lowest();
         }
 
+        // It should be impossible to actually _use_ `T{1}`.  However, it appears (somewhat
+        // surprisingly) that the compiler will try to perform the division by `ABS_DIVISOR` _even
+        // when the logic does not take that branch_.  Therefore, we need to give a nonzero value.
         constexpr T ABS_DIVISOR = ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::OK
                                       ? ABS_DIVISOR_RESULT.value
                                       : T{1};
+
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::lowest() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::max() / ABS_DIVISOR);
@@ -413,12 +417,16 @@ struct ClampHighestOfLimitsTimesInverseValueIfClampableIs
 
     static constexpr T value() {
         if (ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT) {
-            return RELEVANT_LIMIT;
+            return std::numeric_limits<T>::max();
         }
 
+        // It should be impossible to actually _use_ `T{1}`.  However, it appears (somewhat
+        // surprisingly) that the compiler will try to perform the division by `ABS_DIVISOR` _even
+        // when the logic does not take that branch_.  Therefore, we need to give a nonzero value.
         constexpr T ABS_DIVISOR = ABS_DIVISOR_RESULT.outcome == MagRepresentationOutcome::OK
                                       ? ABS_DIVISOR_RESULT.value
                                       : T{1};
+
         constexpr T RELEVANT_BOUND = IsPositive<M>::value
                                          ? (std::numeric_limits<T>::max() / ABS_DIVISOR)
                                          : -(std::numeric_limits<T>::lowest() / ABS_DIVISOR);

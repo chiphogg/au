@@ -1409,6 +1409,10 @@ TEST(OpSequence, MinGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplica
                 SameTypeAndValue(int64_t{0}));
 }
 
+//
+// `MinGood<OpSequence>`:
+//
+
 TEST(OpSequence, MaxGoodForSequenceOfSingleOpIsMaxGoodForThatOp) {
     auto expect_max_good_for_sequence_of_only_this_is_max_good_for_this = [](auto op) {
         EXPECT_THAT(max_good_value(op_sequence(op)), SameTypeAndValue(max_good_value(op)));
@@ -1449,6 +1453,28 @@ TEST(OpSequence, MaxGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplica
                                            StaticCast<double, uint8_t>{},
                                            StaticCast<uint8_t, int32_t>{})),
                 SameTypeAndValue(int64_t{0}));
+}
+
+TEST(OpSequence, DividingByTooBigNumberResetsTheLimitToTheMax) {
+    // We are multiplying a promotable integer type by a rational magnitude, whose denominator is
+    // too big to fit even in the promoted type.  Steps are:
+    //
+    // 1. Static cast to the promoted type.
+    // 2. Multiply by numerator.
+    // 3. Divide by (huge) denominator.
+    // 4. Static cast back to the original type.
+    //
+    // Step 4 imposes a limit of the max of the (tiny) original type.  But in dividing by the (huge)
+    // denominator in step 3, _every_ value will end up in the range of the destination type
+    // (because they'll all be trivial: 0), so the limit should expand to be the max of the promoted
+    // type.  We can tell the difference because step 2 multiplies by an integer, whose effect on
+    // the _limit_ is to _divide_ by that integer.  The key is to make sure we're dividing that
+    // expanded limit, and not the tiny limit of the original type.
+    EXPECT_THAT(max_good_value(op_sequence(StaticCast<int8_t, int>{},
+                                           multiply_type_by<int>(mag<3>()),
+                                           multiply_type_by<int>(mag<1>() / pow<400>(mag<10>())),
+                                           StaticCast<int, int8_t>{})),
+                SameTypeAndValue(std::numeric_limits<int8_t>::max()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
