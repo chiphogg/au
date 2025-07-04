@@ -93,6 +93,15 @@ bool can_overflow_above(Op) {
     return CanOverflowAbove<Op>::value;
 }
 
+template <bool IsPositive>
+struct MagSignIfPositiveIs : stdx::type_identity<Magnitude<>> {};
+template <>
+struct MagSignIfPositiveIs<false> : stdx::type_identity<Magnitude<Negative>> {};
+template <bool IsPositive>
+constexpr auto mag_sign_if_positive_is() {
+    return typename MagSignIfPositiveIs<IsPositive>::type{};
+}
+
 // Handy little utility to turn an arbitrary floating point number into a Magnitude.
 template <typename T, typename ValConst>
 struct MagFromFloatingPointConstantImpl {
@@ -130,19 +139,10 @@ struct MagFromFloatingPointConstantImpl {
         return result;
     }
 
-    template <bool IsPositive>
-    static constexpr auto mag_sign() {
-        return Magnitude<>{};
-    }
-
-    template <>
-    static constexpr auto mag_sign<false>() {
-        return Magnitude<Negative>{};
-    }
-
     static constexpr auto value() {
         constexpr auto params = breakdown();
-        return mag_sign<params.is_positive>() * mag<params.coeff>() * pow<params.exp>(mag<2>());
+        return mag_sign_if_positive_is<params.is_positive>() * mag<params.coeff>() *
+               pow<params.exp>(mag<2>());
     }
 
     using type = decltype(value() * mag<1>());  // Multiply by 1 to remove `const`.

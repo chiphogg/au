@@ -140,13 +140,22 @@ struct FlattenAsImplHelper;
 template <template <class...> class Pack, typename ResultPack>
 struct FlattenAsImplHelper<Pack, ResultPack> : stdx::type_identity<ResultPack> {};
 
-template <template <class...> class Pack, typename... ResultsSoFar, typename T, typename... Ps>
-struct FlattenAsImplHelper<Pack, Pack<ResultsSoFar...>, T, Ps...>
-    : FlattenAsImplHelper<Pack, Pack<ResultsSoFar..., T>, Ps...> {};
+// Skip empty packs.
+template <template <class...> class Pack, typename ResultPack, typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, Pack<>, Us...>
+    : FlattenAsImplHelper<Pack, ResultPack, Us...> {};
 
-template <template <class...> class Pack, typename... ResultsSoFar, typename... Ts, typename... Ps>
-struct FlattenAsImplHelper<Pack, Pack<ResultsSoFar...>, Pack<Ts...>, Ps...>
-    : FlattenAsImplHelper<Pack, Pack<ResultsSoFar...>, Ts..., Ps...> {};
+template <template <class...> class Pack,
+          typename ResultPack,
+          typename T,
+          typename... Ts,
+          typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, Pack<T, Ts...>, Us...>
+    : FlattenAsImplHelper<Pack, ResultPack, T, Pack<Ts...>, Us...> {};
+
+template <template <class...> class Pack, typename ResultPack, typename T, typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, T, Us...>
+    : FlattenAsImplHelper<Pack, Concat<ResultPack, Pack<T>>, Us...> {};
 
 template <template <class...> class Pack, typename... Ts>
 struct FlattenAsImpl : FlattenAsImplHelper<Pack, Pack<>, Ts...> {};
