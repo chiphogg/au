@@ -66,17 +66,6 @@ constexpr bool meets_threshold(T x) {
     return x >= threshold;
 }
 
-// Check overflow risk from below.
-template <bool CanOverflowBelow, typename Op>
-struct OverflowBelowRiskAcceptablyLowImpl
-    : stdx::bool_constant<meets_threshold(MinGood<Op>::value())> {};
-template <typename Op>
-struct OverflowBelowRiskAcceptablyLowImpl<false, Op> : std::true_type {};
-
-template <typename Op>
-struct OverflowBelowRiskAcceptablyLow
-    : OverflowBelowRiskAcceptablyLowImpl<CanOverflowBelow<Op>::value, Op> {};
-
 // Check overflow risk from above.
 template <bool CanOverflowAbove, typename Op>
 struct OverflowAboveRiskAcceptablyLowImpl
@@ -88,10 +77,17 @@ template <typename Op>
 struct OverflowAboveRiskAcceptablyLow
     : OverflowAboveRiskAcceptablyLowImpl<CanOverflowAbove<Op>::value, Op> {};
 
-// Check overflow risk.
+// Check overflow risk, using "overflow above" risk only.
+//
+// We currently do not check the risk for overflowing _below_, because it is overwhelmingly common
+// in practice for people to initialize an unsigned integer variable with a constant of a signed
+// type whose value is known to be positive.  While we would love to be able to prevent implicit
+// signed to unsigned conversions --- and, while our overflow detection machinery can easily do so
+// --- we simply cannot afford to break that many _valid_ use cases to catch those invalid ones.
+//
+// That said, the _runtime_ overflow checkers _do_ check both above and below.
 template <typename Op>
-struct OverflowRiskAcceptablyLow
-    : stdx::conjunction<OverflowBelowRiskAcceptablyLow<Op>, OverflowAboveRiskAcceptablyLow<Op>> {};
+struct OverflowRiskAcceptablyLow : OverflowAboveRiskAcceptablyLow<Op> {};
 
 // Check truncation risk.
 template <typename Op>
