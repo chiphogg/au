@@ -166,17 +166,17 @@ TEST(ConstructionPolicy, AlwaysOkForSameRepAndEquivalentUnit) {
 }
 
 TEST(ConstructionPolicy, NotOkForNegativeRatioAndUnsignedDestination) {
-    EXPECT_THAT(
-        (ConstructionPolicy<NegativeDegrees, uint8_t>::PermitImplicitFrom<Degrees, int8_t>::value),
-        IsFalse());
-    EXPECT_THAT(
-        (ConstructionPolicy<NegativeDegrees, uint8_t>::PermitImplicitFrom<Degrees, uint8_t>::value),
-        IsFalse());
+    EXPECT_THAT((ConstructionPolicy<NegativeDegrees, uint16_t>::PermitImplicitFrom<Degrees,
+                                                                                   int16_t>::value),
+                IsFalse());
+    EXPECT_THAT((ConstructionPolicy<NegativeDegrees,
+                                    uint16_t>::PermitImplicitFrom<Degrees, uint16_t>::value),
+                IsFalse());
 
     // Make sure it's explicitly the unsigned _destination_ that we were forbidding.
-    ASSERT_THAT(
-        (ConstructionPolicy<NegativeDegrees, int8_t>::PermitImplicitFrom<Degrees, uint8_t>::value),
-        IsTrue());
+    ASSERT_THAT((ConstructionPolicy<NegativeDegrees, int16_t>::PermitImplicitFrom<Degrees,
+                                                                                  uint16_t>::value),
+                IsTrue());
 }
 
 TEST(ConstructionPolicy, OkForIntegralRepAndEquivalentUnit) {
