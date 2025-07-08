@@ -261,13 +261,26 @@ struct ValueTimesRatioIsNotIntegerImplForInt
                          ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorFits<T, M>> {};
 
 template <typename T, typename M>
-struct ValueTimesRatioIsNotIntegerImplForFloat {
+struct ValueTimesRatioIsNotIntegerImplForFloatGeneric {
     static constexpr bool would_value_truncate(const T &value) {
-        const auto result = value * get_value<RealPart<T>>(NumeratorT<M>{}) /
-                            get_value<RealPart<T>>(DenominatorT<M>{});
+        const auto result = value * get_value<RealPart<T>>(M{});
         return std::trunc(result) != result;
     }
 };
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloatDivideByInteger {
+    static constexpr bool would_value_truncate(const T &value) {
+        const auto result = value / get_value<RealPart<T>>(MagInverseT<M>{});
+        return std::trunc(result) != result;
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloat
+    : std::conditional_t<IsInteger<MagInverseT<M>>::value,
+                         ValueTimesRatioIsNotIntegerImplForFloatDivideByInteger<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForFloatGeneric<T, M>> {};
 
 template <typename T, typename M>
 struct ValueTimesRatioIsNotIntegerImpl

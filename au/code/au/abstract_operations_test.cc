@@ -98,6 +98,15 @@ TEST(OpSequence, AppliesOperationsInSequence) {
                 SameTypeAndValue(6.0));
 }
 
+TEST(OpSequence, EliminatesRedundantOperations) {
+    StaticAssertTypeEq<
+        OpSequence<StaticCast<int, float>,
+                   OpSequence<OpSequence<OpSequence<>>>,
+                   OpSequence<MultiplyTypeBy<float, decltype(mag<2>())>>,
+                   OpSequence<>>,
+        OpSequence<StaticCast<int, float>, MultiplyTypeBy<float, decltype(mag<2>())>>>();
+}
+
 }  // namespace
 }  // namespace detail
 }  // namespace au

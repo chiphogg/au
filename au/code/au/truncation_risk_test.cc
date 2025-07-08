@@ -253,18 +253,23 @@ TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerUsesModOfDenominatorForIntege
 }
 
 TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatTypes) {
-    using FloatTimesThirteenSeventhsIsNotInteger =
+    using FloatTimesOneSeventhIsNotInteger =
         ValueTimesRatioIsNotInteger<float, decltype(mag<1>() / mag<7>())>;
     for (int i = 0; i < 1000; ++i) {
         const auto f = static_cast<float>(i) * 7.f;
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f), IsFalse())
+        EXPECT_THAT(FloatTimesOneSeventhIsNotInteger::would_value_truncate(f), IsFalse())
             << "i = " << i << ", f = " << f;
 
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f - 1.f),
-                    IsTrue());
-        EXPECT_THAT(FloatTimesThirteenSeventhsIsNotInteger::would_value_truncate(f + 1.f),
-                    IsTrue());
+        EXPECT_THAT(FloatTimesOneSeventhIsNotInteger::would_value_truncate(f - 1.f), IsTrue());
+        EXPECT_THAT(FloatTimesOneSeventhIsNotInteger::would_value_truncate(f + 1.f), IsTrue());
     }
+}
+
+TEST(WillValueTruncate, FalseForVeryBigFloatInputThatProducesIntegerAfterDividing) {
+    using FloatInchesToMiles =
+        TruncationRiskFor<OpSequence<MultiplyTypeBy<float, decltype(mag<1>() / mag<63360>())>,
+                                     StaticCast<float, int>>>;
+    EXPECT_THAT(FloatInchesToMiles::would_value_truncate(-2.47875092e+10f), IsFalse());
 }
 
 TEST(WillValueTruncate, AssumedAlwaysTrueIfCannotAssessTruncationRisk) {
