@@ -142,6 +142,36 @@ struct TruncationRiskForImpl<MultiplyTypeBy<T, M>>
     : TruncationRiskForMultiplyByAssumingScalar<RealPart<T>, M> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger<T, M>` section:
+
+template <typename T, typename M>
+struct TruncationRiskForDivideNonArithmeticByInteger
+    : stdx::type_identity<CannotAssessTruncationRiskFor<T>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideIntegralByInteger
+    : std::conditional<(get_value_result<T>(M{}).outcome ==
+                        MagRepresentationOutcome::ERR_CANNOT_FIT),
+                       ValueIsNotZero<T>,
+                       ValueTimesRatioIsNotInteger<T, MagInverseT<M>>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideArithmeticByInteger
+    : std::conditional_t<std::is_floating_point<T>::value,
+                         stdx::type_identity<NoTruncationRisk<T>>,
+                         TruncationRiskForDivideIntegralByInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideByIntAssumingScalar
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForDivideArithmeticByInteger<T, M>,
+                         TruncationRiskForDivideNonArithmeticByInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForImpl<DivideTypeByInteger<T, M>>
+    : TruncationRiskForDivideByIntAssumingScalar<RealPart<T>, M> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence<...>` section:
 
 // A little helper to simplify instances of `ValueTimesRatioIsNotInteger` that turn out to be
@@ -180,11 +210,19 @@ template <template <class> class Risk, typename T, typename M>
 struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<RealPart<T>>>
     : stdx::type_identity<Risk<RealPart<T>>> {};
 
+template <template <class> class Risk, typename T, typename M>
+struct UpdateRiskImpl<DivideTypeByInteger<T, M>, Risk<RealPart<T>>>
+    : stdx::type_identity<Risk<RealPart<T>>> {};
+
 template <typename T, typename M1, typename M2>
 struct UpdateRiskImpl<MultiplyTypeBy<T, M1>, ValueTimesRatioIsNotInteger<RealPart<T>, M2>>
     : std::conditional<IsRational<M1>::value,
                        ReduceValueTimesRatioIsNotInteger<RealPart<T>, MagProductT<M1, M2>>,
                        ValueIsNotZero<RealPart<T>>> {};
+
+template <typename T, typename M1, typename M2>
+struct UpdateRiskImpl<DivideTypeByInteger<T, M1>, ValueTimesRatioIsNotInteger<RealPart<T>, M2>>
+    : stdx::type_identity<ReduceValueTimesRatioIsNotInteger<RealPart<T>, MagQuotientT<M2, M1>>> {};
 
 //
 // `BiggestRiskImpl<Risk1, Risk2>` is a helper that computes the "biggest" risk between two risks.

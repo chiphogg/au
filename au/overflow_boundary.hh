@@ -736,6 +736,25 @@ struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
     : MaxGoodImplForMultiplyTypeByUsingRealPart<RealPart<T>, M, Limits> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger<T, M>` implementation.
+
+//
+// `MinGood<DivideTypeByInteger<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImpl<DivideTypeByInteger<T, M>, Limits>
+    : MinGoodImpl<MultiplyTypeBy<T, MagInverseT<M>>, Limits> {};
+
+//
+// `MaxGood<DivideTypeByInteger<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImpl<DivideTypeByInteger<T, M>, Limits>
+    : MaxGoodImpl<MultiplyTypeBy<T, MagInverseT<M>>, Limits> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence<Ops...>` implementation.
 
 //

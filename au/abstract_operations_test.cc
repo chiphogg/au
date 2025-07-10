@@ -55,16 +55,33 @@ TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByIntegerMag) {
                 SameTypeAndValue(int16_t{6}));
 }
 
-TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByInverseIntegerMag) {
-    EXPECT_THAT((MultiplyTypeBy<uint16_t, decltype(mag<1>() / mag<3>())>::apply_to(uint16_t{6})),
-                SameTypeAndValue(uint16_t{2}));
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger` section:
+
+TEST(DivideTypeByInteger, InputTypeIsTypeParameter) {
+    StaticAssertTypeEq<OpInput<DivideTypeByInteger<int16_t, decltype(mag<2>())>>, int16_t>();
+    StaticAssertTypeEq<OpInput<DivideTypeByInteger<uint32_t, decltype(mag<3>() / mag<4>())>>,
+                       uint32_t>();
 }
 
-TEST(MultiplyTypeBy, IntegerTypeCanBeMultipliedByInverseIntegerTooBigToRepresent) {
-    EXPECT_THAT((MultiplyTypeBy<uint8_t, decltype(mag<1>() / mag<256>())>::apply_to(uint8_t{1})),
-                SameTypeAndValue(uint8_t{0}));
+TEST(DivideTypeByInteger, OutputTypeIsTypeParameter) {
+    StaticAssertTypeEq<OpOutput<DivideTypeByInteger<int16_t, decltype(mag<2>())>>, int16_t>();
+    StaticAssertTypeEq<OpOutput<DivideTypeByInteger<double, decltype(mag<3>() / mag<4>())>>,
+                       double>();
+}
 
-    EXPECT_THAT((MultiplyTypeBy<float, decltype(-pow<-40>(mag<10>()))>::apply_to(float{1.0f})),
+TEST(DivideTypeByInteger, IntegerTypeCanBeDividedByIntegerMag) {
+    EXPECT_THAT((DivideTypeByInteger<uint16_t, decltype(mag<3>())>::apply_to(uint16_t{16})),
+                SameTypeAndValue(uint16_t{5}));
+}
+
+TEST(DivideTypeByInteger, IntegerTypeDividedByIntegerTooBigToRepresentGivesZero) {
+    EXPECT_THAT((DivideTypeByInteger<uint8_t, decltype(mag<256>())>::apply_to(uint8_t{1})),
+                SameTypeAndValue(uint8_t{0}));
+}
+
+TEST(DivideTypeByInteger, FloatingPointTypeDividedByNumberTooBigToRepresentGivesZero) {
+    EXPECT_THAT((DivideTypeByInteger<float, decltype(-pow<40>(mag<10>()))>::apply_to(float{1.0f})),
                 SameTypeAndValue(0.0f));
 }
 

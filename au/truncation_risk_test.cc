@@ -85,7 +85,7 @@ TEST(TruncationRiskFor, MultiplyAnythingByIntNeverTruncates) {
                        NoTruncationRisk<float>>();
 }
 
-TEST(TruncationRiskFor, DividingFloatByIntNeverTruncates) {
+TEST(TruncationRiskFor, MultiplyFloatByInverseIntNeverTruncates) {
     StaticAssertTypeEq<TruncationRiskFor<MultiplyTypeBy<float, decltype(mag<1>() / mag<2>())>>,
                        NoTruncationRisk<float>>();
 
@@ -109,16 +109,28 @@ TEST(TruncationRiskFor, MultiplyFloatByIrrationalNeverTruncates) {
                        NoTruncationRisk<double>>();
 }
 
+//
+// `DivideTypeByInteger` section:
+//
+
+TEST(TruncationRiskFor, DividingFloatByIntNeverTruncates) {
+    StaticAssertTypeEq<TruncationRiskFor<DivideTypeByInteger<float, decltype(mag<2>())>>,
+                       NoTruncationRisk<float>>();
+
+    StaticAssertTypeEq<TruncationRiskFor<DivideTypeByInteger<double, decltype(mag<3456>())>>,
+                       NoTruncationRisk<double>>();
+}
+
 TEST(TruncationRiskFor, DivideIntByIntTruncatesNumbersNotDivisibleByIt) {
-    StaticAssertTypeEq<TruncationRiskFor<MultiplyTypeBy<int16_t, decltype(mag<1>() / mag<3>())>>,
+    StaticAssertTypeEq<TruncationRiskFor<DivideTypeByInteger<int16_t, decltype(mag<3>())>>,
                        ValueDivIntIsNotInteger<int16_t, decltype(mag<3>())>>();
 
-    StaticAssertTypeEq<TruncationRiskFor<MultiplyTypeBy<uint32_t, decltype(mag<1>() / mag<432>())>>,
+    StaticAssertTypeEq<TruncationRiskFor<DivideTypeByInteger<uint32_t, decltype(mag<432>())>>,
                        ValueDivIntIsNotInteger<uint32_t, decltype(mag<432>())>>();
 }
 
 TEST(TruncationRiskFor, DivideIntByTooBigIntGivesValuesIsNotZero) {
-    StaticAssertTypeEq<TruncationRiskFor<MultiplyTypeBy<uint8_t, decltype(mag<1>() / mag<256>())>>,
+    StaticAssertTypeEq<TruncationRiskFor<DivideTypeByInteger<uint8_t, decltype(mag<256>())>>,
                        ValueIsNotZero<uint8_t>>();
 }
 
@@ -314,6 +326,10 @@ TEST(UpdateRisk, AnyOpBeforeCannotAssessTruncationRiskUpdatesInputType) {
     StaticAssertTypeEq<
         UpdateRisk<MultiplyTypeBy<int, decltype(mag<2>())>, CannotAssessTruncationRiskFor<int>>,
         CannotAssessTruncationRiskFor<int>>();
+
+    StaticAssertTypeEq<UpdateRisk<DivideTypeByInteger<float, decltype(mag<3>())>,
+                                  CannotAssessTruncationRiskFor<float>>,
+                       CannotAssessTruncationRiskFor<float>>();
 }
 
 TEST(UpdateRisk, AnyOpBeforeValueIsNotZeroIsValueIsNotZero) {
@@ -349,6 +365,14 @@ TEST(UpdateRisk, AnyOpBeforeValueIsNotZeroIsValueIsNotZero) {
 
     StaticAssertTypeEq<
         UpdateRisk<MultiplyTypeBy<float, decltype(PI / mag<180>())>, ValueIsNotZero<float>>,
+        ValueIsNotZero<float>>();
+
+    StaticAssertTypeEq<
+        UpdateRisk<DivideTypeByInteger<int, decltype(mag<2>())>, ValueIsNotZero<int>>,
+        ValueIsNotZero<int>>();
+
+    StaticAssertTypeEq<
+        UpdateRisk<DivideTypeByInteger<float, decltype(mag<2>())>, ValueIsNotZero<float>>,
         ValueIsNotZero<float>>();
 }
 
@@ -387,6 +411,14 @@ TEST(UpdateRisk, AnyOpBeforeNoTruncationRiskIsNoTruncationRisk) {
     StaticAssertTypeEq<
         UpdateRisk<MultiplyTypeBy<float, decltype(PI / mag<180>())>, NoTruncationRisk<float>>,
         NoTruncationRisk<float>>();
+
+    StaticAssertTypeEq<
+        UpdateRisk<DivideTypeByInteger<int, decltype(mag<2>())>, NoTruncationRisk<int>>,
+        NoTruncationRisk<int>>();
+
+    StaticAssertTypeEq<
+        UpdateRisk<DivideTypeByInteger<float, decltype(mag<2>())>, NoTruncationRisk<float>>,
+        NoTruncationRisk<float>>();
 }
 
 TEST(UpdateRisk, StaticCastIntToFloatBeforeValueIsNotIntegerIsNoTruncationRisk) {
@@ -402,7 +434,7 @@ TEST(UpdateRisk, MultiplyFloatByIntBeforeValueIsNotIntegerIsValuesNotSomeInteger
 
 TEST(UpdateRisk, DivideFloatByIntBeforeValueIsNotIntegerIsValuesNotSomeIntegerTimes) {
     StaticAssertTypeEq<
-        UpdateRisk<MultiplyTypeBy<float, decltype(mag<1>() / mag<6>())>, ValueIsNotInteger<float>>,
+        UpdateRisk<DivideTypeByInteger<float, decltype(mag<6>())>, ValueIsNotInteger<float>>,
         ValueDivIntIsNotInteger<float, decltype(mag<6>())>>();
 }
 
@@ -438,7 +470,7 @@ TEST(UpdateRisk, MultiplyFloatByIntBeforeValueTimesIntIsNotIntegerMultipliesFact
 }
 
 TEST(UpdateRisk, DivideFloatByIntBeforeValueTimesIntIsNotIntegerMakesFraction) {
-    StaticAssertTypeEq<UpdateRisk<MultiplyTypeBy<float, decltype(mag<1>() / mag<6>())>,
+    StaticAssertTypeEq<UpdateRisk<DivideTypeByInteger<float, decltype(mag<6>())>,
                                   ValueTimesIntIsNotInteger<float, decltype(mag<7>())>>,
                        ValueTimesRatioIsNotInteger<float, decltype(mag<7>() / mag<6>())>>();
 }

@@ -127,16 +127,18 @@ using ImplicitConversionPolicy =
 
 enum class MagKind {
     DEFAULT,
+    INTEGER_DIVIDE,
     NONTRIVIAL_RATIONAL,
 };
 
 template <typename M>
 constexpr MagKind mag_kind_for(M) {
-    return stdx::disjunction<IsInteger<M>,
-                             IsInteger<MagInverseT<M>>,
-                             stdx::negation<IsRational<M>>>::value
-               ? MagKind::DEFAULT
-               : MagKind::NONTRIVIAL_RATIONAL;
+    if (stdx::conjunction<IsRational<M>,
+                          stdx::negation<std::is_same<DenominatorT<M>, Magnitude<>>>>::value) {
+        return std::is_same<Abs<NumeratorT<M>>, Magnitude<>>::value ? MagKind::INTEGER_DIVIDE
+                                                                    : MagKind::NONTRIVIAL_RATIONAL;
+    }
+    return MagKind::DEFAULT;
 }
 
 template <typename T, typename Mag, MagKind>
@@ -146,10 +148,14 @@ using ApplicationStrategyFor =
     typename ApplicationStrategyForImpl<T, Mag, mag_kind_for(Mag{})>::type;
 
 template <typename T, typename Mag>
+struct ApplicationStrategyForImpl<T, Mag, MagKind::INTEGER_DIVIDE>
+    : stdx::type_identity<DivideTypeByInteger<T, MagProductT<Sign<Mag>, DenominatorT<Mag>>>> {};
+
+template <typename T, typename Mag>
 struct ApplicationStrategyForImpl<T, Mag, MagKind::NONTRIVIAL_RATIONAL>
     : std::conditional<
           std::is_integral<T>::value,
-          OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeBy<T, DenominatorT<Mag>>>,
+          OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeByInteger<T, DenominatorT<Mag>>>,
           MultiplyTypeBy<T, Mag>> {};
 
 //
