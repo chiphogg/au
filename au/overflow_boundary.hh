@@ -694,29 +694,16 @@ struct MinGoodImpl<MultiplyTypeBy<T, M>, Limits>
 //
 
 template <typename T, typename M, typename Limits>
-struct MaxGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt
+struct MaxGoodImplForMultiplyCompatibleTypeBy
     : std::conditional<abs_is_probably_bigger_than_one<T>(M{}),
                        HighestOfLimitsDividedByValue<T, M, Limits>,
                        ClampHighestOfLimitsTimesInverseValue<T, M, Limits>> {};
 
 template <typename T, typename M, typename Limits>
-struct MaxGoodImplForMultiplyTypeByNeitherIntNorInverseInt
-    : std::conditional_t<
-          IsCompatibleApartFromMaybeOverflow<T, M>::value,
-          MaxGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt<T, M, Limits>,
-          stdx::type_identity<ValueIsZero<T>>> {};
-
-template <typename T, typename M, typename Limits>
-struct MaxGoodImplForMultiplyTypeByNonInteger
-    : std::conditional_t<IsInteger<MagInverseT<M>>::value,
-                         stdx::type_identity<ClampHighestOfLimitsTimesInverseValue<T, M, Limits>>,
-                         MaxGoodImplForMultiplyTypeByNeitherIntNorInverseInt<T, M, Limits>> {};
-
-template <typename T, typename M, typename Limits>
 struct MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor
-    : std::conditional_t<IsInteger<M>::value,
-                         stdx::type_identity<HighestOfLimitsDividedByValue<T, M, Limits>>,
-                         MaxGoodImplForMultiplyTypeByNonInteger<T, M, Limits>> {};
+    : std::conditional_t<IsCompatibleApartFromMaybeOverflow<T, M>::value,
+                         MaxGoodImplForMultiplyCompatibleTypeBy<T, M, Limits>,
+                         stdx::type_identity<ValueIsZero<T>>> {};
 
 template <typename T, typename M, typename Limits>
 struct MaxGoodImplForMultiplyTypeByUsingRealPart
@@ -755,8 +742,19 @@ struct MinGoodImpl<DivideTypeByInteger<T, M>, Limits>
 //
 
 template <typename T, typename M, typename Limits>
+struct MaxGoodImplForDivideTypeByIntegerAssumingSignedTypeOrPositiveFactor
+    : stdx::type_identity<ClampHighestOfLimitsTimesInverseValue<T, MagInverseT<M>, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForDivideTypeByIntegerUsingRealPart
+    : std::conditional_t<
+          (is_definitely_unsigned<T>() && !IsPositive<M>::value),
+          stdx::type_identity<ValueIsZero<T>>,
+          MaxGoodImplForDivideTypeByIntegerAssumingSignedTypeOrPositiveFactor<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
 struct MaxGoodImpl<DivideTypeByInteger<T, M>, Limits>
-    : MaxGoodImpl<MultiplyTypeBy<T, MagInverseT<M>>, Limits> {};
+    : MaxGoodImplForDivideTypeByIntegerUsingRealPart<RealPart<T>, M, Limits> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `OpSequence<Ops...>` implementation.

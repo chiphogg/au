@@ -1497,13 +1497,13 @@ TEST(OpSequence, MaxGoodForSequenceOfSingleOpIsMaxGoodForThatOp) {
 }
 
 TEST(OpSequence, MaxGoodForDivideThenNarrowIsLimitsOfTypeIfDivisorIsBigEnough) {
-    EXPECT_THAT(max_good_value(op_sequence(multiply_type_by<uint16_t>(mag<1>() / mag<1000>()),
+    EXPECT_THAT(max_good_value(op_sequence(divide_type_by_integer<uint16_t>(mag<1000>()),
                                            StaticCast<uint16_t, uint8_t>{})),
                 SameTypeAndValue(std::numeric_limits<uint16_t>::max()));
 }
 
 TEST(OpSequence, MaxGoodForDivideThenNarrowIsScaledDownDestinationBoundIfDivisorIsSmallEnough) {
-    EXPECT_THAT(max_good_value(op_sequence(multiply_type_by<uint16_t>(mag<1>() / mag<10>()),
+    EXPECT_THAT(max_good_value(op_sequence(divide_type_by_integer<uint16_t>(mag<10>()),
                                            StaticCast<uint16_t, uint8_t>{})),
                 SameTypeAndValue(uint16_t{2550}));
 }
@@ -1520,7 +1520,7 @@ TEST(OpSequence, MaxGoodIsZeroIfUnsignedTypeFoundOnBothSidesOfNegativeMultiplica
     EXPECT_THAT(max_good_value(op_sequence(StaticCast<int64_t, float>{},
                                            StaticCast<float, uint32_t>{},
                                            StaticCast<uint32_t, int16_t>{},
-                                           multiply_type_by<int16_t>(-mag<1>() / mag<234>()),
+                                           divide_type_by_integer<int16_t>(-mag<234>()),
                                            StaticCast<int16_t, double>{},
                                            StaticCast<double, uint8_t>{},
                                            StaticCast<uint8_t, int32_t>{})),
@@ -1544,7 +1544,7 @@ TEST(OpSequence, DividingByTooBigNumberResetsTheLimitToTheMax) {
     // expanded limit, and not the tiny limit of the original type.
     EXPECT_THAT(max_good_value(op_sequence(StaticCast<int8_t, int>{},
                                            multiply_type_by<int>(mag<3>()),
-                                           multiply_type_by<int>(mag<1>() / pow<400>(mag<10>())),
+                                           divide_type_by_integer<int>(pow<400>(mag<10>())),
                                            StaticCast<int, int8_t>{})),
                 SameTypeAndValue(std::numeric_limits<int8_t>::max()));
 }
@@ -1577,7 +1577,7 @@ TEST(CanOverflowAbove, TrueForOverflowableStdComplex) {
 }
 
 TEST(CanOverflowAbove, FalseIfValueCannotBeBigEnoughToGoOutsideBounds) {
-    EXPECT_THAT(can_overflow_above(multiply_type_by<uint8_t>(mag<1>() / mag<8>())), IsFalse());
+    EXPECT_THAT(can_overflow_above(divide_type_by_integer<uint8_t>(mag<8>())), IsFalse());
     EXPECT_THAT(can_overflow_above(multiply_type_by<double>(-mag<1>() / PI)), IsFalse());
 }
 
