@@ -658,32 +658,26 @@ struct MaxGoodImpl<StaticCast<T, U>, ULimit> : MaxGoodImplForStaticCastUsingReal
 // `MinGood<MultiplyTypeBy<T, M>>` implementation cluster.
 //
 
+template <typename T, typename M>
+constexpr bool abs_is_probably_bigger_than_one(M) {
+    constexpr auto abs_value_result = get_value_result<T>(Abs<M>{});
+    return abs_value_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT ||
+           abs_value_result.value >= T{1};
+}
+
 // Assume `T` is non-integral, for now.  If `T` were integral, then (for now) we would only need to
 // cover multiplying or dividing by other integers, and other structs below cover these.
 template <typename T, typename M, typename Limits>
-struct MinGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt
-    : std::conditional<(get_value<T>(Abs<M>{}) > T{1}),
+struct MinGoodImplForMultiplyCompatibleTypeBy
+    : std::conditional<abs_is_probably_bigger_than_one<T>(M{}),
                        LowestOfLimitsDividedByValue<T, M, Limits>,
                        ClampLowestOfLimitsTimesInverseValue<T, M, Limits>> {};
 
 template <typename T, typename M, typename Limits>
-struct MinGoodImplForMultiplyTypeByNeitherIntNorInverseInt
-    : std::conditional_t<
-          IsCompatibleApartFromMaybeOverflow<T, M>::value,
-          MinGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt<T, M, Limits>,
-          stdx::type_identity<ValueIsZero<T>>> {};
-
-template <typename T, typename M, typename Limits>
-struct MinGoodImplForMultiplyTypeByNonInteger
-    : std::conditional_t<IsInteger<MagInverseT<M>>::value,
-                         stdx::type_identity<ClampLowestOfLimitsTimesInverseValue<T, M, Limits>>,
-                         MinGoodImplForMultiplyTypeByNeitherIntNorInverseInt<T, M, Limits>> {};
-
-template <typename T, typename M, typename Limits>
 struct MinGoodImplForMultiplyTypeByAssumingSigned
-    : std::conditional_t<IsInteger<M>::value,
-                         stdx::type_identity<LowestOfLimitsDividedByValue<T, M, Limits>>,
-                         MinGoodImplForMultiplyTypeByNonInteger<T, M, Limits>> {};
+    : std::conditional_t<IsCompatibleApartFromMaybeOverflow<T, M>::value,
+                         MinGoodImplForMultiplyCompatibleTypeBy<T, M, Limits>,
+                         stdx::type_identity<ValueIsZero<T>>> {};
 
 template <typename T, typename M, typename Limits>
 struct MinGoodImplForMultiplyTypeByUsingRealPart
@@ -701,7 +695,7 @@ struct MinGoodImpl<MultiplyTypeBy<T, M>, Limits>
 
 template <typename T, typename M, typename Limits>
 struct MaxGoodImplForMultiplyCompatibleTypeByNeitherIntNorInverseInt
-    : std::conditional<(get_value<T>(Abs<M>{}) > T{1}),
+    : std::conditional<abs_is_probably_bigger_than_one<T>(M{}),
                        HighestOfLimitsDividedByValue<T, M, Limits>,
                        ClampHighestOfLimitsTimesInverseValue<T, M, Limits>> {};
 
@@ -743,8 +737,18 @@ struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
 //
 
 template <typename T, typename M, typename Limits>
+struct MinGoodImplForDivideTypeByIntegerAssumingSigned
+    : stdx::type_identity<ClampLowestOfLimitsTimesInverseValue<T, MagInverseT<M>, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForDivideTypeByIntegerUsingRealPart
+    : std::conditional_t<is_definitely_unsigned<T>(),
+                         stdx::type_identity<ValueIsZero<T>>,
+                         MinGoodImplForDivideTypeByIntegerAssumingSigned<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
 struct MinGoodImpl<DivideTypeByInteger<T, M>, Limits>
-    : MinGoodImpl<MultiplyTypeBy<T, MagInverseT<M>>, Limits> {};
+    : MinGoodImplForDivideTypeByIntegerUsingRealPart<RealPart<T>, M, Limits> {};
 
 //
 // `MaxGood<DivideTypeByInteger<T, M>>` implementation cluster.

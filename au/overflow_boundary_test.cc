@@ -1451,13 +1451,13 @@ TEST(OpSequence, MinGoodForSequenceOfSingleOpIsMinGoodForThatOp) {
 }
 
 TEST(OpSequence, MinGoodForDivideThenNarrowIsLimitsOfTypeIfDivisorIsBigEnough) {
-    EXPECT_THAT(min_good_value(op_sequence(multiply_type_by<int16_t>(mag<1>() / mag<1000>()),
+    EXPECT_THAT(min_good_value(op_sequence(divide_type_by_integer<int16_t>(mag<1000>()),
                                            StaticCast<int16_t, int8_t>{})),
                 SameTypeAndValue(std::numeric_limits<int16_t>::min()));
 }
 
 TEST(OpSequence, MinGoodForDivideThenNarrowIsScaledUpDestinationBoundIfDivisorIsSmallEnough) {
-    EXPECT_THAT(min_good_value(op_sequence(multiply_type_by<int16_t>(mag<1>() / mag<10>()),
+    EXPECT_THAT(min_good_value(op_sequence(divide_type_by_integer<int16_t>(mag<10>()),
                                            StaticCast<int16_t, int8_t>{})),
                 SameTypeAndValue(int16_t{-1280}));
 }
