@@ -15,6 +15,7 @@
 #include "au/overflow_boundary.hh"
 
 #include <complex>
+#include <limits>
 
 #include "au/testing.hh"
 #include "gmock/gmock.h"
@@ -43,7 +44,7 @@ struct NoLowerLimit {
 };
 
 template <typename T>
-struct LowerLimitIsZero : NoUpperLimit<T> {
+struct LowerLimitOfZero : NoUpperLimit<T> {
     static constexpr T lower() { return T{0}; }
 };
 
@@ -155,12 +156,12 @@ struct MagFromFloatingPointConstantImpl {
 
 template <typename Float>
 constexpr auto lowest_floating_point_as_mag() {
-    return MagFromFloatingPointConstantImpl<Float, ValueIsLowestInDestination<Float>>::value();
+    return MagFromFloatingPointConstantImpl<Float, ValueOfLowestInDestination<Float>>::value();
 }
 
 template <typename Float>
 constexpr auto highest_floating_point_as_mag() {
-    return MagFromFloatingPointConstantImpl<Float, ValueIsHighestInDestination<Float>>::value();
+    return MagFromFloatingPointConstantImpl<Float, ValueOfHighestInDestination<Float>>::value();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -369,13 +370,13 @@ TEST(StaticCast, MinGoodUnchangedWithExplicitLimitLessConstrainingThanExistingRe
 }
 
 TEST(StaticCast, MinGoodUnchangedForUnsignedDestinationAndExplicitLimitOfZero) {
-    EXPECT_THAT((MinGood<StaticCast<uint8_t, uint16_t>, LowerLimitIsZero<uint16_t>>::value()),
+    EXPECT_THAT((MinGood<StaticCast<uint8_t, uint16_t>, LowerLimitOfZero<uint16_t>>::value()),
                 Eq(MinGood<StaticCast<uint8_t, uint16_t>>::value()));
 
-    EXPECT_THAT((MinGood<StaticCast<int32_t, uint64_t>, LowerLimitIsZero<uint64_t>>::value()),
+    EXPECT_THAT((MinGood<StaticCast<int32_t, uint64_t>, LowerLimitOfZero<uint64_t>>::value()),
                 Eq(MinGood<StaticCast<int32_t, uint64_t>>::value()));
 
-    EXPECT_THAT((MinGood<StaticCast<double, uint32_t>, LowerLimitIsZero<uint32_t>>::value()),
+    EXPECT_THAT((MinGood<StaticCast<double, uint32_t>, LowerLimitOfZero<uint32_t>>::value()),
                 Eq(MinGood<StaticCast<double, uint32_t>>::value()));
 }
 

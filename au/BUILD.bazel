@@ -589,10 +589,6 @@ cc_test(
 
 cc_library(
     name = "stdx",
-    srcs = glob([
-        "stdx/*.cc",
-        "stdx/experimental/*.cc",
-    ]),
     hdrs = glob([
         "stdx/*.hh",
         "stdx/experimental/*.hh",
@@ -727,6 +723,7 @@ cc_test(
     size = "small",
     srcs = ["zero_test.cc"],
     deps = [
+        ":testing",
         ":zero",
         "@com_google_googletest//:gtest_main",
     ],
