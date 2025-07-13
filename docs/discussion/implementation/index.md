@@ -8,6 +8,9 @@ understand _how_ the library works, this is a good place to go.  Here's a rough 
   number it is (integer, rational, and so on), the runtime performance, and whether we can get exact
   answers.
 
+- **[Conversion Risks](./conversion_risks.md)**.  This doc covers the two main risks in unit
+  conversions --- namely, overflow and truncation --- and explains how Au mitigates them.
+
 - **[Vector Space Representations](./vector_space.md)**.  We're not talking about position vectors
   or velocity vectors!  There's a different kind of vector at the heart of every units library.
   This is the core foundational concept on which we built Au's implementation.
