@@ -19,6 +19,7 @@
 
 #include "au/abstract_operations.hh"
 #include "au/magnitude.hh"
+#include "au/operators.hh"
 #include "au/stdx/type_traits.hh"
 
 // These utilities help assess overflow risk for an operation `Op` by finding the minimum and
@@ -126,6 +127,31 @@ constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
 // (X) = any type
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Helpers to retrieve upper and lower limits of a type.
+
+// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
+template <typename T, typename Limits>
+struct UpperLimit {
+    static constexpr T value() { return Limits::upper(); }
+};
+template <typename T>
+struct UpperLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+
+// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limits>
+struct LowerLimit {
+    static constexpr T value() { return Limits::lower(); }
+};
+template <typename T>
+struct LowerLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Predicate helpers
 
 //
@@ -162,48 +188,16 @@ template <typename T, typename M>
 struct IsAbsProbablyBiggerThanOne
     : IsAbsProbablyBiggerThanOneHelper<T, M, get_value_result<T>(Abs<M>{}).outcome> {};
 
-// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
-// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
-template <typename T, typename Limits>
-struct UpperLimit {
-    static constexpr T value() { return Limits::upper(); }
-};
 template <typename T>
-struct UpperLimit<T, void> {
-    static constexpr T value() { return std::numeric_limits<T>::max(); }
-};
-
-// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
-// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
-template <typename T, typename Limits>
-struct LowerLimit {
-    static constexpr T value() { return Limits::lower(); }
-};
-template <typename T>
-struct LowerLimit<T, void> {
-    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
-};
-
-// `NegativeLowerLimit<T, Limits>::value()` returns `-LowerLimit<T, Limits>::value()`, unless
-// `LowerLimit<T, Limits>::value()` is `std::numeric_limits<T>::lowest()` _and_ `T` is a signed
-// integral type, in which case it returns `std::numeric_limits<T>::max()`.
-template <bool ShouldJustUseMax, typename T, typename Limits>
-struct NegativeLowerLimitImplIfShouldJustUseMaxIs {
-    static constexpr T value() { return -LowerLimit<T, Limits>::value(); }
-};
-template <typename T, typename Limits>
-struct NegativeLowerLimitImplIfShouldJustUseMaxIs<true, T, Limits> {
-    static constexpr T value() { return std::numeric_limits<T>::max(); }
-};
-template <typename T, typename Limits>
-struct NegativeLowerLimit
-    : NegativeLowerLimitImplIfShouldJustUseMaxIs<
-          stdx::conjunction<std::is_signed<T>,
-                            std::is_integral<T>,
-                            stdx::bool_constant<(LowerLimit<T, Limits>::value() ==
-                                                 std::numeric_limits<T>::lowest())>>::value,
-          T,
-          Limits> {};
+constexpr T clamped_negate(T x) {
+    if (Less{}(x, T{0}) && Less{}(x, -std::numeric_limits<T>::max())) {
+        return std::numeric_limits<T>::max();
+    }
+    if (Greater{}(x, T{0}) && Greater{}(x, -std::numeric_limits<T>::lowest())) {
+        return std::numeric_limits<T>::lowest();
+    }
+    return -x;
+}
 
 // `LimitsFor<Op, Limits>` produces a type which can be the `Limits` argument for some other op.
 template <typename Op, typename Limits>
@@ -369,12 +363,14 @@ struct ClampLowestOfLimitsTimesInverseValue {
     static constexpr T value() {
         constexpr auto ABS_DIVISOR = MagInverseT<Abs<M>>{};
 
-        constexpr T RELEVANT_LIMIT =
-            IsPositive<M>::value ? LowerLimit<T, Limits>::value() : -UpperLimit<T, Limits>::value();
+        constexpr T RELEVANT_LIMIT = IsPositive<M>::value
+                                         ? LowerLimit<T, Limits>::value()
+                                         : clamped_negate(UpperLimit<T, Limits>::value());
 
         constexpr T RELEVANT_BOUND =
-            IsPositive<M>::value ? divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR)
-                                 : -divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR);
+            IsPositive<M>::value
+                ? divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR)
+                : clamped_negate(divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR));
         constexpr bool SHOULD_CLAMP = RELEVANT_BOUND >= RELEVANT_LIMIT;
 
         // This value will be meaningless if `get_value_result<T>(ABS_DIVISOR).outcome` is not `OK`,
@@ -422,12 +418,14 @@ struct ClampHighestOfLimitsTimesInverseValue {
     static constexpr T value() {
         constexpr auto ABS_DIVISOR = MagInverseT<Abs<M>>{};
 
-        constexpr T RELEVANT_LIMIT = IsPositive<M>::value ? UpperLimit<T, Limits>::value()
-                                                          : NegativeLowerLimit<T, Limits>::value();
+        constexpr T RELEVANT_LIMIT = IsPositive<M>::value
+                                         ? UpperLimit<T, Limits>::value()
+                                         : clamped_negate(LowerLimit<T, Limits>::value());
 
         constexpr T RELEVANT_BOUND =
-            IsPositive<M>::value ? divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR)
-                                 : -divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR);
+            IsPositive<M>::value
+                ? divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR)
+                : clamped_negate(divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR));
         constexpr bool SHOULD_CLAMP = RELEVANT_BOUND <= RELEVANT_LIMIT;
 
         // This value will be meaningless if `get_value_result<T>(ABS_DIVISOR).outcome` is not `OK`,
