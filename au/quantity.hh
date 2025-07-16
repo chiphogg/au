@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "au/conversion_policy.hh"
+#include "au/conversion_strategy.hh"
 #include "au/fwd.hh"
 #include "au/operators.hh"
 #include "au/rep.hh"

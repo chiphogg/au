@@ -16,7 +16,7 @@
 
 #include <limits>
 
-#include "au/abstract_operations.hh"
+#include "au/conversion_strategy.hh"
 #include "au/magnitude.hh"
 #include "au/operators.hh"
 #include "au/overflow_boundary.hh"
@@ -30,16 +30,6 @@ namespace detail {
 
 // Chosen so as to allow populating a `QuantityI32<Hertz>` with an input in MHz.
 constexpr auto OVERFLOW_THRESHOLD = mag<2'147>();
-
-//
-// `ConversionForRepsAndFactor<OldRep, NewRep, Factor>` is the operation that takes a value of
-// `OldRep`, and produces the application of the magnitude `Factor` in the type `NewRep`.
-//
-template <typename OldRep, typename NewRep, typename Factor>
-struct ConversionForRepsAndFactorImpl;
-template <typename OldRep, typename NewRep, typename Factor>
-using ConversionForRepsAndFactor =
-    typename ConversionForRepsAndFactorImpl<OldRep, NewRep, Factor>::type;
 
 // `SettingPureRealFromMixedReal<A, B>` tests whether `A` is a pure real type, _and_ `B` is a type
 // that has a real _part_, but is not purely real (call it a "mixed-real" type).
@@ -117,78 +107,6 @@ template <typename Rep, typename ScaleFactor, typename SourceRep>
 using ImplicitConversionPolicy =
     stdx::conjunction<PassesConversionRiskCheck<Rep, ScaleFactor, SourceRep>,
                       stdx::negation<SettingPureRealFromMixedReal<Rep, SourceRep>>>;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// `ConversionForRepsAndFactor` implementation details.
-
-//
-// `ApplicationStrategyFor<T, Mag>` tells us how we should apply a magnitude `Mag` to a type `T`.
-//
-
-enum class MagKind {
-    DEFAULT,
-    INTEGER_DIVIDE,
-    NONTRIVIAL_RATIONAL,
-};
-
-template <typename M>
-constexpr MagKind mag_kind_for(M) {
-    if (stdx::conjunction<IsRational<M>,
-                          stdx::negation<std::is_same<DenominatorT<M>, Magnitude<>>>>::value) {
-        return std::is_same<Abs<NumeratorT<M>>, Magnitude<>>::value ? MagKind::INTEGER_DIVIDE
-                                                                    : MagKind::NONTRIVIAL_RATIONAL;
-    }
-    return MagKind::DEFAULT;
-}
-
-template <typename T, typename Mag, MagKind>
-struct ApplicationStrategyForImpl : stdx::type_identity<MultiplyTypeBy<T, Mag>> {};
-template <typename T, typename Mag>
-using ApplicationStrategyFor =
-    typename ApplicationStrategyForImpl<T, Mag, mag_kind_for(Mag{})>::type;
-
-template <typename T, typename Mag>
-struct ApplicationStrategyForImpl<T, Mag, MagKind::INTEGER_DIVIDE>
-    : stdx::type_identity<DivideTypeByInteger<T, MagProductT<Sign<Mag>, DenominatorT<Mag>>>> {};
-
-template <typename T, typename Mag>
-struct ApplicationStrategyForImpl<T, Mag, MagKind::NONTRIVIAL_RATIONAL>
-    : std::conditional<
-          std::is_integral<T>::value,
-          OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeByInteger<T, DenominatorT<Mag>>>,
-          MultiplyTypeBy<T, Mag>> {};
-
-//
-// `FullConversionImpl<OldRep, PromotedCommon, NewRep, Factor>` should resolve to the most efficient
-// sequence of operations for a conversion from `OldRep` to `NewRep`, with a magnitude `Factor`,
-// where `PromotedCommon` is the promoted type of the common type of `OldRep` and `NewRep`.
-//
-
-template <typename OldRep, typename PromotedCommon, typename NewRep, typename Factor>
-struct FullConversionImpl
-    : stdx::type_identity<OpSequence<StaticCast<OldRep, PromotedCommon>,
-                                     ApplicationStrategyFor<PromotedCommon, Factor>,
-                                     StaticCast<PromotedCommon, NewRep>>> {};
-
-template <typename OldRepIsPromotedCommon, typename NewRep, typename Factor>
-struct FullConversionImpl<OldRepIsPromotedCommon, OldRepIsPromotedCommon, NewRep, Factor>
-    : stdx::type_identity<OpSequence<ApplicationStrategyFor<OldRepIsPromotedCommon, Factor>,
-                                     StaticCast<OldRepIsPromotedCommon, NewRep>>> {};
-
-template <typename OldRep, typename NewRepIsPromotedCommon, typename Factor>
-struct FullConversionImpl<OldRep, NewRepIsPromotedCommon, NewRepIsPromotedCommon, Factor>
-    : stdx::type_identity<OpSequence<StaticCast<OldRep, NewRepIsPromotedCommon>,
-                                     ApplicationStrategyFor<NewRepIsPromotedCommon, Factor>>> {};
-
-template <typename Rep, typename Factor>
-struct FullConversionImpl<Rep, Rep, Rep, Factor>
-    : stdx::type_identity<ApplicationStrategyFor<Rep, Factor>> {};
-
-// To implement `ConversionForRepsAndFactor`, delegate to `FullConversionImpl`.
-template <typename OldRep, typename NewRep, typename Factor>
-struct ConversionForRepsAndFactorImpl
-    : FullConversionImpl<OldRep, PromotedType<std::common_type_t<OldRep, NewRep>>, NewRep, Factor> {
-};
 
 }  // namespace detail
 
