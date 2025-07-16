@@ -217,14 +217,14 @@ TEST(TruncationRiskFor, UsesScalarTypeToAssessRisk) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// `WillValueTruncate` section:
+// `WouldValueTruncate` section:
 
-TEST(WillValueTruncate, AlwaysFalseForNoTruncationRisk) {
+TEST(WouldValueTruncate, AlwaysFalseForNoTruncationRisk) {
     EXPECT_THAT(NoTruncationRisk<float>::would_value_truncate(3.1415f), IsFalse());
     EXPECT_THAT(NoTruncationRisk<int8_t>::would_value_truncate(int8_t{-128}), IsFalse());
 }
 
-TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroFloat) {
+TEST(WouldValueTruncate, OnlyFalseForZeroForValueIsNotZeroFloat) {
     EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(-1.23456e7f), IsTrue());
     EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(-9.87e-12), IsTrue());
 
@@ -234,7 +234,7 @@ TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroFloat) {
     EXPECT_THAT(ValueIsNotZero<float>::would_value_truncate(1.23456e7f), IsTrue());
 }
 
-TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroInt) {
+TEST(WouldValueTruncate, OnlyFalseForZeroForValueIsNotZeroInt) {
     EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{-128}), IsTrue());
     EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{-1}), IsTrue());
 
@@ -244,7 +244,7 @@ TEST(WillValueTruncate, OnlyFalseForZeroForValueIsNotZeroInt) {
     EXPECT_THAT(ValueIsNotZero<int8_t>::would_value_truncate(int8_t{127}), IsTrue());
 }
 
-TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerUsesModOfDenominatorForIntegerTypes) {
+TEST(WouldValueTruncate, ValueTimesRatioIsNotIntegerUsesModOfDenominatorForIntegerTypes) {
     using IntDiv3IsNotInteger = ValueTimesRatioIsNotInteger<int, decltype(mag<2>() / mag<3>())>;
 
     EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(-1000000), IsTrue());
@@ -264,7 +264,7 @@ TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerUsesModOfDenominatorForIntege
     EXPECT_THAT(IntDiv3IsNotInteger::would_value_truncate(301), IsTrue());
 }
 
-TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatTypes) {
+TEST(WouldValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatTypes) {
     using FloatTimesOneSeventhIsNotInteger =
         ValueTimesRatioIsNotInteger<float, decltype(mag<1>() / mag<7>())>;
     for (int i = 0; i < 1000; ++i) {
@@ -277,14 +277,14 @@ TEST(WillValueTruncate, ValueTimesRatioIsNotIntegerDividesByDenominatorForFloatT
     }
 }
 
-TEST(WillValueTruncate, FalseForVeryBigFloatInputThatProducesIntegerAfterDividing) {
+TEST(WouldValueTruncate, FalseForVeryBigFloatInputThatProducesIntegerAfterDividing) {
     using FloatInchesToMiles =
         TruncationRiskFor<OpSequence<MultiplyTypeBy<float, decltype(mag<1>() / mag<63360>())>,
                                      StaticCast<float, int>>>;
     EXPECT_THAT(FloatInchesToMiles::would_value_truncate(-2.47875092e+10f), IsFalse());
 }
 
-TEST(WillValueTruncate, AssumedAlwaysTrueIfCannotAssessTruncationRisk) {
+TEST(WouldValueTruncate, AssumedAlwaysTrueIfCannotAssessTruncationRisk) {
     using CannotAssessRisk = CannotAssessTruncationRiskFor<int>;
 
     EXPECT_THAT(CannotAssessRisk::would_value_truncate(0), IsTrue());
