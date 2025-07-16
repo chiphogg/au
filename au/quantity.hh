@@ -668,7 +668,7 @@ template <typename U, typename R, typename TargetUnitSlot>
 constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
     using Op =
         detail::ConversionForRepsAndFactor<R, R, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
-    return detail::would_input_produce_overflow<Op>(q.in(U{}));
+    return detail::would_value_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for overflow (new rep).
@@ -676,7 +676,7 @@ template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
 constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
     using Op = detail::
         ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
-    return detail::would_input_produce_overflow<Op>(q.in(U{}));
+    return detail::would_value_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for truncation (no change of rep).

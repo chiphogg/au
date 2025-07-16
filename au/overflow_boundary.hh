@@ -97,10 +97,10 @@ struct MinValueChecker;
 template <typename Op>
 struct MaxValueChecker;
 
-// `would_input_produce_overflow<Op>(x)` checks whether the value `x` would exceed the bounds of the
+// `would_value_overflow<Op>(x)` checks whether the value `x` would exceed the bounds of the
 // operation at any stage.
 template <typename Op>
-constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
+constexpr bool would_value_overflow(const OpInput<Op> &x) {
     return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
 }
 
@@ -125,31 +125,6 @@ constexpr bool would_input_produce_overflow(const OpInput<Op> &x) {
 // (S) = signed integral
 // (U) = unsigned integral
 // (X) = any type
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helpers to retrieve upper and lower limits of a type.
-
-// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
-// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
-template <typename T, typename Limits>
-struct UpperLimit {
-    static constexpr T value() { return Limits::upper(); }
-};
-template <typename T>
-struct UpperLimit<T, void> {
-    static constexpr T value() { return std::numeric_limits<T>::max(); }
-};
-
-// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
-// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
-template <typename T, typename Limits>
-struct LowerLimit {
-    static constexpr T value() { return Limits::lower(); }
-};
-template <typename T>
-struct LowerLimit<T, void> {
-    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
-};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Predicate helpers
@@ -187,6 +162,28 @@ struct IsAbsProbablyBiggerThanOneHelper<T, M, MagRepresentationOutcome::ERR_CANN
 template <typename T, typename M>
 struct IsAbsProbablyBiggerThanOne
     : IsAbsProbablyBiggerThanOneHelper<T, M, get_value_result<T>(Abs<M>{}).outcome> {};
+
+// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
+template <typename T, typename Limits>
+struct UpperLimit {
+    static constexpr T value() { return Limits::upper(); }
+};
+template <typename T>
+struct UpperLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+
+// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limits>
+struct LowerLimit {
+    static constexpr T value() { return Limits::lower(); }
+};
+template <typename T>
+struct LowerLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
 
 template <typename T>
 constexpr T clamped_negate(T x) {
@@ -387,9 +384,12 @@ constexpr bool mag_representation_equals(const T &x, Magnitude<BPs...> m) {
     return MagHelper<T, Magnitude<BPs...>, result.outcome>::equal(x, result.value);
 }
 
-// Name reads as "highest of (limits divided by value)".  Remember that the value can be negative,
-// so we just take whichever limit is larger _after_ dividing.  And since `Abs<M>` can be assumed to
-// be greater than one, we know that dividing by `M` will shrink values, so we don't risk overflow.
+// Name reads as "highest of (limits divided by value)".  Of course, normally this is just the
+// higher limit divided by the value.  But if the value is negative, then the _lower limit_ will
+// give the higher result _after_ we divide.
+//
+// Also, `Abs<M>` can be assumed to be greater than one, or else we would have been shunted into the
+// clamping variant.  This means that dividing by `M` will shrink values, so we don't risk overflow.
 template <typename T, typename M, typename Limits>
 struct HighestOfLimitsDividedByValue {
     static constexpr T value() {
@@ -722,12 +722,11 @@ struct MaxGoodImpl<DivideTypeByInteger<T, M>, Limits>
 //
 
 template <typename OnlyOp, typename Limits>
-struct MinGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : stdx::type_identity<MinGood<OnlyOp, Limits>> {
-};
+struct MinGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : MinGoodImpl<OnlyOp, Limits> {};
 
 template <typename Op1, typename Op2, typename... Ops, typename Limits>
 struct MinGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
-    : stdx::type_identity<MinGood<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>>> {
+    : MinGoodImpl<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>> {
     static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
                   "Output of each op in sequence must match input of next op");
 };
@@ -737,12 +736,11 @@ struct MinGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
 //
 
 template <typename OnlyOp, typename Limits>
-struct MaxGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : stdx::type_identity<MaxGood<OnlyOp, Limits>> {
-};
+struct MaxGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : MaxGoodImpl<OnlyOp, Limits> {};
 
 template <typename Op1, typename Op2, typename... Ops, typename Limits>
 struct MaxGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
-    : stdx::type_identity<MaxGood<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>>> {
+    : MaxGoodImpl<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>> {
     static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
                   "Output of each op in sequence must match input of next op");
 };
