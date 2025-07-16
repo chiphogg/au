@@ -193,7 +193,7 @@ constexpr T clamped_negate(T x) {
     if (Less{}(x, T{0}) && Less{}(x, -std::numeric_limits<T>::max())) {
         return std::numeric_limits<T>::max();
     }
-    if (Greater{}(x, T{0}) && Greater{}(x, -std::numeric_limits<T>::lowest())) {
+    if (Greater{}(x, T{0}) && Greater{}(x, clamped_negate(std::numeric_limits<T>::lowest()))) {
         return std::numeric_limits<T>::lowest();
     }
     return -x;
@@ -393,21 +393,13 @@ constexpr bool mag_representation_equals(const T &x, Magnitude<BPs...> m) {
 template <typename T, typename M, typename Limits>
 struct HighestOfLimitsDividedByValue {
     static constexpr T value() {
-        constexpr auto RELEVANT_LIMIT =
-            IsPositive<M>::value ? UpperLimit<T, Limits>::value() : LowerLimit<T, Limits>::value();
-
-        // Special handling for signed int min being slightly more negative than max is positive.
-        if (mag_representation_equals(std::numeric_limits<T>::lowest(), M{})) {
+        if (mag_representation_equals(LowerLimit<T, Limits>::value(), M{})) {
             return T{1};
         }
-        if (M{} == -mag<1>() &&
-            (LowerLimit<T, Limits>::value() == std::numeric_limits<T>::lowest())) {
-            // We are implicitly assuming that _unsigned_ types would have already been handled on a
-            // different branch.
-            return std::numeric_limits<T>::max();
-        }
 
-        return divide_by_mag(RELEVANT_LIMIT, M{});
+        return (IsPositive<M>::value)
+                   ? divide_by_mag(UpperLimit<T, Limits>::value(), M{})
+                   : clamped_negate(divide_by_mag(LowerLimit<T, Limits>::value(), Abs<M>{}));
     }
 };
 

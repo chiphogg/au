@@ -1099,6 +1099,24 @@ TEST(MultiplyTypeBy, MaxGoodForSignedTimesNegIntIsLowerLimitDivByMag) {
                 SameTypeAndValue(int32_t{0}));
 }
 
+TEST(MultiplyTypeBy, MaxGoodForSignedTimesNumericLimitsLowestIsZeroIfNontrivialLowerLimit) {
+    // Use the most liberal nontrivial lower limit imaginable.
+    struct I32LowerLimitOfNegativeUpperLimit : NoUpperLimit<int32_t> {
+        static constexpr int32_t lower() { return -std::numeric_limits<int32_t>::max(); }
+    };
+
+    constexpr auto I32_LOWEST =
+        -mag<static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) + 1u>();
+
+    // To ensure test validity, make sure we get a nonzero value if the limits are trivial.
+    ASSERT_THAT(max_good_value(multiply_type_by<int32_t>(I32_LOWEST)),
+                SameTypeAndValue(int32_t{1}));
+
+    EXPECT_THAT(
+        max_good_value(multiply_type_by<int32_t>(I32_LOWEST), I32LowerLimitOfNegativeUpperLimit{}),
+        SameTypeAndValue(int32_t{0}));
+}
+
 TEST(MultiplyTypeBy, MaxGoodForUnlimitedIntTimesPosIrrationalIsZeroAsAPlaceholder) {
     // We can't even compute the overflow boundary for this kind of operation yet, so just return an
     // extremely conservative result of 0.
@@ -1580,6 +1598,32 @@ TEST(CanOverflowAbove, TrueForOverflowableStdComplex) {
 TEST(CanOverflowAbove, FalseIfValueCannotBeBigEnoughToGoOutsideBounds) {
     EXPECT_THAT(can_overflow_above(divide_type_by_integer<uint8_t>(mag<8>())), IsFalse());
     EXPECT_THAT(can_overflow_above(multiply_type_by<double>(-mag<1>() / PI)), IsFalse());
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `clamped_negate()` section
+
+TEST(ClampedNegate, SimplyNegatesWhenLimitsOfTypeAreNotRelevant) {
+    EXPECT_THAT(clamped_negate(15), SameTypeAndValue(-15));
+    EXPECT_THAT(clamped_negate(-15), SameTypeAndValue(15));
+}
+
+TEST(ClampedNegate, ClampsSignedIntMinToIntMax) {
+    EXPECT_THAT(clamped_negate(int8_t{-128}), SameTypeAndValue(int8_t{127}));
+
+    EXPECT_THAT(clamped_negate(int16_t{-32768}), SameTypeAndValue(int16_t{32767}));
+
+    EXPECT_THAT(clamped_negate(int32_t{-2147483648}), SameTypeAndValue(int32_t{2147483647}));
+}
+
+TEST(ClampedNegate, MapsAnyUnsignedInputToZero) {
+    EXPECT_THAT(clamped_negate(123u), SameTypeAndValue(0u));
+
+    EXPECT_THAT(clamped_negate(uint64_t{123'456'789'012'345'678u}), SameTypeAndValue(uint64_t{0}));
+}
+
+TEST(ClampedNegate, SupportsFloatingPointBySimplyNegating) {
+    EXPECT_THAT(clamped_negate(3.14f), FloatEq(-3.14f));
 }
 
 }  // namespace
