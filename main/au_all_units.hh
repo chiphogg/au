@@ -19,17 +19,19 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <exception>
 #include <limits>
 #include <ostream>
 #include <ratio>
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 74ebfc0
+// Version identifier: e17cd92
 // <iostream> support: INCLUDED
+// <format> support: EXCLUDED
 // List of included units:
 //   amperes
+//   arcminutes
+//   arcseconds
 //   bars
 //   becquerel
 //   bits
@@ -43,6 +45,7 @@
 //   farads
 //   fathoms
 //   feet
+//   football_fields
 //   furlongs
 //   grams
 //   grays
@@ -111,6 +114,8 @@ struct Dimension;
 
 template <typename... BPs>
 struct Magnitude;
+
+struct Negative;
 
 template <typename UnitT>
 struct QuantityMaker;
@@ -333,6 +338,198 @@ using void_t = void;
 }  // namespace au
 
 
+
+namespace au {
+namespace detail {
+
+template <typename PackT, typename T>
+struct Prepend;
+template <typename PackT, typename T>
+using PrependT = typename Prepend<PackT, T>::type;
+
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+struct IncludeInPackIfImpl;
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+using IncludeInPackIf = typename IncludeInPackIfImpl<Condition, Pack, Ts...>::type;
+
+template <typename T, typename Pack>
+struct DropAllImpl;
+template <typename T, typename Pack>
+using DropAll = typename DropAllImpl<T, Pack>::type;
+
+template <template <class...> class Pack, typename... Ts>
+struct FlattenAsImpl;
+template <template <class...> class Pack, typename... Ts>
+using FlattenAs = typename FlattenAsImpl<Pack, Ts...>::type;
+
+template <typename T, typename U>
+struct SameTypeIgnoringCvref : std::is_same<stdx::remove_cvref_t<T>, stdx::remove_cvref_t<U>> {};
+
+template <typename T, typename U>
+constexpr bool same_type_ignoring_cvref(T, U) {
+    return SameTypeIgnoringCvref<T, U>::value;
+}
+
+template <typename... Ts>
+struct AlwaysFalse : std::false_type {};
+
+template <typename R1, typename R2>
+struct CommonTypeButPreserveIntSignednessImpl;
+template <typename R1, typename R2>
+using CommonTypeButPreserveIntSignedness =
+    typename CommonTypeButPreserveIntSignednessImpl<R1, R2>::type;
+
+//
+// `PromotedType<T>` is the result type for arithmetic operations involving `T`.  Of course, this is
+// normally just `T`, but integer promotion for small integral types can change this.
+//
+template <typename T>
+struct PromotedTypeImpl;
+template <typename T>
+using PromotedType = typename PromotedTypeImpl<T>::type;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details below.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `Prepend` implementation.
+
+template <template <typename...> class Pack, typename T, typename... Us>
+struct Prepend<Pack<Us...>, T> {
+    using type = Pack<T, Us...>;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `IncludeInPackIf` implementation.
+
+// Helper: change the pack.  This lets us do our work in one kind of pack, and then swap it out for
+// another pack at the end.
+template <template <class...> class NewPack, typename PackT>
+struct ChangePackToImpl;
+template <template <class...> class NewPack, typename PackT>
+using ChangePackTo = typename ChangePackToImpl<NewPack, PackT>::type;
+template <template <class...> class NewPack, template <class...> class OldPack, typename... Ts>
+struct ChangePackToImpl<NewPack, OldPack<Ts...>> : stdx::type_identity<NewPack<Ts...>> {};
+
+// A generic typelist with no constraints on members or ordering.  Intended as a type to hold
+// intermediate work.
+template <typename... Ts>
+struct GenericTypeList;
+
+template <template <class> class Condition, typename PackT>
+struct ListMatchingTypesImpl;
+template <template <class> class Condition, typename PackT>
+using ListMatchingTypes = typename ListMatchingTypesImpl<Condition, PackT>::type;
+
+// Base case:
+template <template <class> class Condition>
+struct ListMatchingTypesImpl<Condition, GenericTypeList<>>
+    : stdx::type_identity<GenericTypeList<>> {};
+
+// Recursive case:
+template <template <class> class Condition, typename H, typename... Ts>
+struct ListMatchingTypesImpl<Condition, GenericTypeList<H, Ts...>>
+    : std::conditional<Condition<H>::value,
+                       PrependT<ListMatchingTypes<Condition, GenericTypeList<Ts...>>, H>,
+                       ListMatchingTypes<Condition, GenericTypeList<Ts...>>> {};
+
+template <template <class> class Condition, template <class...> class Pack, typename... Ts>
+struct IncludeInPackIfImpl
+    : stdx::type_identity<
+          ChangePackTo<Pack, ListMatchingTypes<Condition, GenericTypeList<Ts...>>>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DropAll` implementation.
+
+// Base case.
+template <typename T, template <class...> class Pack>
+struct DropAllImpl<T, Pack<>> : stdx::type_identity<Pack<>> {};
+
+// Recursive case:
+template <typename T, template <class...> class Pack, typename H, typename... Ts>
+struct DropAllImpl<T, Pack<H, Ts...>>
+    : std::conditional<std::is_same<T, H>::value,
+                       DropAll<T, Pack<Ts...>>,
+                       detail::PrependT<DropAll<T, Pack<Ts...>>, H>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `FlattenAs` implementation.
+
+template <typename P1, typename P2>
+struct ConcatImpl;
+template <typename P1, typename P2>
+using Concat = typename ConcatImpl<P1, P2>::type;
+
+template <template <class...> class Pack, typename... T1s, typename... T2s>
+struct ConcatImpl<Pack<T1s...>, Pack<T2s...>> : stdx::type_identity<Pack<T1s..., T2s...>> {};
+
+template <template <class...> class Pack, typename ResultPack, typename... Ts>
+struct FlattenAsImplHelper;
+
+template <template <class...> class Pack, typename ResultPack>
+struct FlattenAsImplHelper<Pack, ResultPack> : stdx::type_identity<ResultPack> {};
+
+// Skip empty packs.
+template <template <class...> class Pack, typename ResultPack, typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, Pack<>, Us...>
+    : FlattenAsImplHelper<Pack, ResultPack, Us...> {};
+
+template <template <class...> class Pack,
+          typename ResultPack,
+          typename T,
+          typename... Ts,
+          typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, Pack<T, Ts...>, Us...>
+    : FlattenAsImplHelper<Pack, ResultPack, T, Pack<Ts...>, Us...> {};
+
+template <template <class...> class Pack, typename ResultPack, typename T, typename... Us>
+struct FlattenAsImplHelper<Pack, ResultPack, T, Us...>
+    : FlattenAsImplHelper<Pack, Concat<ResultPack, Pack<T>>, Us...> {};
+
+template <template <class...> class Pack, typename... Ts>
+struct FlattenAsImpl : FlattenAsImplHelper<Pack, Pack<>, Ts...> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CommonTypeButPreserveIntSignedness` implementation.
+
+// `CopySignednessIfIntType<X, T>` has a `type` member that is always `T`, unless `T` is an integral
+// type: in which case, it's the signed version of `T` if `X` is signed, and the unsigned version of
+// `T` if `X` is unsigned.
+template <typename SignednessSource, typename T, bool IsTIntegral>
+struct CopySignednessIfIntTypeHelper;
+template <typename SignednessSource, typename T>
+struct CopySignednessIfIntTypeHelper<SignednessSource, T, true>
+    : std::conditional<std::is_unsigned<SignednessSource>::value,
+                       std::make_unsigned_t<T>,
+                       std::make_signed_t<T>> {};
+template <typename SignednessSource, typename T>
+struct CopySignednessIfIntTypeHelper<SignednessSource, T, false> : stdx::type_identity<T> {};
+
+template <typename SignednessSource, typename T>
+struct CopySignednessIfIntType
+    : CopySignednessIfIntTypeHelper<SignednessSource, T, std::is_integral<T>::value> {};
+
+template <typename R1, typename R2>
+struct CommonTypeButPreserveIntSignednessImpl
+    : CopySignednessIfIntType<R1, std::common_type_t<R1, R2>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `PromotedType<T>` implementation.
+
+template <typename T>
+struct PromotedTypeImpl {
+    using type = decltype(std::declval<T>() * std::declval<T>());
+
+    static_assert(std::is_same<type, typename PromotedTypeImpl<type>::type>::value,
+                  "We explicitly assume that promoted types are not again promotable");
+};
+
+}  // namespace detail
+}  // namespace au
+
+
+
 namespace au {
 namespace detail {
 
@@ -403,6 +600,22 @@ struct IToA;
 // Implementation details below.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// The absolute value of a signed integer, as an unsigned integer.
+//
+// This handles the special case where the lowest `int64_t` cannot be directly negated: it would be
+// too big to fit into `int64_t`.
+template <typename S>
+constexpr std::make_unsigned_t<S> abs_as_unsigned(S x) {
+    static_assert(stdx::conjunction<std::is_integral<S>, std::is_signed<S>>::value,
+                  "Only designed for signed integral types");
+    using U = std::make_unsigned_t<S>;
+    constexpr auto SMAX = static_cast<U>(std::numeric_limits<S>::max());
+    constexpr auto UMAX = std::numeric_limits<U>::max();
+
+    auto result = static_cast<U>(x);
+    return (result > SMAX) ? static_cast<U>(UMAX - result + 1u) : result;
+}
+
 // The string-length needed to hold a representation of this unsigned integer.
 constexpr std::size_t string_size_unsigned(uint64_t x) {
     std::size_t digits = 1;
@@ -417,10 +630,9 @@ constexpr std::size_t string_size_unsigned(uint64_t x) {
 constexpr std::size_t string_size(int64_t x) {
     std::size_t sign_length = 0u;
     if (x < 0) {
-        x = -x;
         ++sign_length;
     }
-    return string_size_unsigned(static_cast<uint64_t>(x)) + sign_length;
+    return string_size_unsigned(abs_as_unsigned(x)) + sign_length;
 }
 
 // The sum of the template parameters.
@@ -553,11 +765,11 @@ constexpr StringConstant<UIToA<N>::length> UIToA<N>::value;
 
 template <bool IsPositive>
 struct SignIfPositiveIs {
-    static constexpr StringConstant<0> value() { return ""; }
+    static constexpr StringConstant<0> value() { return StringConstant<0>{""}; }
 };
 template <>
 struct SignIfPositiveIs<false> {
-    static constexpr StringConstant<1> value() { return "-"; }
+    static constexpr StringConstant<1> value() { return StringConstant<1>{"-"}; }
 };
 
 template <int64_t N>
@@ -565,8 +777,7 @@ struct IToA {
     static constexpr std::size_t length = string_size(N);
 
     static constexpr StringConstant<length> value =
-        concatenate(SignIfPositiveIs<(N >= 0)>::value(),
-                    UIToA<static_cast<uint64_t>((N) >= 0) ? N : -N>::value);
+        concatenate(SignIfPositiveIs<(N >= 0)>::value(), UIToA<abs_as_unsigned(N)>::value);
 };
 
 // Definitions for IToA<N>::value.  (Needed to prevent linker errors.)
@@ -638,30 +849,40 @@ template <typename T>
 constexpr auto inverse(T x) -> decltype(pow<-1>(x)) {
     return pow<-1>(x);
 }
+template <typename T>
+using Inverse = decltype(inverse(std::declval<T>()));
 
 // Make "squared" an alias for "pow<2>" when the latter exists (for anything).
 template <typename T>
 constexpr auto squared(T x) -> decltype(pow<2>(x)) {
     return pow<2>(x);
 }
+template <typename T>
+using Squared = decltype(squared(std::declval<T>()));
 
 // Make "cubed" an alias for "pow<3>" when the latter exists (for anything).
 template <typename T>
 constexpr auto cubed(T x) -> decltype(pow<3>(x)) {
     return pow<3>(x);
 }
+template <typename T>
+using Cubed = decltype(cubed(std::declval<T>()));
 
 // Make "sqrt" an alias for "root<2>" when the latter exists (for anything).
 template <typename T>
 constexpr auto sqrt(T x) -> decltype(root<2>(x)) {
     return root<2>(x);
 }
+template <typename T>
+using Sqrt = decltype(sqrt(std::declval<T>()));
 
 // Make "cbrt" an alias for "root<3>" when the latter exists (for anything).
 template <typename T>
 constexpr auto cbrt(T x) -> decltype(root<3>(x)) {
     return root<3>(x);
 }
+template <typename T>
+using Cbrt = decltype(cbrt(std::declval<T>()));
 
 }  // namespace au
 
@@ -908,195 +1129,6 @@ struct identity {
 }  // namespace au
 
 
-namespace au {
-namespace detail {
-
-template <typename Source, typename Dest>
-struct StaticCastChecker;
-
-template <typename Dest, typename Source>
-constexpr bool will_static_cast_overflow(Source x) {
-    return StaticCastChecker<Source, Dest>::will_static_cast_overflow(x);
-}
-
-template <typename Dest, typename Source>
-constexpr bool will_static_cast_truncate(Source x) {
-    return StaticCastChecker<Source, Dest>::will_static_cast_truncate(x);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation details below.
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Overflow checking:
-
-// Earlier enum values have higher priority than later ones.
-enum class OverflowSituation {
-    DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS,
-    UNSIGNED_TO_INTEGRAL,
-    SIGNED_TO_UNSIGNED,
-    SIGNED_TO_SIGNED,
-    FLOAT_TO_ANYTHING,
-
-    // If we categorize as this "catch-all" category, then we've hit a case that we haven't yet
-    // handled.  This will result in a compiler error.  We can decide how to handle it at that time.
-    UNEXPLORED,
-};
-
-template <typename Source, typename Dest>
-constexpr OverflowSituation categorize_overflow_situation() {
-    static_assert(std::is_arithmetic<Source>::value && std::is_arithmetic<Dest>::value,
-                  "Only arithmetic types are supported so far.");
-
-    if (std::is_integral<Source>::value && std::is_integral<Dest>::value) {
-        if ((std::is_signed<Source>::value == std::is_signed<Dest>::value) &&
-            (sizeof(Source) <= sizeof(Dest))) {
-            return OverflowSituation::DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS;
-        }
-
-        if (std::is_unsigned<Source>::value) {
-            return OverflowSituation::UNSIGNED_TO_INTEGRAL;
-        }
-
-        return std::is_unsigned<Dest>::value ? OverflowSituation::SIGNED_TO_UNSIGNED
-                                             : OverflowSituation::SIGNED_TO_SIGNED;
-    }
-
-    if (std::is_integral<Source>::value && std::is_floating_point<Dest>::value) {
-        // For any integral-to-floating-point situation, `Dest` should always fully contain
-        // `Source`.  This code simply double checks our assumption.
-        return ((static_cast<long double>(std::numeric_limits<Dest>::max()) >=
-                 static_cast<long double>(std::numeric_limits<Source>::max())) &&
-                (static_cast<long double>(std::numeric_limits<Dest>::lowest()) <=
-                 static_cast<long double>(std::numeric_limits<Source>::lowest())))
-                   ? OverflowSituation::DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS
-                   : OverflowSituation::UNEXPLORED;
-    }
-
-    if (std::is_floating_point<Source>::value && std::is_integral<Dest>::value) {
-        return OverflowSituation::FLOAT_TO_ANYTHING;
-    }
-
-    if (std::is_floating_point<Source>::value && std::is_floating_point<Dest>::value) {
-        return (sizeof(Source) <= sizeof(Dest))
-                   ? OverflowSituation::DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS
-                   : OverflowSituation::FLOAT_TO_ANYTHING;
-    }
-
-    return OverflowSituation::UNEXPLORED;
-}
-
-template <typename Source, typename Dest, OverflowSituation Cat>
-struct StaticCastOverflowImpl;
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS> {
-    static constexpr bool will_static_cast_overflow(Source) { return false; }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::UNSIGNED_TO_INTEGRAL> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        // Note that we know that the max value of `Dest` can fit into `Source`, because otherwise,
-        // this would have been categorized as `DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS` rather than
-        // `UNSIGNED_TO_INTEGRAL`.
-        return x > static_cast<Source>(std::numeric_limits<Dest>::max());
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::SIGNED_TO_UNSIGNED> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        return (x < 0) ||
-               (static_cast<std::make_unsigned_t<Source>>(x) >
-                static_cast<std::make_unsigned_t<Source>>(std::numeric_limits<Dest>::max()));
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::SIGNED_TO_SIGNED> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        return (x < static_cast<Source>(std::numeric_limits<Dest>::lowest())) ||
-               (x > static_cast<Source>(std::numeric_limits<Dest>::max()));
-    }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastOverflowImpl<Source, Dest, OverflowSituation::FLOAT_TO_ANYTHING> {
-    static constexpr bool will_static_cast_overflow(Source x) {
-        // It's pretty safe to assume that `Source` can hold the limits of `Dest`, because otherwise
-        // this would have been categorized as `DEST_BOUNDS_CONTAIN_SOURCE_BOUNDS` rather than
-        // `FLOAT_TO_ANYTHING`.
-        return (x < static_cast<Source>(std::numeric_limits<Dest>::lowest())) ||
-               (x > static_cast<Source>(std::numeric_limits<Dest>::max()));
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Truncation checking:
-
-enum class TruncationSituation {
-    CANNOT_TRUNCATE,
-    FLOAT_TO_INTEGRAL,
-
-    // If we categorize as this "catch-all" category, then we've hit a case that we haven't yet
-    // handled.  This will result in a compiler error.  We can decide how to handle it at that time.
-    UNEXPLORED,
-};
-
-template <typename Source, typename Dest>
-constexpr TruncationSituation categorize_truncation_situation() {
-    static_assert(std::is_arithmetic<Source>::value && std::is_arithmetic<Dest>::value,
-                  "Only arithmetic types are supported so far.");
-
-    if (std::is_same<Source, Dest>::value) {
-        return TruncationSituation::CANNOT_TRUNCATE;
-    }
-
-    if (std::is_floating_point<Dest>::value) {
-        // We explicitly treat floating point destinations as value-preserving, as does the rest of
-        // the library.  This isn't strictly true, but if a user is going into the floating point
-        // domain, we assume they are OK with the usual floating point errors.
-        return TruncationSituation::CANNOT_TRUNCATE;
-    }
-
-    if (std::is_integral<Source>::value) {
-        return TruncationSituation::CANNOT_TRUNCATE;
-    }
-
-    if (std::is_floating_point<Source>::value && std::is_integral<Dest>::value) {
-        return TruncationSituation::FLOAT_TO_INTEGRAL;
-    }
-
-    return TruncationSituation::UNEXPLORED;
-}
-
-template <typename Source, typename Dest, TruncationSituation Cat>
-struct StaticCastTruncateImpl;
-
-template <typename Source, typename Dest>
-struct StaticCastTruncateImpl<Source, Dest, TruncationSituation::CANNOT_TRUNCATE> {
-    static constexpr bool will_static_cast_truncate(Source) { return false; }
-};
-
-template <typename Source, typename Dest>
-struct StaticCastTruncateImpl<Source, Dest, TruncationSituation::FLOAT_TO_INTEGRAL> {
-    static constexpr bool will_static_cast_truncate(Source x) { return std::trunc(x) != x; }
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Main implementation:
-
-template <typename Source, typename Dest>
-struct StaticCastChecker
-    : StaticCastOverflowImpl<Source, Dest, categorize_overflow_situation<Source, Dest>()>,
-      StaticCastTruncateImpl<Source, Dest, categorize_truncation_situation<Source, Dest>()> {};
-
-}  // namespace detail
-}  // namespace au
-
-
 
 namespace au {
 
@@ -1218,17 +1250,22 @@ struct IsQuotientValidRep
 
 }  // namespace au
 
-// This file provides drop-in replacements for certain standard library function objects for
-// comparison and arithmetic: `std::less<void>`, `std::plus<void>`, etc.
+
+// This file provides alternatives to certain standard library function objects for comparison and
+// arithmetic: `std::less<void>`, `std::plus<void>`, etc.
 //
 // These are _not_ intended as _fully general_ replacements.  They are _only_ intended for certain
-// specific use cases in this library, where we can ensure certain preconditions are met before they
-// are called.  For example, these utilities don't handle comparing signed and unsigned integral
-// types, because we only ever use them in places where we've already explicitly cast our quantities
-// to the same Rep.
+// specific use cases in this library.  External user code should not use these utilities: their
+// contract is subject to change at any time to suit the needs of Au.
 //
-// There are two main reasons we rolled our own versions instead of just using the ones from the
-// standard library (as we had initially done).  First, the `<functional>` header is moderately
+// The biggest change is that these function objects produce mathematically correct results when
+// comparing built-in integral types with mixed signedness.  As a concrete example: in the C++
+// language, `-1 < 1u` is `false`, because the common type of the input types is `unsigned int`, and
+// the `int` input `-1` gets converted to a (very large) `unsigned int` value.  However, using these
+// types, `Lt{}(-1, 1u)` will correctly return `true`!
+//
+// There were two initial motivations to roll our own versions instead of just using the ones from
+// the standard library (as we had done earlier).  First, the `<functional>` header is moderately
 // expensive to include---using these alternatives could save 100 ms or more on every file.  Second,
 // certain compilers (such as the Green Hills compiler) struggle with the trailing return types in,
 // say, `std::less<void>::operator()`, but work correctly with our alternatives.
@@ -1236,57 +1273,143 @@ struct IsQuotientValidRep
 namespace au {
 namespace detail {
 
+// These tag types act as a kind of "compile time enum".
+struct CompareBuiltInIntegers {};
+struct DefaultComparison {};
+
+// `ComparisonCategory<T, U>` acts like a function which takes two _types_, and returns the correct
+// instance of the above "compile time enum".
+template <typename T, typename U>
+using ComparisonCategory =
+    std::conditional_t<stdx::conjunction<std::is_integral<T>, std::is_integral<U>>::value,
+                       CompareBuiltInIntegers,
+                       DefaultComparison>;
+
 //
 // Comparison operators.
 //
 
 struct Equal {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a == b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_equal(a, b);
     }
 };
 constexpr auto equal = Equal{};
 
 struct NotEqual {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a != b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_not_equal(a, b);
     }
 };
 constexpr auto not_equal = NotEqual{};
 
 struct Greater {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a > b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_greater(a, b);
     }
 };
 constexpr auto greater = Greater{};
 
 struct Less {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a < b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_less(a, b);
     }
 };
 constexpr auto less = Less{};
 
 struct GreaterEqual {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a >= b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_greater_equal(a, b);
     }
 };
 constexpr auto greater_equal = GreaterEqual{};
 
 struct LessEqual {
-    template <typename T>
-    constexpr bool operator()(const T &a, const T &b) const {
+    template <typename T, typename U>
+    constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
         return a <= b;
+    }
+
+    template <typename T, typename U>
+    constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_less_equal(a, b);
     }
 };
 constexpr auto less_equal = LessEqual{};
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+struct ThreeWayCompare {
+    template <typename T, typename U>
+    constexpr auto operator()(const T &a, const U &b) const {
+        // Note that we do not need special treatment for the case where `T` and `U` are both
+        // integral types, because the C++ language already prohibits narrowing conversions (such as
+        // `int` to `uint`) for `operator<=>`.  We can rely on this implicit warning to induce users
+        // to fix their code.
+        return a <=> b;
+    }
+};
+constexpr auto three_way_compare = ThreeWayCompare{};
+#endif
 
 //
 // Arithmetic operators.
@@ -1319,18 +1442,6 @@ struct Seconds;
 
 namespace au {
 
-struct Amperes;
-
-}  // namespace au
-
-namespace au {
-
-struct Coulombs;
-
-}  // namespace au
-
-namespace au {
-
 struct Meters;
 
 }  // namespace au
@@ -1350,24 +1461,6 @@ struct Newtons;
 namespace au {
 
 struct Joules;
-
-}  // namespace au
-
-namespace au {
-
-struct Hertz;
-
-}  // namespace au
-
-namespace au {
-
-struct StandardGravity;
-
-}  // namespace au
-
-namespace au {
-
-struct Kelvins;
 
 }  // namespace au
 
@@ -1409,13 +1502,37 @@ struct Moles;
 
 namespace au {
 
-struct Minutes;
+struct Kelvins;
 
 }  // namespace au
 
 namespace au {
 
-struct Hours;
+struct Hertz;
+
+}  // namespace au
+
+namespace au {
+
+struct StandardGravity;
+
+}  // namespace au
+
+namespace au {
+
+struct Amperes;
+
+}  // namespace au
+
+namespace au {
+
+struct Coulombs;
+
+}  // namespace au
+
+namespace au {
+
+struct Pascals;
 
 }  // namespace au
 
@@ -1427,19 +1544,19 @@ struct Inches;
 
 namespace au {
 
-struct Feet;
+struct USPints;
 
 }  // namespace au
 
 namespace au {
 
-struct Fathoms;
+struct Degrees;
 
 }  // namespace au
 
 namespace au {
 
-struct Fahrenheit;
+struct Arcminutes;
 
 }  // namespace au
 
@@ -1457,54 +1574,6 @@ struct Webers;
 
 namespace au {
 
-struct Henries;
-
-}  // namespace au
-
-namespace au {
-
-struct USQuarts;
-
-}  // namespace au
-
-namespace au {
-
-struct Bits;
-
-}  // namespace au
-
-namespace au {
-
-struct NauticalMiles;
-
-}  // namespace au
-
-namespace au {
-
-struct Becquerel;
-
-}  // namespace au
-
-namespace au {
-
-struct USPints;
-
-}  // namespace au
-
-namespace au {
-
-struct Knots;
-
-}  // namespace au
-
-namespace au {
-
-struct Katals;
-
-}  // namespace au
-
-namespace au {
-
 struct Tesla;
 
 }  // namespace au
@@ -1512,6 +1581,30 @@ struct Tesla;
 namespace au {
 
 struct Ohms;
+
+}  // namespace au
+
+namespace au {
+
+struct Minutes;
+
+}  // namespace au
+
+namespace au {
+
+struct Hours;
+
+}  // namespace au
+
+namespace au {
+
+struct Days;
+
+}  // namespace au
+
+namespace au {
+
+struct USGallons;
 
 }  // namespace au
 
@@ -1529,7 +1622,97 @@ struct PoundsMass;
 
 namespace au {
 
+struct PoundsForce;
+
+}  // namespace au
+
+namespace au {
+
+struct NauticalMiles;
+
+}  // namespace au
+
+namespace au {
+
+struct Unos;
+
+}  // namespace au
+
+namespace au {
+
+struct Celsius;
+
+}  // namespace au
+
+namespace au {
+
+struct Feet;
+
+}  // namespace au
+
+namespace au {
+
 struct Miles;
+
+}  // namespace au
+
+namespace au {
+
+struct Becquerel;
+
+}  // namespace au
+
+namespace au {
+
+struct Bits;
+
+}  // namespace au
+
+namespace au {
+
+struct Henries;
+
+}  // namespace au
+
+namespace au {
+
+struct Yards;
+
+}  // namespace au
+
+namespace au {
+
+struct FootballFields;
+
+}  // namespace au
+
+namespace au {
+
+struct Slugs;
+
+}  // namespace au
+
+namespace au {
+
+struct Farads;
+
+}  // namespace au
+
+namespace au {
+
+struct Fathoms;
+
+}  // namespace au
+
+namespace au {
+
+struct Arcseconds;
+
+}  // namespace au
+
+namespace au {
+
+struct Bytes;
 
 }  // namespace au
 
@@ -1547,85 +1730,13 @@ struct Liters;
 
 namespace au {
 
-struct Celsius;
-
-}  // namespace au
-
-namespace au {
-
-struct Unos;
-
-}  // namespace au
-
-namespace au {
-
-struct Yards;
-
-}  // namespace au
-
-namespace au {
-
-struct PoundsForce;
-
-}  // namespace au
-
-namespace au {
-
-struct Slugs;
-
-}  // namespace au
-
-namespace au {
-
-struct USGallons;
-
-}  // namespace au
-
-namespace au {
-
-struct Bytes;
-
-}  // namespace au
-
-namespace au {
-
-struct Degrees;
-
-}  // namespace au
-
-namespace au {
-
-struct Pascals;
-
-}  // namespace au
-
-namespace au {
-
-struct Bars;
-
-}  // namespace au
-
-namespace au {
-
-struct Days;
-
-}  // namespace au
-
-namespace au {
-
 struct Grays;
 
 }  // namespace au
 
 namespace au {
 
-struct Farads;
-
-}  // namespace au
-
-namespace au {
-
-struct Revolutions;
+struct Fahrenheit;
 
 }  // namespace au
 
@@ -1638,6 +1749,36 @@ struct Percent;
 namespace au {
 
 struct Lux;
+
+}  // namespace au
+
+namespace au {
+
+struct Revolutions;
+
+}  // namespace au
+
+namespace au {
+
+struct USQuarts;
+
+}  // namespace au
+
+namespace au {
+
+struct Katals;
+
+}  // namespace au
+
+namespace au {
+
+struct Bars;
+
+}  // namespace au
+
+namespace au {
+
+struct Knots;
 
 }  // namespace au
 
@@ -1687,61 +1828,12 @@ inline constexpr bool operator!=(Zero, Zero) { return false; }
 inline constexpr bool operator>(Zero, Zero) { return false; }
 inline constexpr bool operator<(Zero, Zero) { return false; }
 
-}  // namespace au
-
-
-
-namespace au {
-namespace detail {
-
-template <typename PackT, typename T>
-struct Prepend;
-template <typename PackT, typename T>
-using PrependT = typename Prepend<PackT, T>::type;
-
-template <typename T, typename Pack>
-struct DropAllImpl;
-template <typename T, typename Pack>
-using DropAll = typename DropAllImpl<T, Pack>::type;
-
-template <typename T, typename U>
-struct SameTypeIgnoringCvref : std::is_same<stdx::remove_cvref_t<T>, stdx::remove_cvref_t<U>> {};
-
-template <typename T, typename U>
-constexpr bool same_type_ignoring_cvref(T, U) {
-    return SameTypeIgnoringCvref<T, U>::value;
-}
-
-template <typename... Ts>
-struct AlwaysFalse : std::false_type {};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation details below.
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// `Prepend` implementation.
-
-template <template <typename...> class Pack, typename T, typename... Us>
-struct Prepend<Pack<Us...>, T> {
-    using type = Pack<T, Us...>;
+// Implementation helper for "a type where value() returns 0".
+template <typename T>
+struct ValueOfZero {
+    static constexpr T value() { return ZERO; }
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// `DropAll` implementation.
-
-// Base case.
-template <typename T, template <class...> class Pack>
-struct DropAllImpl<T, Pack<>> : stdx::type_identity<Pack<>> {};
-
-// Recursive case:
-template <typename T, template <class...> class Pack, typename H, typename... Ts>
-struct DropAllImpl<T, Pack<H, Ts...>>
-    : std::conditional<std::is_same<T, H>::value,
-                       DropAll<T, Pack<Ts...>>,
-                       detail::PrependT<DropAll<T, Pack<Ts...>>, H>> {};
-
-}  // namespace detail
 }  // namespace au
 
 
@@ -1869,7 +1961,8 @@ constexpr int jacobi_symbol_positive_numerator(uint64_t a, uint64_t n, int start
 
     while (a != 0u) {
         // Handle even numbers in the "numerator".
-        const int sign_for_even = bool_sign(n % 8u == 1u || n % 8u == 7u);
+        const uint64_t rem_8 = n % 8u;
+        const int sign_for_even = bool_sign(rem_8 == 1u || rem_8 == 7u);
         while (a % 2u == 0u) {
             a /= 2u;
             result *= sign_for_even;
@@ -2149,6 +2242,20 @@ struct LexicographicTotalOrdering;
 template <typename T, typename U>
 struct InStandardPackOrder;
 
+// Insert an element in a list, using the ordering for a specific (possibly different) pack.
+//
+// A precondition is that the list must already be sorted by the given ordering.
+template <template <class...> class PackForOrdering, typename T, typename ListT>
+struct InsertUsingOrderingForImpl;
+template <template <class...> class PackForOrdering, typename T, typename ListT>
+using InsertUsingOrderingFor = typename InsertUsingOrderingForImpl<PackForOrdering, T, ListT>::type;
+
+// Sort a type list using the ordering for a specific (possibly different) pack.
+template <template <class...> class PackForOrdering, typename ListT>
+struct SortAsImpl;
+template <template <class...> class PackForOrdering, typename ListT>
+using SortAs = typename SortAsImpl<PackForOrdering, ListT>::type;
+
 // Make a List of deduplicated, sorted types.
 //
 // The result will always be List<...>, and the elements will be sorted according to the total
@@ -2418,6 +2525,44 @@ struct InStandardPackOrder<P<H1, T1...>, P<H2, T2...>>
                                  detail::TailsInStandardPackOrder> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// `InsertUsingOrderingFor` implementation.
+
+// Base case.
+template <template <class...> class PackForOrdering, typename T, template <class...> class Pack>
+struct InsertUsingOrderingForImpl<PackForOrdering, T, Pack<>> : stdx::type_identity<Pack<T>> {};
+
+// Recursive case: simply prepend if it's already in order, or else recurse past the first element,
+// and then prepend the old first element.
+template <template <class...> class PackForOrdering,
+          typename T,
+          template <class...>
+          class Pack,
+          typename U,
+          typename... Us>
+struct InsertUsingOrderingForImpl<PackForOrdering, T, Pack<U, Us...>>
+    : std::conditional<
+          InOrderFor<PackForOrdering, T, U>::value,
+          Pack<T, U, Us...>,
+          detail::PrependT<InsertUsingOrderingFor<PackForOrdering, T, Pack<Us...>>, U>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `SortAs` implementation.
+
+// Base case.
+template <template <class...> class PackForOrdering, template <class...> class Pack>
+struct SortAsImpl<PackForOrdering, Pack<>> : stdx::type_identity<Pack<>> {};
+
+// Recursive case.
+template <template <class...> class PackForOrdering,
+          template <class...>
+          class Pack,
+          typename T,
+          typename... Ts>
+struct SortAsImpl<PackForOrdering, Pack<T, Ts...>>
+    : stdx::type_identity<
+          InsertUsingOrderingFor<PackForOrdering, T, SortAs<PackForOrdering, Pack<Ts...>>>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // `FlatDedupedTypeListT` implementation.
 
 // 1-ary Base case: a list with a single element is already done.
@@ -2647,17 +2792,36 @@ struct SimplifyBasePowers<Pack<BPs...>> : stdx::type_identity<Pack<SimplifyBaseP
 // `NumeratorPartT` and `DenominatorPartT` implementation.
 
 namespace detail {
-template <template <class...> class Pack>
-struct NumeratorPart<Pack<>> : stdx::type_identity<Pack<>> {};
+template <typename BP>
+struct IsInNumerator : stdx::bool_constant<(ExpT<BP>::num > 0)> {};
 
-template <template <class...> class Pack, typename Head, typename... Tail>
-struct NumeratorPart<Pack<Head, Tail...>>
-    : std::conditional<(ExpT<Head>::num > 0),
-                       PackProductT<Pack, Pack<Head>, NumeratorPartT<Pack<Tail...>>>,
-                       NumeratorPartT<Pack<Tail...>>> {};
+template <typename BP>
+struct IsInDenominator : stdx::bool_constant<(ExpT<BP>::num < 0)> {};
+
+// A generic helper for both numerator and denominator.
+template <template <class> class Pred, typename T>
+struct PullOutMatchingPowers;
+
+// Base case: empty pack.
+template <template <class> class Pred, template <class...> class Pack>
+struct PullOutMatchingPowers<Pred, Pack<>> : stdx::type_identity<Pack<>> {};
+
+// Recursive case: non-empty pack.
+template <template <class> class Pred, template <class...> class Pack, typename H, typename... Ts>
+struct PullOutMatchingPowers<Pred, Pack<H, Ts...>>
+    : std::conditional<(Pred<H>::value),
+                       detail::PrependT<typename PullOutMatchingPowers<Pred, Pack<Ts...>>::type, H>,
+                       typename PullOutMatchingPowers<Pred, Pack<Ts...>>::type> {};
+
+template <typename T>
+struct NumeratorPart : PullOutMatchingPowers<IsInNumerator, T> {};
 
 template <template <class...> class Pack, typename... Ts>
-struct DenominatorPart<Pack<Ts...>> : NumeratorPart<PackInverseT<Pack, Pack<Ts...>>> {};
+struct DenominatorPart<Pack<Ts...>>
+    : stdx::type_identity<
+          PackInverseT<Pack, typename PullOutMatchingPowers<IsInDenominator, Pack<Ts...>>::type>> {
+};
+
 }  // namespace detail
 
 }  // namespace au
@@ -2845,7 +3009,7 @@ constexpr std::uintmax_t find_prime_factor(std::uintmax_t n) {
     //
     // Note that range-for isn't supported until C++17, so we need to use an index.
     for (auto i = 0u; i < FirstPrimes::values.size(); ++i) {
-        const auto &p = FirstPrimes::values[i];
+        const std::uintmax_t p = FirstPrimes::values[i];
 
         if (n % p == 0u) {
             return p;
@@ -2942,6 +3106,38 @@ using MagQuotientT = PackQuotientT<Magnitude, T, U>;
 template <typename T>
 using MagInverseT = PackInverseT<Magnitude, T>;
 
+// Enable negative magnitudes with a type representing (-1) that appears/disappears under powers.
+struct Negative {};
+template <typename... BPs, std::intmax_t ExpNum, std::intmax_t ExpDen>
+struct PackPower<Magnitude, Magnitude<Negative, BPs...>, std::ratio<ExpNum, ExpDen>>
+    : std::conditional<
+          (std::ratio<ExpNum, ExpDen>::num % 2 == 0),
+
+          // Even powers of (-1) are 1 for any root.
+          PackPowerT<Magnitude, Magnitude<BPs...>, ExpNum, ExpDen>,
+
+          // At this point, we know we're taking the D'th root of (-1), which is (-1)
+          // if D is odd, and a hard compiler error if D is even.
+          MagProductT<Magnitude<Negative>, MagPowerT<Magnitude<BPs...>, ExpNum, ExpDen>>>
+// Implement the hard error for raising to (odd / even) power:
+{
+    static_assert(std::ratio<ExpNum, ExpDen>::den % 2 == 1,
+                  "Cannot take even root of negative magnitude");
+};
+template <typename... LeftBPs, typename... RightBPs>
+struct PackProduct<Magnitude, Magnitude<Negative, LeftBPs...>, Magnitude<Negative, RightBPs...>>
+    : stdx::type_identity<MagProductT<Magnitude<LeftBPs...>, Magnitude<RightBPs...>>> {};
+
+// Define negation.
+template <typename... BPs>
+constexpr auto operator-(Magnitude<Negative, BPs...>) {
+    return Magnitude<BPs...>{};
+}
+template <typename... BPs>
+constexpr auto operator-(Magnitude<BPs...>) {
+    return Magnitude<Negative, BPs...>{};
+}
+
 // A printable label to indicate the Magnitude for human readers.
 template <typename MagT>
 struct MagnitudeLabel;
@@ -2951,7 +3147,7 @@ template <typename MagT>
 constexpr const auto &mag_label(MagT = MagT{});
 
 // A helper function to create a Magnitude from an integer constant.
-template <std::size_t N>
+template <std::uintmax_t N>
 constexpr auto mag();
 
 // A base type for prime numbers.
@@ -2979,6 +3175,15 @@ struct Pi {
 namespace detail {
 template <typename T, typename U>
 struct OrderByValue : stdx::bool_constant<(T::value() < U::value())> {};
+
+template <typename T>
+struct OrderByValue<Negative, T> : std::true_type {};
+
+template <typename T>
+struct OrderByValue<T, Negative> : std::false_type {};
+
+template <>
+struct OrderByValue<Negative, Negative> : std::false_type {};
 }  // namespace detail
 
 template <typename A, typename B>
@@ -2993,12 +3198,27 @@ template <typename MagT>
 using IntegerPartT = typename IntegerPartImpl<MagT>::type;
 
 template <typename MagT>
+struct AbsImpl;
+template <typename MagT>
+using Abs = typename AbsImpl<MagT>::type;
+
+template <typename MagT>
+struct SignImpl;
+template <typename MagT>
+using Sign = typename SignImpl<MagT>::type;
+
+template <typename MagT>
 struct NumeratorImpl;
 template <typename MagT>
 using NumeratorT = typename NumeratorImpl<MagT>::type;
 
 template <typename MagT>
-using DenominatorT = NumeratorT<MagInverseT<MagT>>;
+using DenominatorT = NumeratorT<MagInverseT<Abs<MagT>>>;
+
+template <typename MagT>
+struct IsPositive : std::true_type {};
+template <typename... BPs>
+struct IsPositive<Magnitude<Negative, BPs...>> : std::false_type {};
 
 template <typename MagT>
 struct IsRational
@@ -3023,18 +3243,6 @@ using CommonMagnitudeT = typename CommonMagnitude<Ms...>::type;
 // Value based interface for Magnitude.
 
 static constexpr auto ONE = Magnitude<>{};
-
-#ifndef PI
-// Some users must work with frameworks that define `PI` as a macro.  Having a macro with this
-// easily collidable name is exceedingly unwise.  Nevertheless, that's not the users' fault, so we
-// accommodate those frameworks by omitting the definition of `PI` in this case.
-//
-// If you are stuck with such a framework, you can choose a different name that does not collide,
-// and reproduce the following line in your own system.
-[[deprecated(
-    "If you need a magnitude instance for pi, define your own as `constexpr auto PI = "
-    "Magnitude<Pi>{};`")]] static constexpr auto PI = Magnitude<Pi>{};
-#endif
 
 template <typename... BP1s, typename... BP2s>
 constexpr auto operator*(Magnitude<BP1s...>, Magnitude<BP2s...>) {
@@ -3072,6 +3280,17 @@ constexpr auto integer_part(Magnitude<BPs...>) {
 }
 
 template <typename... BPs>
+constexpr auto abs(Magnitude<BPs...>) {
+    return Abs<Magnitude<BPs...>>{};
+}
+constexpr auto abs(Zero z) { return z; }
+
+template <typename... BPs>
+constexpr auto sign(Magnitude<BPs...>) {
+    return Sign<Magnitude<BPs...>>{};
+}
+
+template <typename... BPs>
 constexpr auto numerator(Magnitude<BPs...>) {
     return NumeratorT<Magnitude<BPs...>>{};
 }
@@ -3079,6 +3298,11 @@ constexpr auto numerator(Magnitude<BPs...>) {
 template <typename... BPs>
 constexpr auto denominator(Magnitude<BPs...>) {
     return DenominatorT<Magnitude<BPs...>>{};
+}
+
+template <typename... BPs>
+constexpr bool is_positive(Magnitude<BPs...>) {
+    return IsPositive<Magnitude<BPs...>>::value;
 }
 
 template <typename... BPs>
@@ -3130,12 +3354,13 @@ struct PrimeFactorization {
     static constexpr std::uintmax_t power = multiplicity(base, N);
     static constexpr std::uintmax_t remainder = N / int_pow(base, power);
 
-    using type = MagProductT<Magnitude<Pow<Prime<base>, power>>, PrimeFactorizationT<remainder>>;
+    using type = MagProductT<Magnitude<Pow<Prime<base>, static_cast<std::intmax_t>(power)>>,
+                             PrimeFactorizationT<remainder>>;
 };
 
 }  // namespace detail
 
-template <std::size_t N>
+template <std::uintmax_t N>
 constexpr auto mag() {
     return detail::PrimeFactorizationT<N>{};
 }
@@ -3156,6 +3381,31 @@ struct IntegerPartImpl<Magnitude<BPs...>>
     : stdx::type_identity<
           MagProductT<typename IntegerPartOfBasePower<BaseT<BPs>, ExpT<BPs>>::type...>> {};
 
+template <typename... BPs>
+struct IntegerPartImpl<Magnitude<Negative, BPs...>>
+    : stdx::type_identity<MagProductT<Magnitude<Negative>, IntegerPartT<Magnitude<BPs...>>>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `abs()` implementation.
+
+template <typename... BPs>
+struct AbsImpl<Magnitude<Negative, BPs...>> : stdx::type_identity<Magnitude<BPs...>> {};
+
+template <typename... BPs>
+struct AbsImpl<Magnitude<BPs...>> : stdx::type_identity<Magnitude<BPs...>> {};
+
+template <>
+struct AbsImpl<Zero> : stdx::type_identity<Zero> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `sign()` implementation.
+
+template <typename... BPs>
+struct SignImpl<Magnitude<BPs...>> : stdx::type_identity<Magnitude<>> {};
+
+template <typename... BPs>
+struct SignImpl<Magnitude<Negative, BPs...>> : stdx::type_identity<Magnitude<Negative>> {};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `numerator()` implementation.
 
@@ -3172,6 +3422,7 @@ namespace detail {
 enum class MagRepresentationOutcome {
     OK,
     ERR_NON_INTEGER_IN_INTEGER_TYPE,
+    ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE,
     ERR_INVALID_ROOT,
     ERR_CANNOT_FIT,
 };
@@ -3219,6 +3470,32 @@ constexpr MagRepresentationOrError<T> checked_int_pow(T base, std::uintmax_t exp
 }
 
 template <typename T>
+using IsKnownToBeInteger = stdx::bool_constant<(std::numeric_limits<T>::is_specialized &&
+                                                std::numeric_limits<T>::is_integer)>;
+
+template <typename T>
+struct NontrivialRootForInt {
+    constexpr MagRepresentationOrError<T> operator()(T, std::uintmax_t) const {
+        // There exist input values where a valid answer exists.  If this were a fully general root
+        // finding function, we would want to support them.  However, those situations can't arise
+        // in this instance.  We would never take a non-trivial root that returns an integer,
+        // because all inputs are products of rational powers of basis numbers.  If the result were
+        // an integer, then this would be made from rational powers of primes, and those rational
+        // exponents would have been converted to lowest terms already.
+        return {MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE};
+    }
+};
+
+template <typename T>
+struct GeneralNontrivialRoot;
+
+template <typename T, bool IsTKnownToBeInteger>
+struct NontrivialRootImpl
+    : std::conditional_t<IsTKnownToBeInteger, NontrivialRootForInt<T>, GeneralNontrivialRoot<T>> {
+    static_assert(IsKnownToBeInteger<T>::value == IsTKnownToBeInteger, "Internal library error");
+};
+
+template <typename T>
 constexpr MagRepresentationOrError<T> root(T x, std::uintmax_t n) {
     // The "zeroth root" would be mathematically undefined.
     if (n == 0) {
@@ -3230,89 +3507,109 @@ constexpr MagRepresentationOrError<T> root(T x, std::uintmax_t n) {
         return {MagRepresentationOutcome::OK, x};
     }
 
-    // We only support nontrivial roots of floating point types.
-    if (!std::is_floating_point<T>::value) {
-        return {MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE};
-    }
-
-    // Handle negative numbers: only odd roots are allowed.
-    if (x < 0) {
-        if (n % 2 == 0) {
-            return {MagRepresentationOutcome::ERR_INVALID_ROOT};
-        } else {
-            const auto negative_result = root(-x, n);
-            if (negative_result.outcome != MagRepresentationOutcome::OK) {
-                return {negative_result.outcome};
-            }
-            return {MagRepresentationOutcome::OK, static_cast<T>(-negative_result.value)};
-        }
-    }
-
     // Handle special cases of zero and one.
     if (x == 0 || x == 1) {
         return {MagRepresentationOutcome::OK, x};
     }
 
-    // Handle numbers bewtween 0 and 1.
-    if (x < 1) {
-        const auto inverse_result = root(T{1} / x, n);
-        if (inverse_result.outcome != MagRepresentationOutcome::OK) {
-            return {inverse_result.outcome};
-        }
-        return {MagRepresentationOutcome::OK, static_cast<T>(T{1} / inverse_result.value)};
-    }
-
-    //
-    // At this point, error conditions are finished, and we can proceed with the "core" algorithm.
-    //
-
-    // Always use `long double` for intermediate computations.  We don't ever expect people to be
-    // calling this at runtime, so we want maximum accuracy.
-    long double lo = 1.0;
-    long double hi = static_cast<long double>(x);
-
-    // Do a binary search to find the closest value such that `checked_int_pow` recovers the input.
-    //
-    // Because we know `n > 1`, and `x > 1`, and x^n is monotonically increasing, we know that
-    // `checked_int_pow(lo, n) < x < checked_int_pow(hi, n)`.  We will preserve this as an
-    // invariant.
-    while (lo < hi) {
-        long double mid = lo + (hi - lo) / 2;
-
-        auto result = checked_int_pow(mid, n);
-
-        if (result.outcome != MagRepresentationOutcome::OK) {
-            return {result.outcome};
-        }
-
-        // Early return if we get lucky with an exact answer.
-        if (result.value == x) {
-            return {MagRepresentationOutcome::OK, static_cast<T>(mid)};
-        }
-
-        // Check for stagnation.
-        if (mid == lo || mid == hi) {
-            break;
-        }
-
-        // Preserve the invariant that `checked_int_pow(lo, n) < x < checked_int_pow(hi, n)`.
-        if (result.value < x) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-
-    // Pick whichever one gets closer to the target.
-    const auto lo_diff = x - checked_int_pow(lo, n).value;
-    const auto hi_diff = checked_int_pow(hi, n).value - x;
-    return {MagRepresentationOutcome::OK, static_cast<T>(lo_diff < hi_diff ? lo : hi)};
+    return NontrivialRootImpl<T, IsKnownToBeInteger<T>::value>{}(x, n);
 }
+
+template <typename T>
+struct GeneralNontrivialRoot {
+    constexpr MagRepresentationOrError<T> operator()(T x, std::uintmax_t n) const {
+        // Handle negative numbers: only odd roots are allowed.
+        if (x < 0) {
+            if (n % 2 == 0) {
+                return {MagRepresentationOutcome::ERR_INVALID_ROOT};
+            }
+
+            const auto negative_result = root(-x, n);
+            if (negative_result.outcome != MagRepresentationOutcome::OK) {
+                return {negative_result.outcome};
+            }
+
+            return {MagRepresentationOutcome::OK, static_cast<T>(-negative_result.value)};
+        }
+
+        // Handle numbers bewtween 0 and 1.
+        if (x < 1) {
+            const auto inverse_result = root(T{1} / x, n);
+            if (inverse_result.outcome != MagRepresentationOutcome::OK) {
+                return {inverse_result.outcome};
+            }
+            return {MagRepresentationOutcome::OK, static_cast<T>(T{1} / inverse_result.value)};
+        }
+
+        //
+        // At this point, error conditions are finished, and we can proceed with the "core"
+        // algorithm.
+        //
+
+        // Always use `long double` for intermediate computations.  We don't ever expect people to
+        // be calling this at runtime, so we want maximum accuracy.
+        long double lo = 1.0;
+        long double hi = static_cast<long double>(x);
+
+        // Do a binary search to find the closest value such that `checked_int_pow` recovers the
+        // input.
+        //
+        // Because we know `n > 1`, and `x > 1`, and x^n is monotonically increasing, we know that
+        // `checked_int_pow(lo, n) < x < checked_int_pow(hi, n)`.  We will preserve this as an
+        // invariant.
+        while (lo < hi) {
+            long double mid = lo + (hi - lo) / 2;
+
+            auto result = checked_int_pow(mid, n);
+
+            if (result.outcome != MagRepresentationOutcome::OK) {
+                return {result.outcome};
+            }
+
+            // Early return if we get lucky with an exact answer.
+            if (result.value == x) {
+                return {MagRepresentationOutcome::OK, static_cast<T>(mid)};
+            }
+
+            // Check for stagnation.
+            if (mid == lo || mid == hi) {
+                break;
+            }
+
+            // Preserve the invariant that `checked_int_pow(lo, n) < x < checked_int_pow(hi, n)`.
+            if (result.value < x) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+
+        // Pick whichever one gets closer to the target.
+        const auto lo_diff = x - checked_int_pow(lo, n).value;
+        const auto hi_diff = checked_int_pow(hi, n).value - x;
+        return {MagRepresentationOutcome::OK, static_cast<T>(lo_diff < hi_diff ? lo : hi)};
+    }
+};
+enum class SignOfExponent { POSITIVE_SIGN, NEGATIVE_SIGN };
+
+template <typename T, std::uintmax_t N, std::uintmax_t D, typename B, SignOfExponent>
+struct BasePowerValueImpl;
 
 template <typename T, std::intmax_t N, std::uintmax_t D, typename B>
 constexpr MagRepresentationOrError<Widen<T>> base_power_value(B base) {
-    if (N < 0) {
-        const auto inverse_result = base_power_value<T, -N, D>(base);
+    return BasePowerValueImpl<T,
+                              static_cast<std::uintmax_t>(N < 0 ? -N : N),
+                              D,
+                              B,
+                              (N < 0 ? SignOfExponent::NEGATIVE_SIGN
+                                     : SignOfExponent::POSITIVE_SIGN)>{}(base);
+}
+
+template <typename T, std::uintmax_t N, std::uintmax_t D, typename B>
+struct BasePowerValueImpl<T, N, D, B, SignOfExponent::NEGATIVE_SIGN> {
+    constexpr MagRepresentationOrError<Widen<T>> operator()(B base) const {
+        const auto inverse_result =
+            BasePowerValueImpl<T, N, D, B, SignOfExponent::POSITIVE_SIGN>{}(base);
         if (inverse_result.outcome != MagRepresentationOutcome::OK) {
             return inverse_result;
         }
@@ -3321,14 +3618,18 @@ constexpr MagRepresentationOrError<Widen<T>> base_power_value(B base) {
             Widen<T>{1} / inverse_result.value,
         };
     }
+};
 
-    const auto power_result =
-        checked_int_pow(static_cast<Widen<T>>(base), static_cast<std::uintmax_t>(N));
-    if (power_result.outcome != MagRepresentationOutcome::OK) {
-        return {power_result.outcome};
+template <typename T, std::uintmax_t N, std::uintmax_t D, typename B>
+struct BasePowerValueImpl<T, N, D, B, SignOfExponent::POSITIVE_SIGN> {
+    constexpr MagRepresentationOrError<Widen<T>> operator()(B base) const {
+        const auto power_result = checked_int_pow(static_cast<Widen<T>>(base), N);
+        if (power_result.outcome != MagRepresentationOutcome::OK) {
+            return {power_result.outcome};
+        }
+        return (D > 1) ? root(power_result.value, D) : power_result;
     }
-    return (D > 1) ? root(power_result.value, D) : power_result;
-}
+};
 
 template <typename T, std::size_t N>
 constexpr MagRepresentationOrError<T> product(const MagRepresentationOrError<T> (&values)[N]) {
@@ -3396,32 +3697,83 @@ constexpr bool safe_to_cast_to(InputT x) {
     return SafeCastingChecker<T>{}(x);
 }
 
-template <typename T, typename... BPs>
-constexpr MagRepresentationOrError<T> get_value_result(Magnitude<BPs...>) {
-    // Representing non-integer values in integral types is something we never plan to support.
-    constexpr bool REPRESENTING_NON_INTEGER_IN_INTEGRAL_TYPE =
-        stdx::conjunction<std::is_integral<T>, stdx::negation<IsInteger<Magnitude<BPs...>>>>::value;
-    if (REPRESENTING_NON_INTEGER_IN_INTEGRAL_TYPE) {
+template <typename T, typename MagT>
+struct GetValueResultImplForNonIntegerInIntegralType {
+    constexpr MagRepresentationOrError<T> operator()() {
         return {MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE};
     }
+};
 
-    // Force the expression to be evaluated in a constexpr context.
-    constexpr auto widened_result = product(
-        {base_power_value<RealPart<T>, ExpT<BPs>::num, static_cast<std::uintmax_t>(ExpT<BPs>::den)>(
-            BaseT<BPs>::value())...});
+template <typename T, typename MagT>
+struct GetValueResultImplForDefaultCase;
+template <typename T, typename... BPs>
+struct GetValueResultImplForDefaultCase<T, Magnitude<BPs...>> {
+    constexpr MagRepresentationOrError<T> operator()() {
+        // Force the expression to be evaluated in a constexpr context.
+        constexpr auto widened_result =
+            product({base_power_value<RealPart<T>,
+                                      ExpT<BPs>::num,
+                                      static_cast<std::uintmax_t>(ExpT<BPs>::den)>(
+                BaseT<BPs>::value())...});
 
-    if ((widened_result.outcome != MagRepresentationOutcome::OK) ||
-        !safe_to_cast_to<T>(widened_result.value)) {
-        return {MagRepresentationOutcome::ERR_CANNOT_FIT};
+        if ((widened_result.outcome != MagRepresentationOutcome::OK) ||
+            !safe_to_cast_to<T>(widened_result.value)) {
+            return {MagRepresentationOutcome::ERR_CANNOT_FIT};
+        }
+
+        return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
     }
+};
 
-    return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
+template <typename T, typename MagT>
+struct GetValueResultImpl
+    : std::conditional_t<
+          stdx::conjunction<std::is_integral<T>, stdx::negation<IsInteger<MagT>>>::value,
+          GetValueResultImplForNonIntegerInIntegralType<T, MagT>,
+          GetValueResultImplForDefaultCase<T, MagT>> {};
+
+template <typename T, typename... BPs>
+constexpr MagRepresentationOrError<T> get_value_result(Magnitude<BPs...>) {
+    constexpr auto result = GetValueResultImpl<T, Magnitude<BPs...>>{}();
+    return result;
 }
 
 // This simple overload avoids edge cases with creating and passing zero-sized arrays.
 template <typename T>
 constexpr MagRepresentationOrError<T> get_value_result(Magnitude<>) {
     return {MagRepresentationOutcome::OK, static_cast<T>(1)};
+}
+
+template <typename T, typename MagT, bool IsCandidate>
+struct IsExactlyLowestOfSignedIntegral : std::false_type {};
+template <typename T, typename... BPs>
+struct IsExactlyLowestOfSignedIntegral<T, Magnitude<Negative, BPs...>, true>
+    : std::is_same<
+          decltype(mag<static_cast<std::make_unsigned_t<T>>(std::numeric_limits<T>::max()) + 1u>()),
+          Magnitude<BPs...>> {};
+template <typename T, typename... BPs>
+constexpr bool is_exactly_lowest_of_signed_integral(Magnitude<BPs...>) {
+    return IsExactlyLowestOfSignedIntegral<
+        T,
+        Magnitude<BPs...>,
+        stdx::conjunction<std::is_integral<T>, std::is_signed<T>>::value>::value;
+}
+
+template <typename T, typename... BPs>
+constexpr MagRepresentationOrError<T> get_value_result(Magnitude<Negative, BPs...> m) {
+    if (std::is_unsigned<T>::value) {
+        return {MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE};
+    }
+
+    if (is_exactly_lowest_of_signed_integral<T>(m)) {
+        return {MagRepresentationOutcome::OK, std::numeric_limits<T>::lowest()};
+    }
+
+    const auto result = get_value_result<T>(Magnitude<BPs...>{});
+    if (result.outcome != MagRepresentationOutcome::OK) {
+        return result;
+    }
+    return {MagRepresentationOutcome::OK, static_cast<T>(-result.value)};
 }
 }  // namespace detail
 
@@ -3461,15 +3813,14 @@ enum class MagLabelCategory {
 
 template <typename... BPs>
 constexpr MagLabelCategory categorize_mag_label(Magnitude<BPs...> m) {
-    if (IsInteger<Magnitude<BPs...>>::value) {
-        return get_value_result<std::uintmax_t>(m).outcome == MagRepresentationOutcome::OK
-                   ? MagLabelCategory::INTEGER
-                   : MagLabelCategory::UNSUPPORTED;
-    }
-    if (IsRational<Magnitude<BPs...>>::value) {
-        return MagLabelCategory::RATIONAL;
-    }
-    return MagLabelCategory::UNSUPPORTED;
+    // This unsightly "nested ternary" approach makes this entire function into --- _technically_
+    // --- a one-liner, which appeases the Green Hills compiler.
+    return IsInteger<Magnitude<BPs...>>::value
+               ? (get_value_result<std::uintmax_t>(m).outcome == MagRepresentationOutcome::OK
+                      ? MagLabelCategory::INTEGER
+                      : MagLabelCategory::UNSUPPORTED)
+               : (IsRational<Magnitude<BPs...>>::value ? MagLabelCategory::RATIONAL
+                                                       : MagLabelCategory::UNSUPPORTED);
 }
 
 template <typename MagT, MagLabelCategory Category>
@@ -3521,6 +3872,18 @@ struct MagnitudeLabel<Magnitude<BPs...>>
     : detail::MagnitudeLabelImplementation<Magnitude<BPs...>,
                                            detail::categorize_mag_label(Magnitude<BPs...>{})> {};
 
+template <typename... BPs>
+struct MagnitudeLabel<Magnitude<Negative, BPs...>> :
+    // Inherit for "has exposed slash".
+    MagnitudeLabel<Magnitude<BPs...>> {
+    using LabelT = detail::ExtendedMagLabel<1u, Magnitude<BPs...>>;
+    static constexpr LabelT value =
+        detail::concatenate("-", MagnitudeLabel<Magnitude<BPs...>>::value);
+};
+template <typename... BPs>
+constexpr typename MagnitudeLabel<Magnitude<Negative, BPs...>>::LabelT
+    MagnitudeLabel<Magnitude<Negative, BPs...>>::value;
+
 template <typename MagT>
 constexpr const auto &mag_label(MagT) {
     return detail::as_char_array(MagnitudeLabel<MagT>::value);
@@ -3539,9 +3902,9 @@ template <typename BP, typename... Ts>
 struct PrependIfExpNegative<BP, Magnitude<Ts...>>
     : std::conditional<(ExpT<BP>::num < 0), Magnitude<BP, Ts...>, Magnitude<Ts...>> {};
 
-// If M is (N/D), DenominatorPartT<M> is D; we want 1/D.
+// Remove all positive powers from M.
 template <typename M>
-using NegativePowers = MagInverseT<DenominatorPartT<M>>;
+using NegativePowers = MagQuotientT<M, NumeratorPartT<M>>;
 }  // namespace detail
 
 // 1-ary case: identity.
@@ -3600,234 +3963,1052 @@ struct CommonMagnitude<Zero, Zero> : stdx::type_identity<Zero> {};
 }  // namespace  au
 
 
+namespace au {
+namespace detail {
 
-// This file exists to analyze one single calculation: `x * N / D`, where `x` is
-// some integral type, and `N` and `D` are the numerator and denominator of a
-// rational magnitude (and hence, are automatically in lowest terms),
-// represented in that same type.  We want to answer one single question: will
-// this calculation overflow at any stage?
 //
-// Importantly, we need to produce correct answers even when `N` and/or `D`
-// _cannot be represented_ in that type (because they would overflow).  We also
-// need to handle subtleties around integer promotion, where the type of `x * x`
-// can be different from the type of `x` when those types are small.
+// `OpInput<Op>` and `OpOutput<Op>` are the input and output types of an operation.
 //
-// The goal for the final solution we produce is to be as fast and efficient as
-// the best such function that an expert C++ engineer could produce by hand, for
-// every combination of integral type and numerator and denominator magnitudes.
+template <typename Op>
+struct OpInputImpl;
+template <typename Op>
+using OpInput = typename OpInputImpl<Op>::type;
+
+template <typename Op>
+struct OpOutputImpl;
+template <typename Op>
+using OpOutput = typename OpOutputImpl<Op>::type;
+
+//
+// `StaticCast<T, U>` represents an operation that converts from `T` to `U` via `static_cast`.
+//
+template <typename T, typename U>
+struct StaticCast;
+
+//
+// `MultiplyTypeBy<T, M>` represents an operation that multiplies a value of type `T` by the
+// magnitude `M`.
+//
+// Note that this operation does *not* model integer promotion.  It will always force the result to
+// be `T`.  To model integer promotion, form a compound operation with `OpSequence` that includes
+// appropriate `StaticCast`.
+//
+template <typename T, typename M>
+struct MultiplyTypeBy;
+
+//
+// `DivideTypeByInteger<T, M>` represents an operation that divides a value of type `T` by the
+// magnitude `M`.
+//
+// Note that this operation does *not* model integer promotion.  It will always force the result to
+// be `T`.  To model integer promotion, form a compound operation with `OpSequence` that includes
+// appropriate `StaticCast`.
+//
+template <typename T, typename M>
+struct DivideTypeByInteger;
+
+//
+// `OpSequence<Ops...>` represents an ordered sequence of operations.
+//
+// We require that the output type of each operation is the same as the input type of the next one
+// (see below for `OpInput` and `OpOutput`).
+//
+template <typename... Ops>
+struct OpSequenceImpl;
+template <typename... Ops>
+using OpSequence = FlattenAs<OpSequenceImpl, Ops...>;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMPLEMENTATION DETAILS (`abstract_operations.hh`):
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `StaticCast<T, U>` implementation.
+
+// `OpInput` and `OpOutput`:
+template <typename T, typename U>
+struct OpInputImpl<StaticCast<T, U>> : stdx::type_identity<T> {};
+template <typename T, typename U>
+struct OpOutputImpl<StaticCast<T, U>> : stdx::type_identity<U> {};
+
+// `StaticCast<T, U>` operation:
+template <typename T, typename U>
+struct StaticCast {
+    static constexpr U apply_to(T value) { return static_cast<U>(value); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MultiplyTypeBy<T, M>` implementation.
+
+// `OpInput` and `OpOutput`:
+template <typename T, typename M>
+struct OpInputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
+template <typename T, typename M>
+struct OpOutputImpl<MultiplyTypeBy<T, M>> : stdx::type_identity<T> {};
+
+// `MultiplyTypeBy<T, M>` operation:
+template <typename T, typename Mag>
+struct MultiplyTypeBy {
+    static constexpr T apply_to(T value) {
+        return static_cast<T>(value * get_value<RealPart<T>>(Mag{}));
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger<T, M>` implementation.
+
+// `OpInput` and `OpOutput`:
+template <typename T, typename M>
+struct OpInputImpl<DivideTypeByInteger<T, M>> : stdx::type_identity<T> {};
+template <typename T, typename M>
+struct OpOutputImpl<DivideTypeByInteger<T, M>> : stdx::type_identity<T> {};
+
+template <typename T, typename M, MagRepresentationOutcome MagOutcome>
+struct DivideTypeByIntegerImpl {
+    static constexpr T apply_to(T value) {
+        static_assert(MagOutcome == MagRepresentationOutcome::OK, "Internal library error");
+        return static_cast<T>(value / get_value<RealPart<T>>(M{}));
+    }
+};
+
+template <typename T, typename M>
+struct DivideTypeByIntegerImpl<T, M, MagRepresentationOutcome::ERR_CANNOT_FIT> {
+    // If a number is too big to fit in the type, then dividing by it should produce 0.
+    static constexpr T apply_to(T) { return T{0}; }
+};
+
+template <typename T, typename M>
+struct DivideTypeByInteger
+    : DivideTypeByIntegerImpl<T, M, get_value_result<RealPart<T>>(M{}).outcome> {
+    static_assert(IsInteger<M>::value,
+                  "Internal library error: inappropriate operation"
+                  " (use `MultiplyTypeBy` with inverse instead)");
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `OpSequence<Ops...>` implementation.
+
+// `OpInput`:
+template <typename Op, typename... Ops>
+struct OpInputImpl<OpSequenceImpl<Op, Ops...>> : stdx::type_identity<OpInput<Op>> {};
+
+// `OpOutput`:
+template <typename Op, typename... Ops>
+struct OpOutputImpl<OpSequenceImpl<Op, Ops...>>
+    : stdx::type_identity<OpOutput<OpSequence<Ops...>>> {};
+template <typename OnlyOp>
+struct OpOutputImpl<OpSequenceImpl<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
+
+template <typename Op>
+struct OpSequenceImpl<Op> {
+    static constexpr auto apply_to(OpInput<OpSequenceImpl> value) { return Op::apply_to(value); }
+};
+
+template <typename Op, typename... Ops>
+struct OpSequenceImpl<Op, Ops...> {
+    static constexpr auto apply_to(OpInput<OpSequenceImpl> value) {
+        return OpSequenceImpl<Ops...>::apply_to(Op::apply_to(value));
+    }
+};
+
+}  // namespace detail
+}  // namespace au
+
 
 namespace au {
 namespace detail {
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// `PromotedType<T>` is the result type for arithmetic operations involving `T`.  Of course, this is
-// normally just `T`, but integer promotion for small integral types can change this.
+// `ConversionForRepsAndFactor<OldRep, NewRep, Factor>` is the operation that takes a value of
+// `OldRep`, and produces the product of that value with magnitude `Factor` in the type `NewRep`.
 //
-template <typename T>
-struct PromotedTypeImpl {
-    using type = decltype(std::declval<T>() * std::declval<T>());
+template <typename OldRep, typename NewRep, typename Factor>
+struct ConversionForRepsAndFactorImpl;
+template <typename OldRep, typename NewRep, typename Factor>
+using ConversionForRepsAndFactor =
+    typename ConversionForRepsAndFactorImpl<OldRep, NewRep, Factor>::type;
 
-    static_assert(std::is_same<type, typename PromotedTypeImpl<type>::type>::value,
-                  "We explicitly assume that promoted types are not again promotable");
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details (`conversion_strategy.hh`):
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//
+// `ApplicationStrategyFor<T, Mag>` tells us how we should apply a magnitude `Mag` to a type `T`.
+//
+
+enum class MagKind {
+    DEFAULT,
+    INTEGER_DIVIDE,
+    NONTRIVIAL_RATIONAL,
 };
-template <typename T>
-using PromotedType = typename PromotedTypeImpl<T>::type;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+template <MagKind>
+struct MagKindHolder {};
+
+template <typename M>
+struct MagKindForImpl
+    : std::conditional<
+          stdx::conjunction<IsRational<M>,
+                            stdx::negation<std::is_same<DenominatorT<M>, Magnitude<>>>>::value,
+          std::conditional_t<std::is_same<Abs<NumeratorT<M>>, Magnitude<>>::value,
+                             MagKindHolder<MagKind::INTEGER_DIVIDE>,
+                             MagKindHolder<MagKind::NONTRIVIAL_RATIONAL>>,
+          MagKindHolder<MagKind::DEFAULT>> {};
+template <typename M>
+using MagKindFor = typename MagKindForImpl<M>::type;
+
+template <typename T, typename Mag, typename MagKindValue>
+struct ApplicationStrategyForImpl : stdx::type_identity<MultiplyTypeBy<T, Mag>> {};
+template <typename T, typename Mag>
+using ApplicationStrategyFor = typename ApplicationStrategyForImpl<T, Mag, MagKindFor<Mag>>::type;
+
+template <typename T, typename Mag>
+struct ApplicationStrategyForImpl<T, Mag, MagKindHolder<MagKind::INTEGER_DIVIDE>>
+    : stdx::type_identity<DivideTypeByInteger<T, MagProductT<Sign<Mag>, DenominatorT<Mag>>>> {};
+
+template <typename T, typename Mag>
+struct ApplicationStrategyForImpl<T, Mag, MagKindHolder<MagKind::NONTRIVIAL_RATIONAL>>
+    : std::conditional<
+          std::is_integral<RealPart<T>>::value,
+          OpSequence<MultiplyTypeBy<T, NumeratorT<Mag>>, DivideTypeByInteger<T, DenominatorT<Mag>>>,
+          MultiplyTypeBy<T, Mag>> {};
+
 //
-// `clamp_to_range_of<T>(x)` returns `x` if it is in the range of `T`, and otherwise returns the
-// maximum value representable in `T` if `x` is too large, or the minimum value representable in `T`
-// if `x` is too small.
+// `ConversionRep<OldRep, NewRep>` is the rep we should use when applying the conversion factor.
+//
+template <typename OldRep, typename NewRep>
+struct ConversionRepImpl;
+template <typename OldRep, typename NewRep>
+using ConversionRep = typename ConversionRepImpl<OldRep, NewRep>::type;
+
+template <typename OldRep, typename NewRep>
+struct IsRealToComplex
+    : stdx::conjunction<std::is_same<OldRep, RealPart<OldRep>>,
+                        stdx::experimental::is_detected<TypeOfRealMember, NewRep>> {};
+
+template <typename OldRep, typename NewRep>
+struct ConversionRepImpl
+    : std::conditional<IsRealToComplex<OldRep, NewRep>::value,
+                       PromotedType<std::common_type_t<RealPart<OldRep>, RealPart<NewRep>>>,
+                       PromotedType<std::common_type_t<OldRep, NewRep>>> {};
+
+//
+// `StaticCastSequence<T, U>` is the sequence of operations that gets us from `T` to `U`.
+//
+// Normally, of course, this is just `StaticCast<T, U>`.  But we have weird edge cases like going
+// from `double` to `std::complex<int>`, which require an intermediate step of static casting to
+// `int`.
 //
 
 template <typename T, typename U>
-constexpr T clamp_to_range_of(U x) {
-    return stdx::cmp_greater(x, std::numeric_limits<T>::max())
-               ? std::numeric_limits<T>::max()
-               : (stdx::cmp_less(x, std::numeric_limits<T>::lowest())
-                      ? std::numeric_limits<T>::lowest()
-                      : static_cast<T>(x));
+struct StaticCastSequenceImpl
+    : std::conditional<stdx::conjunction<IsRealToComplex<T, U>,
+                                         stdx::negation<std::is_same<T, RealPart<U>>>>::value,
+                       OpSequence<StaticCast<T, RealPart<U>>, StaticCast<RealPart<U>, U>>,
+                       StaticCast<T, U>> {};
+template <typename T, typename U>
+using StaticCastSequence = typename StaticCastSequenceImpl<T, U>::type;
+
+//
+// `FullConversionImpl<OldRep, ConversionRepT, NewRep, Factor>` should resolve to the most efficient
+// sequence of operations for a conversion from `OldRep` to `NewRep`, with a magnitude `Factor`,
+// where `ConversionRepT` is the promoted type of the common type of `OldRep` and `NewRep`.
+//
+
+template <typename OldRep, typename ConversionRepT, typename NewRep, typename Factor>
+struct FullConversionImpl
+    : stdx::type_identity<OpSequence<StaticCastSequence<OldRep, ConversionRepT>,
+                                     ApplicationStrategyFor<ConversionRepT, Factor>,
+                                     StaticCastSequence<ConversionRepT, NewRep>>> {};
+
+template <typename OldRepIsConversionRep, typename NewRep, typename Factor>
+struct FullConversionImpl<OldRepIsConversionRep, OldRepIsConversionRep, NewRep, Factor>
+    : stdx::type_identity<OpSequence<ApplicationStrategyFor<OldRepIsConversionRep, Factor>,
+                                     StaticCastSequence<OldRepIsConversionRep, NewRep>>> {};
+
+template <typename OldRep, typename NewRepIsConversionRep, typename Factor>
+struct FullConversionImpl<OldRep, NewRepIsConversionRep, NewRepIsConversionRep, Factor>
+    : stdx::type_identity<OpSequence<StaticCastSequence<OldRep, NewRepIsConversionRep>,
+                                     ApplicationStrategyFor<NewRepIsConversionRep, Factor>>> {};
+
+template <typename Rep, typename Factor>
+struct FullConversionImpl<Rep, Rep, Rep, Factor>
+    : stdx::type_identity<ApplicationStrategyFor<Rep, Factor>> {};
+
+// To implement `ConversionForRepsAndFactor`, delegate to `FullConversionImpl`.
+template <typename OldRep, typename NewRep, typename Factor>
+struct ConversionForRepsAndFactorImpl
+    : FullConversionImpl<OldRep, ConversionRep<OldRep, NewRep>, NewRep, Factor> {};
+
+}  // namespace detail
+}  // namespace au
+
+
+
+// These utilities help assess overflow risk for an operation `Op` by finding the minimum and
+// maximum values in the "scalar type" of `OpInput<Op>` that are guaranteed to not overflow.
+//
+// The "scalar type" of `T` is usually just `T`, but if `T` is something like `std::complex<U>`, or
+// `Eigen::Vector<U, N>`, then it would be `U`.
+
+namespace au {
+namespace detail {
+
+//
+// `MinPossible<Op>::value()` is the smallest representable value in the "scalar type" for
+// `OpInput<Op>` (see above comments for definition of "scalar type").
+//
+// This exists to give us an interface for `numeric_limits<T>::lowest()` that is as easy as possible
+// to use with `MinGood<Op, Limits>`.  That means it automatically applies to the scalar type, and
+// that it stores the result behind a `::value()` interface.
+//
+template <typename Op>
+struct MinPossibleImpl;
+template <typename Op>
+using MinPossible = typename MinPossibleImpl<Op>::type;
+
+//
+// `MaxPossible<Op>::value()` is the largest representable value in the "scalar type" for
+// `OpInput<Op>` (see above comments for definition of "scalar type").
+//
+template <typename Op>
+struct MaxPossibleImpl;
+template <typename Op>
+using MaxPossible = typename MaxPossibleImpl<Op>::type;
+
+//
+// `MinGood<Op>::value()` is a constexpr constant of the "scalar type" for `OpInput<Op>` that is the
+// minimum value that does not overflow.
+//
+// IMPORTANT: the result must always be non-positive.  The code is structured on this assumption.
+//
+template <typename Op, typename Limits>
+struct MinGoodImpl;
+template <typename Op, typename Limits = void>
+using MinGood = typename MinGoodImpl<Op, Limits>::type;
+
+//
+// `MaxGood<Op>::value()` is a constexpr constant of the "scalar type" for `OpInput<Op>` that is the
+// maximum value that does not overflow.
+//
+// IMPORTANT: the result must always be non-negative.  The code is structured on this assumption.
+//
+template <typename Op, typename Limits = void>
+struct MaxGoodImpl;
+template <typename Op, typename Limits = void>
+using MaxGood = typename MaxGoodImpl<Op, Limits>::type;
+
+//
+// `CanOverflowBelow<Op>::value` is `true` if there is any value in `OpInput<Op>` that can cause the
+// operation to exceed its bounds.
+//
+template <typename Op>
+struct CanOverflowBelow;
+
+//
+// `CanOverflowAbove<Op>::value` is `true` if there is any value in `OpInput<Op>` that can cause the
+// operation to exceed its bounds.
+//
+template <typename Op>
+struct CanOverflowAbove;
+
+// `MinValueChecker<Op>::is_too_small(x)` checks whether the value `x` is small enough to overflow
+// the bounds of the operation.
+template <typename Op>
+struct MinValueChecker;
+
+// `MaxValueChecker<Op>::is_too_large(x)` checks whether the value `x` is large enough to overflow
+// the bounds of the operation.
+template <typename Op>
+struct MaxValueChecker;
+
+// `would_value_overflow<Op>(x)` checks whether the value `x` would exceed the bounds of the
+// operation at any stage.
+template <typename Op>
+constexpr bool would_value_overflow(const OpInput<Op> &x) {
+    return MinValueChecker<Op>::is_too_small(x) || MaxValueChecker<Op>::is_too_large(x);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMPLEMENTATION DETAILS
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// General note:
 //
-// `is_known_to_be_less_than_one(MagT)` is true if the magnitude `MagT` is purely rational; its
-// numerator is representable in `std::uintmax_t`; and, it is less than 1.
+// The implementation strategy will be to decompose to increasingly specific cases, using
+// `std::conditional` constructs that are _at most one layer deep_.  This should keep every
+// individual piece as easy to understand as possible, although it does mean we'll tend to be
+// navigating many layers deep from the top-level API to the ultimate implementation.
 //
+// It's easier to navigate these helpers if we put a shorthand comment at the top of each.  Here's
+// the key:
+//
+// (A) = arithmetic (integral or floating point)
+// (F) = floating point
+// (I) = integral (signed or unsigned)
+// (N) = non-arithmetic
+// (S) = signed integral
+// (U) = unsigned integral
+// (X) = any type
 
-template <typename... BPs>
-constexpr bool is_known_to_be_less_than_one(Magnitude<BPs...>) {
-    using MagT = Magnitude<BPs...>;
-    static_assert(is_rational(MagT{}), "Magnitude must be rational");
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Predicate helpers
 
-    constexpr auto num_result = get_value_result<std::uintmax_t>(numerator(MagT{}));
-    static_assert(num_result.outcome == MagRepresentationOutcome::OK,
-                  "Magnitude must be representable in std::uintmax_t");
+//
+// `IsDefinitelyBounded<T>::value` is `true` if `T` is known to have specific min/max values.
+//
+template <typename T>
+using IsDefinitelyBounded =
+    stdx::conjunction<stdx::bool_constant<(std::numeric_limits<T>::is_specialized)>,
+                      stdx::bool_constant<(std::numeric_limits<T>::is_bounded)>>;
 
-    constexpr auto den_result = get_value_result<std::uintmax_t>(denominator(MagT{}));
-    static_assert(
-        den_result.outcome == MagRepresentationOutcome::OK ||
-            den_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT,
-        "Magnitude must either be representable in std::uintmax_t, or fail due to overflow");
+//
+// `IsDefinitelyUnsigned<T>::value` is `true` if `T` is known to be an unsigned type.
+//
+template <typename T>
+using IsDefinitelyUnsigned =
+    stdx::conjunction<stdx::bool_constant<std::numeric_limits<T>::is_specialized>,
+                      stdx::bool_constant<!std::numeric_limits<T>::is_signed>>;
 
-    return den_result.outcome == MagRepresentationOutcome::OK ? num_result.value < den_result.value
-                                                              : true;
+//
+// `IsAbsProbablyBiggerThanOne<T, M>::value` is `true` if `Abs<M>` is bigger than 1.
+//
+template <typename T, typename M, MagRepresentationOutcome Outcome>
+struct IsAbsProbablyBiggerThanOneHelper : std::false_type {};
+
+template <typename T, typename M>
+struct IsAbsProbablyBiggerThanOneHelper<T, M, MagRepresentationOutcome::OK>
+    : stdx::bool_constant<(get_value<T>(Abs<M>{}) >= T{1})> {};
+
+template <typename T, typename M>
+struct IsAbsProbablyBiggerThanOneHelper<T, M, MagRepresentationOutcome::ERR_CANNOT_FIT>
+    : std::true_type {};
+
+template <typename T, typename M>
+struct IsAbsProbablyBiggerThanOne
+    : IsAbsProbablyBiggerThanOneHelper<T, M, get_value_result<T>(Abs<M>{}).outcome> {};
+
+// `UpperLimit<T, Limits>::value()` returns `Limits::upper()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the highest possible value.
+template <typename T, typename Limits>
+struct UpperLimit {
+    static constexpr T value() { return Limits::upper(); }
+};
+template <typename T>
+struct UpperLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::max(); }
+};
+
+// `LowerLimit<T, Limits>::value()` returns `Limits::lower()` (assumed to be of type `T`), unless
+// `Limits` is `void`, in which case it means "no limit" and we return the lowest possible value.
+template <typename T, typename Limits>
+struct LowerLimit {
+    static constexpr T value() { return Limits::lower(); }
+};
+template <typename T>
+struct LowerLimit<T, void> {
+    static constexpr T value() { return std::numeric_limits<T>::lowest(); }
+};
+
+template <typename T>
+constexpr T clamped_negate(T x) {
+    if (Less{}(x, T{0}) && Less{}(x, -std::numeric_limits<T>::max())) {
+        return std::numeric_limits<T>::max();
+    }
+    if (Greater{}(x, T{0}) && Greater{}(x, clamped_negate(std::numeric_limits<T>::lowest()))) {
+        return std::numeric_limits<T>::lowest();
+    }
+    return -x;
 }
 
+// `LimitsFor<Op, Limits>` produces a type which can be the `Limits` argument for some other op.
+template <typename Op, typename Limits>
+struct LimitsFor {
+    static constexpr RealPart<OpInput<Op>> lower() { return MinGood<Op, Limits>::value(); }
+    static constexpr RealPart<OpInput<Op>> upper() { return MaxGood<Op, Limits>::value(); }
+};
+
+// Inherit from this struct to produce a compiler error in case we try to use a combination of types
+// that isn't yet supported.
+template <typename T>
+struct OverflowBoundaryNotYetImplemented {
+    struct NotYetImplemented {};
+    static_assert(std::is_same<T, NotYetImplemented>::value,
+                  "Overflow boundary not yet implemented for this type.");
+};
+
+// A type whose `::value()` function returns the higher of `std::numeric_limits<T>::lowest()`, or
+// `LowerLimit<U, ULimit>` expressed in `T`.  Assumes that `U` is more expansive than `T`, so that
+// we can cast everything to `U` to do the comparisons.
+template <typename T, typename U, typename ULimit>
+struct ValueOfSourceLowestUnlessDestLimitIsHigher {
+    static constexpr T value() {
+        constexpr auto LOWEST_T_IN_U = static_cast<U>(std::numeric_limits<T>::lowest());
+        constexpr auto U_LIMIT = LowerLimit<U, ULimit>::value();
+        return (LOWEST_T_IN_U <= U_LIMIT) ? static_cast<T>(U_LIMIT)
+                                          : std::numeric_limits<T>::lowest();
+    }
+};
+
+// A type whose `::value()` function returns the lower of `std::numeric_limits<T>::max()`, or
+// `UpperLimit<U, ULimit>` expressed in `T`.  Assumes that `U` is more expansive than `T`, so that
+// we can cast everything to `U` to do the comparisons.
+template <typename T, typename U, typename ULimit>
+struct ValueOfSourceHighestUnlessDestLimitIsLower {
+    static constexpr T value() {
+        constexpr auto HIGHEST_T_IN_U = static_cast<U>(std::numeric_limits<T>::max());
+        constexpr auto U_LIMIT = UpperLimit<U, ULimit>::value();
+        return (HIGHEST_T_IN_U >= U_LIMIT) ? static_cast<T>(U_LIMIT)
+                                           : std::numeric_limits<T>::max();
+    }
+};
+
+// A type whose `::value()` function returns the lowest value of `U`, expressed in `T`.
+template <typename T, typename U = T, typename ULimit = void>
+struct ValueOfLowestInDestination {
+    static constexpr T value() { return static_cast<T>(LowerLimit<U, ULimit>::value()); }
+
+    static_assert(static_cast<U>(value()) == LowerLimit<U, ULimit>::value(),
+                  "This utility assumes lossless round trips");
+};
+
+// A type whose `::value()` function returns the highest value of `U`, expressed in `T`.
+template <typename T, typename U = T, typename ULimit = void>
+struct ValueOfHighestInDestination {
+    static constexpr T value() { return static_cast<T>(UpperLimit<U, ULimit>::value()); }
+
+    static_assert(static_cast<U>(value()) == UpperLimit<U, ULimit>::value(),
+                  "This utility assumes lossless round trips");
+};
+
+// A type whose `::value()` function is capped at the highest value in `Float` (assumed to be a
+// floating point type) that can be cast to `Int` (assumed to be an integral type).  We need to be
+// really careful in how we express this, because max int values tend not to be nice powers of 2.
+// Therefore, even though we can cast the `Int` max to `Float` successfully, casting back to `Int`
+// will produce a compile time error because the closest representable integer in `Float` is
+// slightly _higher_ than that max.
+//
+// On the implementation side, keep in mind that our library supports C++14, and most common
+// floating point utilities (such as `std::nextafter`) are not `constexpr` compatible in C++14.
+// Therefore, we need to use alternative strategies to explore the floating point type.  These are
+// always evaluated at compile time, so we are not especially concerned about the efficiency: it
+// should have no runtime effect at all, and we expect even the compile time impact --- which we
+// measure regularly as we land commits --- to be too small to measure.
+template <typename Float, typename Int, typename IntLimit>
+struct ValueOfMaxFloatNotExceedingMaxInt {
+    // The `Float` value where all mantissa bits are set to `1`, and the exponent is `0`.
+    static constexpr Float max_mantissa() {
+        constexpr Float ONE = Float{1};
+        Float x = ONE;
+        Float last = x;
+        while (x + ONE > x) {
+            last = x;
+            x += x + ONE;
+        }
+        return last;
+    }
+
+    // Function to do the actual computation of the value.
+    static constexpr Float compute_value() {
+        constexpr Float LIMIT = static_cast<Float>(std::numeric_limits<Int>::max());
+        constexpr Float MAX_MANTISSA = max_mantissa();
+
+        return (LIMIT <= MAX_MANTISSA) ? LIMIT : double_first_until_second(MAX_MANTISSA, LIMIT);
+    }
+
+    static constexpr Float double_first_until_second(Float x, Float limit) {
+        while (x + x < limit) {
+            x += x;
+        }
+        return x;
+    }
+
+    // `value()` implementation simply computes the result _once_ (caching it), and then returns it.
+    static constexpr Float value() {
+        constexpr Float FLOAT_LIMIT = compute_value();
+        constexpr Float EXPLICIT_LIMIT = static_cast<Float>(UpperLimit<Int, IntLimit>::value());
+        constexpr Float RESULT = (FLOAT_LIMIT <= EXPLICIT_LIMIT) ? FLOAT_LIMIT : EXPLICIT_LIMIT;
+        return RESULT;
+    }
+};
+
+template <typename T, typename MagT, MagRepresentationOutcome Outcome>
+struct MagHelper {
+    static constexpr bool equal(const T &, const T &) { return false; }
+    static constexpr T div(const T &, const T &) {
+        static_assert(Outcome == MagRepresentationOutcome::ERR_CANNOT_FIT,
+                      "Internal library error");
+
+        // Dividing by a number that is too big to fit in the type implies a result of 0.
+        return T{0};
+    }
+};
+
+template <typename T, typename MagT>
+struct MagHelper<T, MagT, MagRepresentationOutcome::OK> {
+    static constexpr bool equal(const T &x, const T &value) { return x == value; }
+    static constexpr T div(const T &a, const T &b) { return a / b; }
+};
+
+template <typename T, typename... BPs>
+constexpr T divide_by_mag(const T &x, Magnitude<BPs...> m) {
+    constexpr auto result = get_value_result<T>(m);
+    return MagHelper<T, Magnitude<BPs...>, result.outcome>::div(x, result.value);
+}
+
+// Name reads as "lowest of (limits divided by value)".  Remember that the value can be negative, so
+// we just take whichever limit is smaller _after_ dividing.
+//
+// This utility should only be called when `Abs<M>` is greater than 1.  (We can't easily check this
+// condition, so we simply assume it; all callers are library-internal anyway, and we have unit
+// tests.)  Since `Abs<M>` can be assumed to be greater than one, we know that dividing by `M` will
+// shrink values, so we don't risk overflow.
+template <typename T, typename M, typename Limits>
+struct LowestOfLimitsDividedByValue {
+    static constexpr T value() {
+        constexpr auto RELEVANT_LIMIT =
+            IsPositive<M>::value ? LowerLimit<T, Limits>::value() : UpperLimit<T, Limits>::value();
+
+        return divide_by_mag(RELEVANT_LIMIT, M{});
+    }
+};
+
+// Name reads as "clamp lowest of (limits times inverse value)".  First, remember that the value can
+// be negative, so multiplying can sometimes switch the sign: we want whichever is smaller _after_
+// that operation.  Next, if clamping is relevant, that means both that the type is bounded (so
+// overflow is _possible_), and that `Abs<M>` is _smaller_ than 1 (implying that its _inverse_ can
+// _grow_ values, so we risk overflow).  Therefore, we have to start from the bounds of the type,
+// and back out the most extreme value for the limit that will _not_ overflow.
+template <typename T, typename M, typename Limits>
+struct ClampLowestOfLimitsTimesInverseValue {
+    static constexpr T value() {
+        constexpr auto ABS_DIVISOR = MagInverseT<Abs<M>>{};
+
+        constexpr T RELEVANT_LIMIT = IsPositive<M>::value
+                                         ? LowerLimit<T, Limits>::value()
+                                         : clamped_negate(UpperLimit<T, Limits>::value());
+
+        constexpr T RELEVANT_BOUND =
+            IsPositive<M>::value
+                ? divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR)
+                : clamped_negate(divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR));
+        constexpr bool SHOULD_CLAMP = RELEVANT_BOUND >= RELEVANT_LIMIT;
+
+        // This value will be meaningless if `get_value_result<T>(ABS_DIVISOR).outcome` is not `OK`,
+        // but we won't end up actually using the value in those cases.
+        constexpr auto ABS_DIVISOR_AS_T = get_value_result<T>(ABS_DIVISOR).value;
+
+        return SHOULD_CLAMP ? std::numeric_limits<T>::lowest() : RELEVANT_LIMIT * ABS_DIVISOR_AS_T;
+    }
+};
+
+template <typename T, typename... BPs>
+constexpr bool mag_representation_equals(const T &x, Magnitude<BPs...> m) {
+    constexpr auto result = get_value_result<T>(m);
+    return MagHelper<T, Magnitude<BPs...>, result.outcome>::equal(x, result.value);
+}
+
+// Name reads as "highest of (limits divided by value)".  Of course, normally this is just the
+// higher limit divided by the value.  But if the value is negative, then the _lower limit_ will
+// give the higher result _after_ we divide.
+//
+// Also, `Abs<M>` can be assumed to be greater than one, or else we would have been shunted into the
+// clamping variant.  This means that dividing by `M` will shrink values, so we don't risk overflow.
+template <typename T, typename M, typename Limits>
+struct HighestOfLimitsDividedByValue {
+    static constexpr T value() {
+        if (mag_representation_equals(LowerLimit<T, Limits>::value(), M{})) {
+            return T{1};
+        }
+
+        return (IsPositive<M>::value)
+                   ? divide_by_mag(UpperLimit<T, Limits>::value(), M{})
+                   : clamped_negate(divide_by_mag(LowerLimit<T, Limits>::value(), Abs<M>{}));
+    }
+};
+
+// Name reads as "clamp highest of (limits times inverse value)".  See comments for
+// `ClampLowestOfLimitsTimesInverseValue` for more details on the motivation and logic.
+template <typename T, typename M, typename Limits>
+struct ClampHighestOfLimitsTimesInverseValue {
+    static constexpr T value() {
+        constexpr auto ABS_DIVISOR = MagInverseT<Abs<M>>{};
+
+        constexpr T RELEVANT_LIMIT = IsPositive<M>::value
+                                         ? UpperLimit<T, Limits>::value()
+                                         : clamped_negate(LowerLimit<T, Limits>::value());
+
+        constexpr T RELEVANT_BOUND =
+            IsPositive<M>::value
+                ? divide_by_mag(std::numeric_limits<T>::max(), ABS_DIVISOR)
+                : clamped_negate(divide_by_mag(std::numeric_limits<T>::lowest(), ABS_DIVISOR));
+        constexpr bool SHOULD_CLAMP = RELEVANT_BOUND <= RELEVANT_LIMIT;
+
+        // This value will be meaningless if `get_value_result<T>(ABS_DIVISOR).outcome` is not `OK`,
+        // but we won't end up actually using the value in those cases.
+        constexpr auto ABS_DIVISOR_AS_T = get_value_result<T>(ABS_DIVISOR).value;
+
+        return SHOULD_CLAMP ? std::numeric_limits<T>::max() : RELEVANT_LIMIT * ABS_DIVISOR_AS_T;
+    }
+};
+
+constexpr bool is_ok_or_err_cannot_fit(MagRepresentationOutcome outcome) {
+    return outcome == MagRepresentationOutcome::OK ||
+           outcome == MagRepresentationOutcome::ERR_CANNOT_FIT;
+}
+
+template <typename T, typename M>
+struct IsCompatibleApartFromMaybeOverflow
+    : stdx::bool_constant<is_ok_or_err_cannot_fit(get_value_result<T>(M{}).outcome)> {};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// `MaxNonOverflowingValue<T, MagT>` is the maximum value of type `T` that can have `MagT` applied
-// as numerator-and-denominator without overflowing.  We require that `T` is some integral
-// arithmetic type, and that `MagT` is a rational magnitude that is neither purely integral nor
-// purely inverse-integral.
-//
-// If you are trying to understand these helpers, we suggest starting at the bottom with
-// `MaxNonOverflowingValue`, and reading upwards.
-//
+// `MinPossible<Op>` implementation.
 
-//
-// Branch based on whether `MagT` is less than 1.
-//
-template <typename T, typename MagT, bool IsMagLessThanOne>
-struct MaxNonOverflowingValueImplWhenNumFits;
-
-// If `MagT` is less than 1, then we only need to check for the limiting value where the _numerator
-// multiplication step alone_ would overflow.
-template <typename T, typename MagT>
-struct MaxNonOverflowingValueImplWhenNumFits<T, MagT, true> {
-    using P = PromotedType<T>;
-
-    static constexpr T value() {
-        return clamp_to_range_of<T>(std::numeric_limits<P>::max() /
-                                    get_value<P>(numerator(MagT{})));
-    }
+// Why this lazy implementation, instead of using `std::numeric_limits` directly?  Simply because we
+// need a _type_ whose _`value()` method_ returns the given value.  We already built that for more
+// complicated use cases (it's called `LowestOfLimitsDividedByValue`), so we can just reuse it here.
+template <typename Op>
+struct MinPossibleImpl
+    : stdx::type_identity<LowestOfLimitsDividedByValue<RealPart<OpInput<Op>>, Magnitude<>, void>> {
 };
-
-// If `MagT` is greater than 1, then we have two opportunities for overflow: the numerator
-// multiplication step can overflow the promoted type; or, the denominator division step can fail to
-// restore it to the original type's range.
-template <typename T, typename MagT>
-struct MaxNonOverflowingValueImplWhenNumFits<T, MagT, false> {
-    using P = PromotedType<T>;
-
-    static constexpr T value() {
-        constexpr auto num = get_value<P>(numerator(MagT{}));
-        constexpr auto den = get_value<P>(denominator(MagT{}));
-        constexpr auto t_max = std::numeric_limits<T>::max();
-        constexpr auto p_max = std::numeric_limits<P>::max();
-        constexpr auto limit_to_avoid = (den > p_max / t_max) ? p_max : t_max * den;
-        return clamp_to_range_of<T>(limit_to_avoid / num);
-    }
-};
-
-//
-// Branch based on whether the numerator of `MagT` can fit in the promoted type of `T`.
-//
-template <typename T, typename MagT, MagRepresentationOutcome NumOutcome>
-struct MaxNonOverflowingValueImpl;
-
-// If the numerator fits in the promoted type of `T`, delegate further based on whether the
-// denominator is bigger.
-template <typename T, typename MagT>
-struct MaxNonOverflowingValueImpl<T, MagT, MagRepresentationOutcome::OK>
-    : MaxNonOverflowingValueImplWhenNumFits<T, MagT, is_known_to_be_less_than_one(MagT{})> {};
-
-// If `MagT` can't be represented in the promoted type of `T`, then the result is 0.
-template <typename T, typename MagT>
-struct MaxNonOverflowingValueImpl<T, MagT, MagRepresentationOutcome::ERR_CANNOT_FIT> {
-    static constexpr T value() { return T{0}; }
-};
-
-template <typename T, typename MagT>
-struct ValidateTypeAndMagnitude {
-    static_assert(std::is_integral<T>::value, "Only designed for integral types");
-    static_assert(is_rational(MagT{}), "Magnitude must be rational");
-    static_assert(!is_integer(MagT{}), "Magnitude must not be purely integral");
-    static_assert(!is_integer(inverse(MagT{})), "Magnitude must not be purely inverse-integral");
-};
-
-template <typename T, typename MagT>
-struct MaxNonOverflowingValue
-    : ValidateTypeAndMagnitude<T, MagT>,
-      MaxNonOverflowingValueImpl<T,
-                                 MagT,
-                                 get_value_result<PromotedType<T>>(numerator(MagT{})).outcome> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// `MinNonOverflowingValue<T, MagT>` is the minimum (i.e., most-negative) value of type `T` that can
-// have `MagT` applied as numerator-and-denominator without overflowing (i.e., becoming too-negative
-// to represent).  We require that `T` is some integral arithmetic type, and that `MagT` is a
-// rational magnitude that is neither purely integral nor purely inverse-integral.
-//
-// If you are trying to understand these helpers, we suggest starting at the bottom with
-// `MinNonOverflowingValue`, and reading upwards.
-//
+// `MaxPossible<Op>` implementation.
 
-//
-// Branch based on whether `MagT` is less than 1.
-//
-template <typename T, typename MagT, bool IsMagLessThanOne>
-struct MinNonOverflowingValueImplWhenNumFits;
-
-// If `MagT` is less than 1, then we only need to check for the limiting value where the _numerator
-// multiplication step alone_ would overflow.
-template <typename T, typename MagT>
-struct MinNonOverflowingValueImplWhenNumFits<T, MagT, true> {
-    using P = PromotedType<T>;
-
-    static constexpr T value() {
-        return clamp_to_range_of<T>(std::numeric_limits<P>::lowest() /
-                                    get_value<P>(numerator(MagT{})));
-    }
+// See `MinPossibleImpl` comments above for explanation of this lazy approach.
+template <typename Op>
+struct MaxPossibleImpl
+    : stdx::type_identity<HighestOfLimitsDividedByValue<RealPart<OpInput<Op>>, Magnitude<>, void>> {
 };
 
-// If `MagT` is greater than 1, then we have two opportunities for overflow: the numerator
-// multiplication step can overflow the promoted type; or, the denominator division step can fail to
-// restore it to the original type's range.
-template <typename T, typename MagT>
-struct MinNonOverflowingValueImplWhenNumFits<T, MagT, false> {
-    using P = PromotedType<T>;
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `StaticCast<T, U>` implementation.
 
-    static constexpr T value() {
-        constexpr auto num = get_value<P>(numerator(MagT{}));
-        constexpr auto den = get_value<P>(denominator(MagT{}));
-        constexpr auto t_min = std::numeric_limits<T>::lowest();
-        constexpr auto p_min = std::numeric_limits<P>::lowest();
-        constexpr auto limit_to_avoid = (den > p_min / t_min) ? p_min : t_min * den;
-        return clamp_to_range_of<T>(limit_to_avoid / num);
-    }
+//
+// `MinGood<StaticCast<T, U>>` implementation cluster.
+//
+// See comment above for meanings of (N), (X), (A), etc.
+//
+
+// (N) -> (X) (placeholder)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
+
+// (A) -> (N) (placeholder)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromArithmeticToNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
+
+// (S) -> (S)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromSignedToSigned
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueOfSourceLowestUnlessDestLimitIsHigher<T, U, ULimit>,
+                       ValueOfLowestInDestination<T, U, ULimit>> {};
+
+// (S) -> (I)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromSignedToIntegral
+    : std::conditional_t<std::is_unsigned<U>::value,
+                         stdx::type_identity<ValueOfZero<T>>,
+                         MinGoodImplForStaticCastFromSignedToSigned<T, U, ULimit>> {};
+
+// (S) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromSignedToArithmetic
+    : std::conditional_t<
+          std::is_floating_point<U>::value,
+          stdx::type_identity<ValueOfSourceLowestUnlessDestLimitIsHigher<T, U, ULimit>>,
+          MinGoodImplForStaticCastFromSignedToIntegral<T, U, ULimit>> {};
+
+// (I) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromIntegralToArithmetic
+    : std::conditional_t<
+          std::is_unsigned<T>::value,
+          stdx::type_identity<ValueOfSourceLowestUnlessDestLimitIsHigher<T, U, ULimit>>,
+          MinGoodImplForStaticCastFromSignedToArithmetic<T, U, ULimit>> {};
+
+// (F) -> (F)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromFloatingPointToFloatingPoint
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueOfSourceLowestUnlessDestLimitIsHigher<T, U, ULimit>,
+                       ValueOfLowestInDestination<T, U, ULimit>> {};
+
+// (F) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromFloatingPointToArithmetic
+    : std::conditional_t<std::is_floating_point<U>::value,
+                         MinGoodImplForStaticCastFromFloatingPointToFloatingPoint<T, U, ULimit>,
+                         stdx::type_identity<ValueOfLowestInDestination<T, U, ULimit>>> {};
+
+// (A) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromArithmeticToArithmetic
+    : std::conditional_t<std::is_integral<T>::value,
+                         MinGoodImplForStaticCastFromIntegralToArithmetic<T, U, ULimit>,
+                         MinGoodImplForStaticCastFromFloatingPointToArithmetic<T, U, ULimit>> {};
+
+// (A) -> (X)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastFromArithmetic
+    : std::conditional_t<std::is_arithmetic<U>::value,
+                         MinGoodImplForStaticCastFromArithmeticToArithmetic<T, U, ULimit>,
+                         MinGoodImplForStaticCastFromArithmeticToNonArithmetic<T, U, ULimit>> {};
+
+// (X) -> (X)
+template <typename T, typename U, typename ULimit>
+struct MinGoodImplForStaticCastUsingRealPart
+    : std::conditional_t<
+          std::is_arithmetic<RealPart<T>>::value,
+          MinGoodImplForStaticCastFromArithmetic<RealPart<T>, RealPart<U>, ULimit>,
+          MinGoodImplForStaticCastFromNonArithmetic<RealPart<T>, RealPart<U>, ULimit>> {};
+
+template <typename T, typename U, typename ULimit>
+struct MinGoodImpl<StaticCast<T, U>, ULimit> : MinGoodImplForStaticCastUsingRealPart<T, U, ULimit> {
 };
 
 //
-// Branch based on whether the denominator of `MagT` can fit in the promoted type of `T`.
+// `MaxGood<StaticCast<T, U>>` implementation cluster.
 //
-template <typename T, typename MagT, MagRepresentationOutcome NumOutcome>
-struct MinNonOverflowingValueImpl;
+// See comment above for meanings of (N), (X), (A), etc.
+//
 
-// If the numerator fits in the promoted type of `T`, delegate further based on whether the
-// denominator is bigger.
-template <typename T, typename MagT>
-struct MinNonOverflowingValueImpl<T, MagT, MagRepresentationOutcome::OK>
-    : MinNonOverflowingValueImplWhenNumFits<T, MagT, is_known_to_be_less_than_one(MagT{})> {};
+// (N) -> (X) (placeholder)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
 
-// If the numerator can't be represented in the promoted type of `T`, then the result is 0.
-template <typename T, typename MagT>
-struct MinNonOverflowingValueImpl<T, MagT, MagRepresentationOutcome::ERR_CANNOT_FIT> {
-    static constexpr T value() { return T{0}; }
+// (A) -> (N) (placeholder)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromArithmeticToNonArithmetic
+    : OverflowBoundaryNotYetImplemented<StaticCast<T, U>> {};
+
+// (I) -> (I)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromIntegralToIntegral
+    : std::conditional<(static_cast<std::common_type_t<T, U>>(std::numeric_limits<T>::max()) <=
+                        static_cast<std::common_type_t<T, U>>(std::numeric_limits<U>::max())),
+                       ValueOfSourceHighestUnlessDestLimitIsLower<T, U, ULimit>,
+                       ValueOfHighestInDestination<T, U, ULimit>> {};
+
+// (I) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromIntegralToArithmetic
+    : std::conditional_t<
+          std::is_integral<U>::value,
+          MaxGoodImplForStaticCastFromIntegralToIntegral<T, U, ULimit>,
+          stdx::type_identity<ValueOfSourceHighestUnlessDestLimitIsLower<T, U, ULimit>>> {};
+
+// (F) -> (F)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromFloatingPointToFloatingPoint
+    : std::conditional<sizeof(T) <= sizeof(U),
+                       ValueOfSourceHighestUnlessDestLimitIsLower<T, U, ULimit>,
+                       ValueOfHighestInDestination<T, U, ULimit>> {};
+
+// (F) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromFloatingPointToArithmetic
+    : std::conditional_t<std::is_floating_point<U>::value,
+                         MaxGoodImplForStaticCastFromFloatingPointToFloatingPoint<T, U, ULimit>,
+                         stdx::type_identity<ValueOfMaxFloatNotExceedingMaxInt<T, U, ULimit>>> {};
+
+// (A) -> (A)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromArithmeticToArithmetic
+    : std::conditional_t<std::is_integral<T>::value,
+                         MaxGoodImplForStaticCastFromIntegralToArithmetic<T, U, ULimit>,
+                         MaxGoodImplForStaticCastFromFloatingPointToArithmetic<T, U, ULimit>> {};
+
+// (A) -> (X)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastFromArithmetic
+    : std::conditional_t<std::is_arithmetic<U>::value,
+                         MaxGoodImplForStaticCastFromArithmeticToArithmetic<T, U, ULimit>,
+                         MaxGoodImplForStaticCastFromArithmeticToNonArithmetic<T, U, ULimit>> {};
+
+// (X) -> (X)
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImplForStaticCastUsingRealPart
+    : std::conditional_t<
+          std::is_arithmetic<RealPart<T>>::value,
+          MaxGoodImplForStaticCastFromArithmetic<RealPart<T>, RealPart<U>, ULimit>,
+          MaxGoodImplForStaticCastFromNonArithmetic<RealPart<T>, RealPart<U>, ULimit>> {};
+
+template <typename T, typename U, typename ULimit>
+struct MaxGoodImpl<StaticCast<T, U>, ULimit> : MaxGoodImplForStaticCastUsingRealPart<T, U, ULimit> {
 };
 
-template <typename T, typename MagT>
-struct MinNonOverflowingValue
-    : ValidateTypeAndMagnitude<T, MagT>,
-      MinNonOverflowingValueImpl<T,
-                                 MagT,
-                                 get_value_result<PromotedType<T>>(numerator(MagT{})).outcome> {
-    static_assert(std::is_signed<T>::value, "Only designed for signed types");
-    static_assert(std::is_signed<PromotedType<T>>::value,
-                  "We assume the promoted type is also signed");
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MultiplyTypeBy<T, M>` implementation.
+
+template <typename T, typename M>
+using IsClampingRequired =
+    stdx::conjunction<stdx::negation<IsAbsProbablyBiggerThanOne<T, M>>, IsDefinitelyBounded<T>>;
+
+//
+// `MinGood<MultiplyTypeBy<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForMultiplyCompatibleTypeBy
+    : std::conditional<IsClampingRequired<T, M>::value,
+                       ClampLowestOfLimitsTimesInverseValue<T, M, Limits>,
+                       LowestOfLimitsDividedByValue<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForMultiplyTypeByAssumingSigned
+    : std::conditional_t<IsCompatibleApartFromMaybeOverflow<T, M>::value,
+                         MinGoodImplForMultiplyCompatibleTypeBy<T, M, Limits>,
+                         stdx::type_identity<ValueOfZero<T>>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForMultiplyTypeByUsingRealPart
+    : std::conditional_t<IsDefinitelyUnsigned<T>::value,
+                         stdx::type_identity<ValueOfZero<T>>,
+                         MinGoodImplForMultiplyTypeByAssumingSigned<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImpl<MultiplyTypeBy<T, M>, Limits>
+    : MinGoodImplForMultiplyTypeByUsingRealPart<RealPart<T>, M, Limits> {};
+
+//
+// `MaxGood<MultiplyTypeBy<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForMultiplyCompatibleTypeBy
+    : std::conditional<IsClampingRequired<T, M>::value,
+                       ClampHighestOfLimitsTimesInverseValue<T, M, Limits>,
+                       HighestOfLimitsDividedByValue<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor
+    : std::conditional_t<IsCompatibleApartFromMaybeOverflow<T, M>::value,
+                         MaxGoodImplForMultiplyCompatibleTypeBy<T, M, Limits>,
+                         stdx::type_identity<ValueOfZero<T>>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForMultiplyTypeByUsingRealPart
+    : std::conditional_t<
+          stdx::conjunction<IsDefinitelyUnsigned<T>, stdx::negation<IsPositive<M>>>::value,
+          stdx::type_identity<ValueOfZero<T>>,
+          MaxGoodImplForMultiplyTypeByAssumingSignedTypeOrPositiveFactor<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImpl<MultiplyTypeBy<T, M>, Limits>
+    : MaxGoodImplForMultiplyTypeByUsingRealPart<RealPart<T>, M, Limits> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger<T, M>` implementation.
+
+//
+// `MinGood<DivideTypeByInteger<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForDivideTypeByIntegerAssumingSigned
+    : stdx::type_identity<ClampLowestOfLimitsTimesInverseValue<T, MagInverseT<M>, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImplForDivideTypeByIntegerUsingRealPart
+    : std::conditional_t<IsDefinitelyUnsigned<T>::value,
+                         stdx::type_identity<ValueOfZero<T>>,
+                         MinGoodImplForDivideTypeByIntegerAssumingSigned<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MinGoodImpl<DivideTypeByInteger<T, M>, Limits>
+    : MinGoodImplForDivideTypeByIntegerUsingRealPart<RealPart<T>, M, Limits> {};
+
+//
+// `MaxGood<DivideTypeByInteger<T, M>>` implementation cluster.
+//
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForDivideTypeByIntegerAssumingSignedTypeOrPositiveFactor
+    : stdx::type_identity<ClampHighestOfLimitsTimesInverseValue<T, MagInverseT<M>, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImplForDivideTypeByIntegerUsingRealPart
+    : std::conditional_t<
+          stdx::conjunction<IsDefinitelyUnsigned<T>, stdx::negation<IsPositive<M>>>::value,
+          stdx::type_identity<ValueOfZero<T>>,
+          MaxGoodImplForDivideTypeByIntegerAssumingSignedTypeOrPositiveFactor<T, M, Limits>> {};
+
+template <typename T, typename M, typename Limits>
+struct MaxGoodImpl<DivideTypeByInteger<T, M>, Limits>
+    : MaxGoodImplForDivideTypeByIntegerUsingRealPart<RealPart<T>, M, Limits> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `OpSequence<Ops...>` implementation.
+
+//
+// `MinGood<OpSequence<Ops...>>` implementation cluster.
+//
+
+template <typename OnlyOp, typename Limits>
+struct MinGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : MinGoodImpl<OnlyOp, Limits> {};
+
+template <typename Op1, typename Op2, typename... Ops, typename Limits>
+struct MinGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
+    : MinGoodImpl<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>> {
+    static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
+                  "Output of each op in sequence must match input of next op");
 };
+
+//
+// `MaxGood<OpSequence<Ops...>>` implementation cluster.
+//
+
+template <typename OnlyOp, typename Limits>
+struct MaxGoodImpl<OpSequenceImpl<OnlyOp>, Limits> : MaxGoodImpl<OnlyOp, Limits> {};
+
+template <typename Op1, typename Op2, typename... Ops, typename Limits>
+struct MaxGoodImpl<OpSequenceImpl<Op1, Op2, Ops...>, Limits>
+    : MaxGoodImpl<Op1, LimitsFor<OpSequenceImpl<Op2, Ops...>, Limits>> {
+    static_assert(std::is_same<OpOutput<Op1>, OpInput<Op2>>::value,
+                  "Output of each op in sequence must match input of next op");
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowBelow<Op>` implementation.
+
+template <typename Op>
+struct CanOverflowBelow : stdx::bool_constant<(MinGood<Op>::value() > MinPossible<Op>::value())> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `CanOverflowAbove<Op>` implementation.
+
+template <typename Op>
+struct CanOverflowAbove : stdx::bool_constant<(MaxGood<Op>::value() < MaxPossible<Op>::value())> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MinValueChecker<Op>` and `MaxValueChecker<Op>` implementation.
+
+template <typename Op, bool IsOverflowPossible>
+struct MinValueCheckerImpl {
+    static constexpr bool is_too_small(const OpInput<Op> &x) { return x < MinGood<Op>::value(); }
+};
+template <typename Op>
+struct MinValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_small(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MinValueChecker : MinValueCheckerImpl<Op, CanOverflowBelow<Op>::value> {};
+
+template <typename Op, bool IsOverflowPossible>
+struct MaxValueCheckerImpl {
+    static constexpr bool is_too_large(const OpInput<Op> &x) { return x > MaxGood<Op>::value(); }
+};
+template <typename Op>
+struct MaxValueCheckerImpl<Op, false> {
+    static constexpr bool is_too_large(const OpInput<Op> &) { return false; }
+};
+template <typename Op>
+struct MaxValueChecker : MaxValueCheckerImpl<Op, CanOverflowAbove<Op>::value> {};
 
 }  // namespace detail
 }  // namespace au
@@ -3946,11 +5127,9 @@ struct UnitRatio : stdx::type_identity<MagQuotientT<detail::MagT<U1>, detail::Ma
 template <typename U1, typename U2>
 using UnitRatioT = typename UnitRatio<U1, U2>::type;
 
-// Some units have an "origin".  This is not meaningful by itself, but its difference w.r.t. the
-// "origin" of another unit of the same Dimension _is_ meaningful.  This type trait provides access
-// to that difference.
-template <typename U1, typename U2>
-struct OriginDisplacement;
+// The sign of a unit: almost always `mag<1>()`, but `-mag<1>()` for "negative" units.
+template <typename U>
+using UnitSign = Sign<detail::MagT<U>>;
 
 template <typename U>
 struct AssociatedUnit : stdx::type_identity<U> {};
@@ -4056,9 +5235,10 @@ constexpr UnitRatioT<AssociatedUnitT<U1>, AssociatedUnitT<U2>> unit_ratio(U1, U2
     return {};
 }
 
-template <typename U1, typename U2>
-constexpr auto origin_displacement(U1, U2) {
-    return OriginDisplacement<AssociatedUnitT<U1>, AssociatedUnitT<U2>>::value();
+// Type trait for the sign of a Unit (represented as a Magnitude).
+template <typename U>
+constexpr UnitSign<AssociatedUnitT<U>> unit_sign(U) {
+    return {};
 }
 
 template <typename U>
@@ -4209,7 +5389,7 @@ constexpr UnitPowerT<U, Exp> pow(U) {
 }
 
 // Take the Root (of some integral degree) of a Unit.
-template <std::uintmax_t Deg, typename U, typename = std::enable_if_t<IsUnit<U>::value>>
+template <std::intmax_t Deg, typename U, typename = std::enable_if_t<IsUnit<U>::value>>
 constexpr UnitPowerT<U, 1, Deg> root(U) {
     return {};
 }
@@ -4241,17 +5421,28 @@ struct SingularNameFor {
     }
 };
 
+// Support `SingularNameFor` in (quantity) unit slots.
+template <typename U>
+struct AssociatedUnit<SingularNameFor<U>> : stdx::type_identity<U> {};
+
 template <int Exp, typename Unit>
 constexpr auto pow(SingularNameFor<Unit>) {
     return SingularNameFor<UnitPowerT<Unit, Exp>>{};
 }
+
+//
+// Specialize `UnitOrderTiebreaker<YourCustomUnit>` as below, but with a different constant, in
+// order to reduce the chance of hitting "distinct input types compare equal" errors.
+//
+template <typename U>
+struct UnitOrderTiebreaker;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation details below
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// `OriginDisplacement` implementation.
+// Origin displacement implementation.
 
 namespace detail {
 // Callable type trait for the default origin of a unit: choose ZERO.
@@ -4279,26 +5470,62 @@ struct ValueDifference {
 };
 }  // namespace detail
 
-// Why this conditional, instead of just using `ValueDifference` unconditionally?  The use case is
-// somewhat subtle.  Without it, we would still deduce a displacement _numerically_ equal to 0, but
-// it would be stored in specific _units_.  For example, for Celsius, the displacement would be "0
-// millikelvins" rather than a generic ZERO.  This has implications for type deduction.  It means
-// that, e.g., the following would fail!
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `ValueDisplacementMagnitude` utility.
+namespace detail {
+
+// `ValueDisplacementMagnitude<T1, T2>` is a type that can be instantiated, and is either a
+// `Magnitude` type or else `Zero`.  It represents the magnitude of the unit that takes us from
+// `T1::value()` to `T2::value()` (and is `Zero` if and only if these values are equal).
 //
-//   celsius_pt(20).in(celsius_pt);
-//
-// The reason it would fail is because under the hood, we'd be subtracting a `QuantityI32<Celsius>`
-// from a `QuantityI32<Milli<Kelvins>>`, yielding a result expressed in millikelvins for what should
-// be an integer number of degrees Celsius.  True, that result happens to have a _value_ of 0... but
-// values don't affect overload resolution!
-//
-// Using ZeroValue when the origins are equal fixes this problem, by expressing the "zero-ness" in
-// the _type_.
+// This is fully encapsulated inside of the `detail` namespace because we don't want end users
+// reasoning in terms of "the magnitude" of a unit.  This concept makes no sense generally.
+// However, it's useful to us internally, because it helps us compute the largest possible magnitude
+// of a common point unit.  Being fully encapsulated, we ourselves can be careful not to misuse it.
+enum class AreValuesEqual { YES, NO };
+template <typename U1, typename U2, AreValuesEqual>
+struct ValueDisplacementMagnitudeImpl;
 template <typename U1, typename U2>
-struct OriginDisplacement
-    : std::conditional_t<detail::OriginOf<U1>::value() == detail::OriginOf<U2>::value(),
-                         detail::ZeroValue,
-                         detail::ValueDifference<detail::OriginOf<U2>, detail::OriginOf<U1>>> {};
+using ValueDisplacementMagnitude = typename ValueDisplacementMagnitudeImpl<
+    U1,
+    U2,
+    (U1::value() == U2::value() ? AreValuesEqual::YES : AreValuesEqual::NO)>::type;
+
+// Equal values case.
+template <typename U1, typename U2>
+struct ValueDisplacementMagnitudeImpl<U1, U2, AreValuesEqual::YES> : stdx::type_identity<Zero> {
+    static_assert(U1::value() == U2::value(), "Mismatched instantiation (internal library error)");
+};
+
+// Prep for handling unequal values: it's useful to be able to turn a signed integer into a
+// Magnitude.
+//
+// The `bool` template parameter in the `MagSign` interface has poor callsite readability, but it
+// doesn't matter because we're only using it right here.
+template <bool IsNeg>
+struct MagSign : stdx::type_identity<Magnitude<>> {};
+template <>
+struct MagSign<true> : stdx::type_identity<Magnitude<Negative>> {};
+template <std::intmax_t N>
+constexpr auto signed_mag() {
+    constexpr auto sign = typename MagSign<(N < 0)>::type{};
+    return sign * mag<static_cast<std::size_t>(N < 0 ? (-N) : N)>();
+}
+
+// Unequal values case implementation: scale up the magnitude of the diff's _unit_ by the diff's
+// _value in_ that unit.
+template <typename U1, typename U2>
+struct ValueDisplacementMagnitudeImpl<U1, U2, AreValuesEqual::NO> {
+    static_assert(U1::value() != U2::value(), "Mismatched instantiation (internal library error)");
+    static constexpr auto mag() {
+        constexpr auto diff = U2::value() - U1::value();
+        using D = typename decltype(diff)::Unit;
+        return MagT<D>{} * signed_mag<diff.in(D{})>();
+    }
+    using type = decltype(mag());
+};
+
+}  // namespace detail
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `HasSameDimension` implementation.
@@ -4330,7 +5557,7 @@ struct AreUnitsQuantityEquivalent
 
 namespace detail {
 template <typename U1, typename U2>
-struct HasSameOrigin : stdx::bool_constant<(OriginDisplacement<U1, U2>::value() == ZERO)> {};
+struct HasSameOrigin : stdx::bool_constant<(OriginOf<U1>::value() == OriginOf<U2>::value())> {};
 }  // namespace detail
 
 template <typename U1, typename U2>
@@ -4416,7 +5643,8 @@ struct IsFirstUnitRedundant
                          std::true_type,
                          std::conditional_t<AreUnitsQuantityEquivalent<U1, U2>::value,
                                             InOrderFor<Pack, U2, U1>,
-                                            IsInteger<UnitRatioT<U1, U2>>>> {};
+                                            stdx::conjunction<IsInteger<UnitRatioT<U1, U2>>,
+                                                              IsPositive<UnitRatioT<U1, U2>>>>> {};
 
 // Recursive case: eliminate first unit if it is redundant; else, keep it and eliminate any later
 // units that are redundant with it.
@@ -4480,12 +5708,23 @@ struct SimplifyIfOnlyOneUnscaledUnitImpl;
 template <typename U>
 using SimplifyIfOnlyOneUnscaledUnit =
     typename SimplifyIfOnlyOneUnscaledUnitImpl<U, DistinctUnscaledUnits<U>>::type;
+template <>
+struct SimplifyIfOnlyOneUnscaledUnitImpl<Zero, UnitList<Zero>> : stdx::type_identity<Zero> {};
 template <typename U, typename SoleUnscaledUnit>
 struct SimplifyIfOnlyOneUnscaledUnitImpl<U, UnitList<SoleUnscaledUnit>>
     : stdx::type_identity<decltype(SoleUnscaledUnit{} * UnitRatioT<U, SoleUnscaledUnit>{})> {};
 template <typename U, typename... Us>
 struct SimplifyIfOnlyOneUnscaledUnitImpl<U, UnitList<Us...>> : stdx::type_identity<U> {};
 
+// Explicit specialization to short-circuit `FirstMatchingUnit` machinery for `Zero`.
+template <>
+struct FirstMatchingUnit<AreUnitsQuantityEquivalent, Zero, Zero> : stdx::type_identity<Zero> {};
+
+template <typename U>
+struct ReplaceCommonPointUnitWithCommonUnitImpl : stdx::type_identity<U> {};
+template <typename U>
+using ReplaceCommonPointUnitWithCommonUnit =
+    typename ReplaceCommonPointUnitWithCommonUnitImpl<U>::type;
 }  // namespace detail
 
 template <typename A, typename B>
@@ -4495,14 +5734,22 @@ template <typename... Us>
 using CommonUnitLabel = FlatDedupedTypeListT<detail::CommonUnitLabelImpl, Us...>;
 
 template <typename... Us>
-using ComputeCommonUnitImpl =
-    detail::EliminateRedundantUnits<FlatDedupedTypeListT<CommonUnit, Us...>>;
+struct ComputeCommonUnitImpl
+    : stdx::type_identity<detail::EliminateRedundantUnits<
+          FlatDedupedTypeListT<CommonUnit, detail::ReplaceCommonPointUnitWithCommonUnit<Us>...>>> {
+};
+template <>
+struct ComputeCommonUnitImpl<> : stdx::type_identity<Zero> {};
+
+template <typename T>
+struct IsNonzero : stdx::negation<std::is_same<T, Zero>> {};
 
 template <typename... Us>
 struct ComputeCommonUnit
-    : stdx::type_identity<detail::SimplifyIfOnlyOneUnscaledUnit<
-          typename detail::FirstMatchingUnit<AreUnitsQuantityEquivalent,
-                                             ComputeCommonUnitImpl<Us...>>::type>> {};
+    : stdx::type_identity<detail::SimplifyIfOnlyOneUnscaledUnit<typename detail::FirstMatchingUnit<
+          AreUnitsQuantityEquivalent,
+          typename detail::IncludeInPackIf<IsNonzero, ComputeCommonUnitImpl, Us...>::type>::type>> {
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `CommonPointUnitT` helper implementation.
@@ -4555,6 +5802,43 @@ struct CommonOrigin<Head, Tail...> :
                                OriginOf<Head>,
                                CommonOrigin<Tail...>>>> {};
 
+// `UnitOfLowestOrigin<Us...>` is any unit among `Us` whose origin equals `CommonOrigin<Us...>`.
+template <typename... Us>
+struct UnitOfLowestOriginImpl;
+template <typename... Us>
+using UnitOfLowestOrigin = typename SortAs<UnitProduct, UnitOfLowestOriginImpl<Us...>>::type;
+template <typename U>
+struct UnitOfLowestOriginImpl<U> : stdx::type_identity<U> {};
+template <typename U, typename U1, typename... Us>
+struct UnitOfLowestOriginImpl<U, U1, Us...>
+    : std::conditional<(OriginOf<U>::value() == CommonOrigin<U, U1, Us...>::value()),
+                       U,
+                       UnitOfLowestOrigin<U1, Us...>> {};
+
+template <typename U1, typename U2>
+struct OriginDisplacementUnit {
+    static_assert(OriginOf<U1>::value() != OriginOf<U2>::value(),
+                  "OriginDisplacementUnit must be an actual unit, so it must be nonzero.");
+
+    using Dim = CommonDimensionT<DimT<U1>, DimT<U2>>;
+    using Mag = ValueDisplacementMagnitude<OriginOf<U1>, OriginOf<U2>>;
+};
+
+// `ComputeOriginDisplacementUnit<U1, U2>` produces an ad hoc unit equal to the displacement from
+// the origin of `U1` to the origin of `U2`.  If `U1` and `U2` have equal origins, then it is
+// `Zero`.  Otherwise, it will be `OriginDisplacementUnit<U1, U2>`.
+template <typename U1, typename U2>
+using ComputeOriginDisplacementUnit =
+    std::conditional_t<(OriginOf<U1>::value() == OriginOf<U2>::value()),
+                       Zero,
+                       OriginDisplacementUnit<U1, U2>>;
+
+template <typename U1, typename U2>
+constexpr auto origin_displacement_unit(U1, U2) {
+    return ComputeOriginDisplacementUnit<AssociatedUnitForPointsT<U1>,
+                                         AssociatedUnitForPointsT<U2>>{};
+}
+
 // MagTypeT<T> gives some measure of the size of the unit for this "quantity-alike" type.
 //
 // Zero acts like a quantity in this context, and we treat it as if its unit's Magnitude is Zero.
@@ -4568,42 +5852,40 @@ struct MagType<Zero> : stdx::type_identity<Zero> {};
 
 }  // namespace detail
 
+template <typename U1, typename U2>
+struct UnitLabel<detail::OriginDisplacementUnit<U1, U2>> {
+    using LabelT = detail::ExtendedLabel<15u, U1, U2>;
+    static constexpr LabelT value =
+        detail::concatenate("(@(0 ", UnitLabel<U2>::value, ") - @(0 ", UnitLabel<U1>::value, "))");
+};
+template <typename U1, typename U2>
+constexpr typename UnitLabel<detail::OriginDisplacementUnit<U1, U2>>::LabelT
+    UnitLabel<detail::OriginDisplacementUnit<U1, U2>>::value;
+
 // This exists to be the "named type" for the common unit of a bunch of input units.
 //
 // To be well-formed, the units must be listed in the same order every time.  End users cannot be
 // responsible for this; thus, they should never name this type directly.  Rather, they should name
 // the `CommonPointUnitT` alias, which will handle the canonicalization.
 template <typename... Us>
-struct CommonPointUnit {
+using CommonAmongUnitsAndOriginDisplacements =
+    CommonUnitT<Us...,
+                detail::ComputeOriginDisplacementUnit<detail::UnitOfLowestOrigin<Us...>, Us>...>;
+template <typename... Us>
+struct CommonPointUnit : CommonAmongUnitsAndOriginDisplacements<Us...> {
     static_assert(AreElementsInOrder<CommonPointUnit, CommonPointUnit<Us...>>::value,
                   "Elements must be listed in ascending order");
     static_assert(HasSameDimension<Us...>::value,
                   "Common unit only meaningful if units have same dimension");
 
-    // We need to store the origin member inside of a type, so that it will act "just enough" like a
-    // unit to let us use `OriginDisplacement`.  (We'll link to this nested type's origin member for
-    // our own origin member.)
-    struct TypeHoldingCommonOrigin {
-        using OriginT = decltype(detail::CommonOrigin<Us...>::value());
-        static constexpr OriginT origin() { return detail::CommonOrigin<Us...>::value(); }
-    };
-    static constexpr auto origin() { return TypeHoldingCommonOrigin::origin(); }
-
-    // This handles checking that all the dimensions are the same.  It's what lets us reason in
-    // terms of pure Magnitudes below, whereas usually this kind of reasoning is meaningless.
-    using Dim = CommonDimensionT<detail::DimT<Us>...>;
-
-    // Now, for Magnitude reasoning.  `OriginDisplacementMagnitude` tells us how finely grained we
-    // are forced to split our Magnitude to handle the additive displacements from the common
-    // origin.  It might be `Zero` if there is no such constraint (which would mean all the units
-    // have the _same_ origin).
-    using OriginDisplacementMagnitude = CommonMagnitudeT<
-        detail::MagTypeT<decltype(OriginDisplacement<TypeHoldingCommonOrigin, Us>::value())>...>;
-
-    // The final Magnitude is just what it would have been before, except that we also take the
-    // results of `OriginDisplacementMagnitude` into account.
-    using Mag = CommonMagnitudeT<detail::MagT<Us>..., OriginDisplacementMagnitude>;
+    static constexpr auto origin() { return detail::CommonOrigin<Us...>::value(); }
 };
+
+namespace detail {
+template <typename... Us>
+struct ReplaceCommonPointUnitWithCommonUnitImpl<CommonPointUnit<Us...>>
+    : stdx::type_identity<CommonAmongUnitsAndOriginDisplacements<Us...>> {};
+}  // namespace detail
 
 template <typename A, typename B>
 struct InOrderFor<CommonPointUnit, A, B> : InOrderFor<UnitProduct, A, B> {};
@@ -4749,6 +6031,16 @@ struct UnitLabel<ScaledUnit<U, M>> {
 template <typename U, typename M>
 constexpr typename UnitLabel<ScaledUnit<U, M>>::LabelT UnitLabel<ScaledUnit<U, M>>::value;
 
+// Special case for unit scaled by (-1).
+template <typename U>
+struct UnitLabel<ScaledUnit<U, Magnitude<Negative>>> {
+    using LabelT = detail::ExtendedLabel<3u, U>;
+    static constexpr LabelT value = detail::concatenate("[-", UnitLabel<U>::value, "]");
+};
+template <typename U>
+constexpr typename UnitLabel<ScaledUnit<U, Magnitude<Negative>>>::LabelT
+    UnitLabel<ScaledUnit<U, Magnitude<Negative>>>::value;
+
 // Implementation for CommonUnit: give size in terms of each constituent unit.
 template <typename... Us>
 struct UnitLabel<CommonUnit<Us...>>
@@ -4759,8 +6051,7 @@ struct UnitLabel<CommonUnit<Us...>>
 // origin displacements into account.
 template <typename... Us>
 struct UnitLabel<CommonPointUnit<Us...>>
-    : CommonUnitLabel<decltype(
-          Us{} * (detail::MagT<CommonPointUnit<Us...>>{} / detail::MagT<Us>{}))...> {};
+    : UnitLabel<CommonAmongUnitsAndOriginDisplacements<Us...>> {};
 
 template <typename Unit>
 constexpr const auto &unit_label(Unit) {
@@ -4804,8 +6095,37 @@ template <typename... U1s, typename... U2s>
 struct OrderAsUnitProduct<UnitProduct<U1s...>, UnitProduct<U2s...>>
     : InStandardPackOrder<UnitProduct<U1s...>, UnitProduct<U2s...>> {};
 
+// OrderAsOriginDisplacementUnit<A, B> can only be true if both A and B are `OriginDisplacementUnit`
+// specializations, _and_ their first units are in order, or their first units are identical and
+// their second units are in order.  This default case handles the usual case where either A or B
+// (or both) is not a `OriginDisplacementUnit` specialization in the first place.
 template <typename A, typename B>
-struct OrderByOrigin : stdx::bool_constant<(OriginDisplacement<A, B>::value() < ZERO)> {};
+struct OrderAsOriginDisplacementUnit : std::false_type {};
+
+template <typename A, typename B>
+struct OrderByFirstInOriginDisplacementUnit;
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderByFirstInOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>,
+                                            OriginDisplacementUnit<B1, B2>>
+    : InOrderFor<UnitProduct, A1, B1> {};
+
+template <typename A, typename B>
+struct OrderBySecondInOriginDisplacementUnit;
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderBySecondInOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>,
+                                             OriginDisplacementUnit<B1, B2>>
+    : InOrderFor<UnitProduct, A2, B2> {};
+
+template <typename A1, typename A2, typename B1, typename B2>
+struct OrderAsOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>, OriginDisplacementUnit<B1, B2>>
+    : LexicographicTotalOrdering<OriginDisplacementUnit<A1, A2>,
+                                 OriginDisplacementUnit<B1, B2>,
+                                 OrderByFirstInOriginDisplacementUnit,
+                                 OrderBySecondInOriginDisplacementUnit> {};
+
+template <typename A, typename B>
+struct OrderByOrigin
+    : stdx::bool_constant<(detail::OriginOf<A>::value() < detail::OriginOf<B>::value())> {};
 
 // "Unit avoidance" is a tiebreaker for quantity-equivalent units.  Anonymous units, such as
 // `UnitImpl<...>`, `ScaledUnit<...>`, and `UnitProduct<...>`, are more "avoidable" than units which
@@ -4813,89 +6133,434 @@ struct OrderByOrigin : stdx::bool_constant<(OriginDisplacement<A, B>::value() < 
 // relative ordering among these built-in template types is probably less important than the fact
 // that there _is_ a relative ordering among them (because we need to have a strict total ordering).
 template <typename T>
-struct UnitAvoidance : std::integral_constant<int, 0> {};
+struct CoarseUnitOrdering : std::integral_constant<int, 0> {};
 
 template <typename A, typename B>
-struct OrderByUnitAvoidance
-    : stdx::bool_constant<(UnitAvoidance<A>::value < UnitAvoidance<B>::value)> {};
+struct OrderByCoarseUnitOrdering
+    : stdx::bool_constant<(CoarseUnitOrdering<A>::value < CoarseUnitOrdering<B>::value)> {};
 
 template <typename... Ts>
-struct UnitAvoidance<UnitProduct<Ts...>> : std::integral_constant<int, 1> {};
+struct CoarseUnitOrdering<UnitProduct<Ts...>> : std::integral_constant<int, 1> {};
 
 template <typename... Ts>
-struct UnitAvoidance<UnitImpl<Ts...>> : std::integral_constant<int, 2> {};
+struct CoarseUnitOrdering<UnitImpl<Ts...>> : std::integral_constant<int, 2> {};
 
 template <typename... Ts>
-struct UnitAvoidance<ScaledUnit<Ts...>> : std::integral_constant<int, 3> {};
+struct CoarseUnitOrdering<ScaledUnit<Ts...>> : std::integral_constant<int, 3> {};
 
 template <typename B, std::intmax_t N>
-struct UnitAvoidance<Pow<B, N>> : std::integral_constant<int, 4> {};
+struct CoarseUnitOrdering<Pow<B, N>> : std::integral_constant<int, 4> {};
 
 template <typename B, std::intmax_t N, std::intmax_t D>
-struct UnitAvoidance<RatioPow<B, N, D>> : std::integral_constant<int, 5> {};
+struct CoarseUnitOrdering<RatioPow<B, N, D>> : std::integral_constant<int, 5> {};
 
 template <typename... Us>
-struct UnitAvoidance<CommonUnit<Us...>> : std::integral_constant<int, 6> {};
+struct CoarseUnitOrdering<CommonUnit<Us...>> : std::integral_constant<int, 6> {};
 
 template <typename... Us>
-struct UnitAvoidance<CommonPointUnit<Us...>> : std::integral_constant<int, 7> {};
-}  // namespace detail
+struct CoarseUnitOrdering<CommonPointUnit<Us...>> : std::integral_constant<int, 7> {};
 
 template <typename A, typename B>
-struct InOrderFor<UnitProduct, A, B> : LexicographicTotalOrdering<A,
-                                                                  B,
-                                                                  detail::OrderByUnitAvoidance,
-                                                                  detail::OrderByDim,
-                                                                  detail::OrderByMag,
-                                                                  detail::OrderByScaleFactor,
-                                                                  detail::OrderByOrigin,
-                                                                  detail::OrderAsUnitProduct> {};
+struct OrderByUnitOrderTiebreaker
+    : stdx::bool_constant<(UnitOrderTiebreaker<A>::value < UnitOrderTiebreaker<B>::value)> {};
 
+template <typename U>
+struct UnitAvoidance : std::integral_constant<int, 0> {};
+
+}  // namespace detail
+
+template <typename U>
+struct UnitOrderTiebreaker : detail::UnitAvoidance<U> {};
+
+template <typename A, typename B>
+struct InOrderFor<UnitProduct, A, B>
+    : LexicographicTotalOrdering<A,
+                                 B,
+                                 detail::OrderByCoarseUnitOrdering,
+                                 detail::OrderByDim,
+                                 detail::OrderByMag,
+                                 detail::OrderByScaleFactor,
+                                 detail::OrderByOrigin,
+                                 detail::OrderAsUnitProduct,
+                                 detail::OrderAsOriginDisplacementUnit,
+                                 detail::OrderByUnitOrderTiebreaker> {};
+
+}  // namespace au
+
+
+namespace au {
+namespace detail {
+
+template <typename Op>
+struct TruncationRiskForImpl;
+template <typename Op>
+using TruncationRiskFor = typename TruncationRiskForImpl<Op>::type;
+
+template <int N>
+struct TruncationRiskClass {
+    static constexpr int truncation_risk_class() { return N; }
+};
+
+template <typename T>
+struct NoTruncationRisk : TruncationRiskClass<0> {
+    static constexpr bool would_value_truncate(const T &) { return false; }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImpl;
+template <typename T, typename M>
+struct ValueTimesRatioIsNotInteger : ValueTimesRatioIsNotIntegerImpl<T, M>,
+                                     TruncationRiskClass<10> {};
+
+template <typename T>
+using ValueIsNotInteger = ValueTimesRatioIsNotInteger<T, Magnitude<>>;
+
+template <typename T>
+struct ValueIsNotZero : TruncationRiskClass<20> {
+    static constexpr bool would_value_truncate(const T &x) { return x != T{0}; }
+};
+
+template <typename T>
+struct CannotAssessTruncationRiskFor : TruncationRiskClass<1000> {
+    static constexpr bool would_value_truncate(const T &) { return true; }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// IMPLEMENTATION DETAILS (`truncation_risk.hh`):
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `StaticCast<T, U>` section:
+
+// (A) -> (A)
+template <typename T, typename U>
+struct TruncationRiskForStaticCastFromArithmeticToArithmetic
+    : std::conditional<stdx::conjunction<std::is_floating_point<T>, std::is_integral<U>>::value,
+                       ValueIsNotInteger<T>,
+                       NoTruncationRisk<T>> {};
+
+// (A) -> (X)
+template <typename T, typename U>
+struct TruncationRiskForStaticCastFromArithmetic
+    : std::conditional_t<std::is_arithmetic<U>::value,
+                         TruncationRiskForStaticCastFromArithmeticToArithmetic<T, U>,
+                         stdx::type_identity<CannotAssessTruncationRiskFor<T>>> {};
+
+// (X) -> (X)
+template <typename T, typename U>
+struct TruncationRiskForStaticCastAssumingScalar
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForStaticCastFromArithmetic<T, U>,
+                         stdx::type_identity<CannotAssessTruncationRiskFor<T>>> {};
+
+template <typename T, typename U>
+struct TruncationRiskForImpl<StaticCast<T, U>>
+    : TruncationRiskForStaticCastAssumingScalar<RealPart<T>, RealPart<U>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MultiplyTypeBy<T, M>` section:
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyArithmeticByIrrational
+    : std::conditional<std::is_integral<T>::value, ValueIsNotZero<T>, NoTruncationRisk<T>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyByIrrational
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForMultiplyArithmeticByIrrational<T, M>,
+                         stdx::type_identity<CannotAssessTruncationRiskFor<T>>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyArithmeticByRationalNontrivialDenominator
+    : std::conditional<(get_value_result<RealPart<T>>(DenominatorT<M>{}).outcome ==
+                        MagRepresentationOutcome::ERR_CANNOT_FIT),
+                       ValueIsNotZero<T>,
+                       ValueTimesRatioIsNotInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyArithmeticByRational
+    : std::conditional_t<stdx::disjunction<IsInteger<M>, std::is_floating_point<T>>::value,
+                         stdx::type_identity<NoTruncationRisk<T>>,
+                         TruncationRiskForMultiplyArithmeticByRationalNontrivialDenominator<T, M>> {
+};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyByRational
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForMultiplyArithmeticByRational<T, M>,
+                         stdx::type_identity<CannotAssessTruncationRiskFor<T>>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForMultiplyByAssumingScalar
+    : std::conditional_t<IsRational<M>::value,
+                         TruncationRiskForMultiplyByRational<T, M>,
+                         TruncationRiskForMultiplyByIrrational<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForImpl<MultiplyTypeBy<T, M>>
+    : TruncationRiskForMultiplyByAssumingScalar<RealPart<T>, M> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `DivideTypeByInteger<T, M>` section:
+
+template <typename T, typename M>
+struct TruncationRiskForDivideNonArithmeticByInteger
+    : stdx::type_identity<CannotAssessTruncationRiskFor<T>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideIntegralByInteger
+    : std::conditional<(get_value_result<T>(M{}).outcome ==
+                        MagRepresentationOutcome::ERR_CANNOT_FIT),
+                       ValueIsNotZero<T>,
+                       ValueTimesRatioIsNotInteger<T, MagInverseT<M>>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideArithmeticByInteger
+    : std::conditional_t<std::is_floating_point<T>::value,
+                         stdx::type_identity<NoTruncationRisk<T>>,
+                         TruncationRiskForDivideIntegralByInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForDivideByIntAssumingScalar
+    : std::conditional_t<std::is_arithmetic<T>::value,
+                         TruncationRiskForDivideArithmeticByInteger<T, M>,
+                         TruncationRiskForDivideNonArithmeticByInteger<T, M>> {};
+
+template <typename T, typename M>
+struct TruncationRiskForImpl<DivideTypeByInteger<T, M>>
+    : TruncationRiskForDivideByIntAssumingScalar<RealPart<T>, M> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `OpSequence<...>` section:
+
+// A little helper to simplify instances of `ValueTimesRatioIsNotInteger` that turn out to be
+// trivial (because their type is integral, so they can never produce truncating values).
+template <typename T, typename M>
+struct ReduceValueTimesRatioIsNotIntegerImpl
+    : std::conditional<stdx::conjunction<IsInteger<M>, std::is_integral<T>>::value,
+                       NoTruncationRisk<T>,
+                       ValueTimesRatioIsNotInteger<T, M>> {};
+template <typename T, typename M>
+using ReduceValueTimesRatioIsNotInteger =
+    typename ReduceValueTimesRatioIsNotIntegerImpl<T, M>::type;
+
+//
+// `UpdateRisk<Op, Risk>` adapts a "downstream" risk to the "upstream" interface.
+//
+// At minimum, this updates the input type to `OpInput<Op>`.  But it may also tweak the parameters
+// (e.g., for `ValuesNotSomeIntegerTimes`), or even change the risk type entirely.
+//
+template <typename Op, typename Risk>
+struct UpdateRiskImpl;
+template <typename Op, typename Risk>
+using UpdateRisk = typename UpdateRiskImpl<Op, Risk>::type;
+
+template <template <class> class Risk, typename T, typename U>
+struct UpdateRiskImpl<StaticCast<T, U>, Risk<RealPart<U>>>
+    : stdx::type_identity<Risk<RealPart<T>>> {};
+
+template <typename T, typename U, typename M>
+struct UpdateRiskImpl<StaticCast<T, U>, ValueTimesRatioIsNotInteger<RealPart<U>, M>>
+    : std::conditional<stdx::conjunction<IsInteger<M>, std::is_integral<T>>::value,
+                       NoTruncationRisk<RealPart<T>>,
+                       ReduceValueTimesRatioIsNotInteger<RealPart<T>, M>> {};
+
+template <template <class> class Risk, typename T, typename M>
+struct UpdateRiskImpl<MultiplyTypeBy<T, M>, Risk<RealPart<T>>>
+    : stdx::type_identity<Risk<RealPart<T>>> {};
+
+template <template <class> class Risk, typename T, typename M>
+struct UpdateRiskImpl<DivideTypeByInteger<T, M>, Risk<RealPart<T>>>
+    : stdx::type_identity<Risk<RealPart<T>>> {};
+
+template <typename T, typename M1, typename M2>
+struct UpdateRiskImpl<MultiplyTypeBy<T, M1>, ValueTimesRatioIsNotInteger<RealPart<T>, M2>>
+    : std::conditional<IsRational<M1>::value,
+                       ReduceValueTimesRatioIsNotInteger<RealPart<T>, MagProductT<M1, M2>>,
+                       ValueIsNotZero<RealPart<T>>> {};
+
+template <typename T, typename M1, typename M2>
+struct UpdateRiskImpl<DivideTypeByInteger<T, M1>, ValueTimesRatioIsNotInteger<RealPart<T>, M2>>
+    : stdx::type_identity<ReduceValueTimesRatioIsNotInteger<RealPart<T>, MagQuotientT<M2, M1>>> {};
+
+//
+// `BiggestRiskImpl<Risk1, Risk2>` is a helper that computes the "biggest" risk between two risks.
+//
+
+template <typename Risk1, typename Risk2>
+struct TruncationRisks {};
+
+template <typename Risk1, typename Risk2>
+struct OrderByTruncationRiskClass
+    : stdx::bool_constant<(Risk1::truncation_risk_class() < Risk2::truncation_risk_class())> {};
+
+template <typename Risk>
+struct DenominatorOfRatioImpl : stdx::type_identity<Magnitude<>> {};
+template <typename T, typename M>
+struct DenominatorOfRatioImpl<ValueTimesRatioIsNotInteger<T, M>>
+    : stdx::type_identity<DenominatorT<M>> {};
+template <typename Risk>
+using DenominatorOfRatio = typename DenominatorOfRatioImpl<Risk>::type;
+
+template <typename Risk1, typename Risk2>
+struct OrderByDenominatorOfRatio
+    : stdx::bool_constant<(get_value<uint64_t>(DenominatorOfRatio<Risk1>{}) <
+                           get_value<uint64_t>(DenominatorOfRatio<Risk2>{}))> {};
+
+}  // namespace detail
+
+// Must be in `::au` namespace:
+template <typename Risk1, typename Risk2>
+struct InOrderFor<detail::TruncationRisks, Risk1, Risk2>
+    : LexicographicTotalOrdering<Risk1,
+                                 Risk2,
+                                 detail::OrderByTruncationRiskClass,
+                                 detail::OrderByDenominatorOfRatio> {};
+
+namespace detail {
+
+template <typename Risk1, typename Risk2>
+struct BiggestRiskImpl
+    : std::conditional<InOrderFor<TruncationRisks, Risk1, Risk2>::value, Risk2, Risk1> {};
+
+//
+// Full `TruncationRiskFor` implementation for `OpSequence<Op>`:
+//
+
+template <typename Op>
+struct TruncationRiskForImpl<OpSequenceImpl<Op>> : TruncationRiskForImpl<Op> {};
+
+template <typename Op, typename... Ops>
+struct TruncationRiskForImpl<OpSequenceImpl<Op, Ops...>>
+    : BiggestRiskImpl<UpdateRisk<Op, TruncationRiskFor<OpSequenceImpl<Ops...>>>,
+                      TruncationRiskFor<Op>> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `ValueTimesRatioIsNotInteger` section:
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorDoesNotFit {
+    static constexpr bool would_value_truncate(const T &value) { return value != T{0}; }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorFits {
+    static constexpr bool would_value_truncate(const T &value) {
+        return (value % get_value<RealPart<T>>(DenominatorT<M>{})) != T{0};
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForInt
+    : std::conditional_t<get_value_result<RealPart<T>>(DenominatorT<M>{}).outcome ==
+                             MagRepresentationOutcome::ERR_CANNOT_FIT,
+                         ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorDoesNotFit<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForIntWhereDenominatorFits<T, M>> {};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloatGeneric {
+    static constexpr bool would_value_truncate(const T &value) {
+        const auto result = value * get_value<RealPart<T>>(M{});
+        return std::trunc(result) != result;
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloatDivideByInteger {
+    static constexpr bool would_value_truncate(const T &value) {
+        const auto result = value / get_value<RealPart<T>>(MagInverseT<M>{});
+        return std::trunc(result) != result;
+    }
+};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImplForFloat
+    : std::conditional_t<IsInteger<MagInverseT<M>>::value,
+                         ValueTimesRatioIsNotIntegerImplForFloatDivideByInteger<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForFloatGeneric<T, M>> {};
+
+template <typename T, typename M>
+struct ValueTimesRatioIsNotIntegerImpl
+    : std::conditional_t<std::is_integral<T>::value,
+                         ValueTimesRatioIsNotIntegerImplForInt<T, M>,
+                         ValueTimesRatioIsNotIntegerImplForFloat<T, M>> {};
+
+}  // namespace detail
 }  // namespace au
 
 
 
 namespace au {
 
-// Check that this particular Magnitude won't cause this specific value to overflow its type.
-template <typename Rep, typename... BPs>
-constexpr bool can_scale_without_overflow(Magnitude<BPs...> m, Rep value) {
-    // Scales that shrink don't cause overflow.
-    if (get_value<double>(m) <= 1.0) {
-        (void)value;
-        return true;
-    } else {
-        return std::numeric_limits<Rep>::max() / get_value<Rep>(m) >= value;
+//
+// Conversion risk section.
+//
+// End users can use the constants `OVERFLOW_RISK` and `TRUNCATION_RISK`.  They can combine them as
+// flags with `|`.  And they can pass either of these (or the result of `|`) to either
+// `check_for()` or `ignore()`.  The result of these functions is a risk _policy_, which can be
+// passed as a second argument to conversion functions to control which checks are performed.
+//
+
+namespace detail {
+enum class ConversionRisk : uint8_t {
+    // We use CamelCase instead of UPPER_CASE because `OVERFLOW` is the name of a macro that exists
+    // in the wild in some versions of glibc's `math.h`.
+    Overflow = (1u << 0u),
+    Truncation = (1u << 1u),
+};
+
+template <typename T>
+struct CheckTheseRisks;
+
+template <uint8_t RiskFlags>
+struct RiskSet {
+    static_assert(RiskFlags <= 3u, "Invalid risk flags");
+
+    template <uint8_t OtherFlags>
+    constexpr RiskSet<RiskFlags | OtherFlags> operator|(RiskSet<OtherFlags>) const {
+        return {};
     }
-}
+
+    constexpr uint8_t flags() const { return RiskFlags; }
+
+    friend constexpr CheckTheseRisks<RiskSet<RiskFlags>> check_for(RiskSet) { return {}; }
+    friend constexpr CheckTheseRisks<RiskSet<3u - RiskFlags>> ignore(RiskSet) { return {}; }
+};
+
+template <uint8_t RiskFlags>
+struct CheckTheseRisks<RiskSet<RiskFlags>> {
+    constexpr bool should_check(ConversionRisk risk) const {
+        return (RiskFlags & static_cast<uint8_t>(risk)) != 0u;
+    }
+};
+
+constexpr auto OVERFLOW_RISK = RiskSet<static_cast<uint8_t>(ConversionRisk::Overflow)>{};
+constexpr auto TRUNCATION_RISK = RiskSet<static_cast<uint8_t>(ConversionRisk::Truncation)>{};
+
+}  // namespace detail
+
+constexpr auto OVERFLOW_RISK = detail::OVERFLOW_RISK;
+constexpr auto TRUNCATION_RISK = detail::TRUNCATION_RISK;
+constexpr auto ALL_RISKS = OVERFLOW_RISK | TRUNCATION_RISK;
+
+// `IsConversionRiskPolicy<T>` checks whether `T` is a conversion risk policy type.  For now, this
+// boils down to being a specialization of `CheckTheseRisks` on some `RiskSet`.
+//
+// Although we have no such plans at present, it's conceivable that we could create more general
+// conversion risk policy types later.  If we do, this trait will still be authoritatively correct.
+template <typename T>
+struct IsConversionRiskPolicy : std::false_type {};
+template <uint8_t RiskFlags>
+struct IsConversionRiskPolicy<detail::CheckTheseRisks<detail::RiskSet<RiskFlags>>>
+    : std::true_type {};
+
+//
+// "Main" conversion policy section.
+//
 
 namespace detail {
 // Chosen so as to allow populating a `QuantityI32<Hertz>` with an input in MHz.
-constexpr auto OVERFLOW_THRESHOLD = 2'147;
-
-// This wrapper for `can_scale_without_overflow<...>(..., OVERFLOW_THRESHOLD)` can prevent an
-// instantiation via short-circuiting, speeding up compile times.
-template <typename Rep, typename ScaleFactor>
-struct CanScaleThresholdWithoutOverflow
-    : stdx::conjunction<
-          stdx::bool_constant<stdx::in_range<Rep>(OVERFLOW_THRESHOLD)>,
-          stdx::bool_constant<can_scale_without_overflow<Rep>(ScaleFactor{}, OVERFLOW_THRESHOLD)>> {
-};
-
-template <typename U1, typename U2>
-struct SameDimension : stdx::bool_constant<U1::dim_ == U2::dim_> {};
-
-template <typename Rep, typename ScaleFactor, typename SourceRep>
-struct CoreImplicitConversionPolicyImplAssumingReal
-    : stdx::disjunction<
-          std::is_floating_point<Rep>,
-          stdx::conjunction<std::is_integral<SourceRep>,
-                            IsInteger<ScaleFactor>,
-                            detail::CanScaleThresholdWithoutOverflow<Rep, ScaleFactor>>> {};
-
-// Always permit the identity scaling.
-template <typename Rep>
-struct CoreImplicitConversionPolicyImplAssumingReal<Rep, Magnitude<>, Rep> : std::true_type {};
+constexpr auto OVERFLOW_THRESHOLD = mag<2'147>();
 
 // `SettingPureRealFromMixedReal<A, B>` tests whether `A` is a pure real type, _and_ `B` is a type
 // that has a real _part_, but is not purely real (call it a "mixed-real" type).
@@ -4907,26 +6572,77 @@ struct SettingPureRealFromMixedReal
     : stdx::conjunction<stdx::negation<std::is_same<SourceRep, RealPart<SourceRep>>>,
                         std::is_same<Rep, RealPart<Rep>>> {};
 
-template <typename Rep, typename ScaleFactor, typename SourceRep>
-struct CoreImplicitConversionPolicyImpl
-    : stdx::conjunction<stdx::negation<SettingPureRealFromMixedReal<Rep, SourceRep>>,
-                        CoreImplicitConversionPolicyImplAssumingReal<RealPart<Rep>,
-                                                                     ScaleFactor,
-                                                                     RealPart<SourceRep>>> {};
+template <typename T>
+constexpr bool meets_threshold(T x) {
+    constexpr auto threshold_result = get_value_result<T>(OVERFLOW_THRESHOLD);
+    static_assert(threshold_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT ||
+                      threshold_result.outcome == MagRepresentationOutcome::OK,
+                  "Overflow threshold must be a valid representation");
+    const auto threshold = (threshold_result.outcome == MagRepresentationOutcome::ERR_CANNOT_FIT)
+                               ? std::numeric_limits<T>::max()
+                               : threshold_result.value;
+    if (Less{}(x, T{0})) {
+        x = T{0} - x;
+    }
+    return x >= threshold;
+}
 
-template <typename Rep, typename ScaleFactor, typename SourceRep>
-using CoreImplicitConversionPolicy = CoreImplicitConversionPolicyImpl<Rep, ScaleFactor, SourceRep>;
+// Check overflow risk from above.
+template <bool CanOverflowAbove, typename Op>
+struct OverflowAboveRiskAcceptablyLowImpl
+    : stdx::bool_constant<meets_threshold(MaxGood<Op>::value())> {};
+template <typename Op>
+struct OverflowAboveRiskAcceptablyLowImpl<false, Op> : std::true_type {};
+
+template <typename Op>
+struct OverflowAboveRiskAcceptablyLow
+    : OverflowAboveRiskAcceptablyLowImpl<CanOverflowAbove<Op>::value, Op> {};
+
+// Check overflow risk, using "overflow above" risk only.
+//
+// We currently do not check the risk for overflowing _below_, because it is overwhelmingly common
+// in practice for people to initialize an unsigned integer variable with a constant of a signed
+// type whose value is known to be positive.  While we would love to be able to prevent implicit
+// signed to unsigned conversions --- and, while our overflow detection machinery can easily do so
+// --- we simply cannot afford to break that many _valid_ use cases to catch those invalid ones.
+//
+// That said, the _runtime_ overflow checkers _do_ check both above and below.
+template <typename Op>
+struct OverflowRiskAcceptablyLow : OverflowAboveRiskAcceptablyLow<Op> {};
+
+// Check truncation risk.
+template <typename Op>
+struct TruncationRiskAcceptablyLow
+    : std::is_same<TruncationRiskFor<Op>, NoTruncationRisk<RealPart<OpInput<Op>>>> {};
+
+template <typename Op>
+struct ConversionRiskAcceptablyLow
+    : stdx::conjunction<OverflowRiskAcceptablyLow<Op>, TruncationRiskAcceptablyLow<Op>> {};
 
 template <typename Rep, typename ScaleFactor, typename SourceRep>
 struct PermitAsCarveOutForIntegerPromotion
-    : stdx::conjunction<std::is_same<ScaleFactor, Magnitude<>>,
+    : stdx::conjunction<std::is_same<Abs<ScaleFactor>, Magnitude<>>,
+                        std::is_same<SourceRep, PromotedType<Rep>>,
+                        stdx::disjunction<IsPositive<ScaleFactor>, std::is_signed<Rep>>,
                         std::is_integral<Rep>,
                         std::is_integral<SourceRep>,
                         std::is_assignable<Rep &, SourceRep>> {};
+
+template <typename Rep, typename ScaleFactor, typename SourceRep>
+struct PassesConversionRiskCheck
+    : stdx::disjunction<
+          PermitAsCarveOutForIntegerPromotion<Rep, ScaleFactor, SourceRep>,
+          ConversionRiskAcceptablyLow<ConversionForRepsAndFactor<SourceRep, Rep, ScaleFactor>>> {};
+
+template <typename Rep, typename ScaleFactor, typename SourceRep>
+using ImplicitConversionPolicy =
+    stdx::conjunction<PassesConversionRiskCheck<Rep, ScaleFactor, SourceRep>,
+                      stdx::negation<SettingPureRealFromMixedReal<Rep, SourceRep>>>;
+
 }  // namespace detail
 
 template <typename Rep, typename ScaleFactor>
-struct ImplicitRepPermitted : detail::CoreImplicitConversionPolicy<Rep, ScaleFactor, Rep> {};
+struct ImplicitRepPermitted : detail::ImplicitConversionPolicy<Rep, ScaleFactor, Rep> {};
 
 template <typename Rep, typename SourceUnitSlot, typename TargetUnitSlot>
 constexpr bool implicit_rep_permitted_from_source_to_target(SourceUnitSlot, TargetUnitSlot) {
@@ -4951,234 +6667,9 @@ struct ConstructionPolicy {
     template <typename SourceUnit, typename SourceRep>
     using PermitImplicitFrom = stdx::conjunction<
         HasSameDimension<Unit, SourceUnit>,
-        stdx::disjunction<
-            detail::CoreImplicitConversionPolicy<Rep, ScaleFactor<SourceUnit>, SourceRep>,
-            detail::PermitAsCarveOutForIntegerPromotion<Rep, ScaleFactor<SourceUnit>, SourceRep>>>;
+        detail::ImplicitConversionPolicy<Rep, ScaleFactor<SourceUnit>, SourceRep>>;
 };
 
-}  // namespace au
-
-
-namespace au {
-namespace detail {
-
-// The various categories by which a magnitude can be applied to a numeric quantity.
-enum class ApplyAs {
-    INTEGER_MULTIPLY,
-    INTEGER_DIVIDE,
-    RATIONAL_MULTIPLY,
-    IRRATIONAL_MULTIPLY,
-};
-
-template <typename... BPs>
-constexpr ApplyAs categorize_magnitude(Magnitude<BPs...>) {
-    if (IsInteger<Magnitude<BPs...>>::value) {
-        return ApplyAs::INTEGER_MULTIPLY;
-    }
-
-    if (IsInteger<MagInverseT<Magnitude<BPs...>>>::value) {
-        return ApplyAs::INTEGER_DIVIDE;
-    }
-
-    return IsRational<Magnitude<BPs...>>::value ? ApplyAs::RATIONAL_MULTIPLY
-                                                : ApplyAs::IRRATIONAL_MULTIPLY;
-}
-
-template <typename Mag, ApplyAs Category, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl;
-
-template <typename T, bool IsMagnitudeValid>
-struct OverflowChecker {
-    // Default case: `IsMagnitudeValid` is true.
-    static constexpr bool would_product_overflow(T x, T mag_value) {
-        return (x > (std::numeric_limits<T>::max() / mag_value)) ||
-               (x < (std::numeric_limits<T>::lowest() / mag_value));
-    }
-};
-
-template <typename T>
-struct OverflowChecker<T, false> {
-    // Specialization for when `IsMagnitudeValid` is false.
-    //
-    // This means that the magnitude itself could not fit inside of the type; therefore, the only
-    // possible value that would not overflow is zero.
-    static constexpr bool would_product_overflow(T x, T) { return (x != T{0}); }
-};
-
-template <typename T, bool IsTIntegral>
-struct TruncationCheckerIfMagnitudeValid {
-    // Default case: T is integral.
-    static_assert(std::is_integral<T>::value && IsTIntegral,
-                  "Mismatched instantiation (should never be done manually)");
-
-    static constexpr bool would_truncate(T x, T mag_value) { return (x % mag_value != T{0}); }
-};
-
-template <typename T>
-struct TruncationCheckerIfMagnitudeValid<T, false> {
-    // Specialization for when T is not integral: by convention, assume no truncation for floats.
-    static_assert(!std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-    static constexpr bool would_truncate(T, T) { return false; }
-};
-
-template <typename T, bool IsMagnitudeValid>
-// Default case: `IsMagnitudeValid` is true.
-struct TruncationChecker : TruncationCheckerIfMagnitudeValid<T, std::is_integral<T>::value> {
-    static_assert(IsMagnitudeValid, "Mismatched instantiation (should never be done manually)");
-};
-
-template <typename T>
-struct TruncationChecker<T, false> {
-    // Specialization for when `IsMagnitudeValid` is false.
-    //
-    // This means that the magnitude itself could not fit inside of the type; therefore, the only
-    // possible value that would not truncate is zero.
-    static constexpr bool would_truncate(T x, T) { return (x != T{0}); }
-};
-
-// Multiplying by an integer, for any type T.
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_MULTIPLY, T, is_T_integral> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::INTEGER_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-// Dividing by an integer, for any type T.
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::INTEGER_DIVIDE, T, is_T_integral> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::INTEGER_DIVIDE,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x / get_value<RealPart<T>>(MagInverseT<Mag>{}); }
-
-    static constexpr bool would_overflow(const T &) { return false; }
-
-    static constexpr bool would_truncate(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(MagInverseT<Mag>{});
-        return TruncationChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_truncate(x, mag_value_result.value);
-    }
-};
-
-template <typename T, typename Mag, bool is_T_signed>
-struct RationalOverflowChecker;
-template <typename T, typename Mag>
-struct RationalOverflowChecker<T, Mag, true> {
-    static constexpr bool would_overflow(const T &x) {
-        static_assert(std::is_signed<T>::value,
-                      "Mismatched instantiation (should never be done manually)");
-        const bool safe = (x <= MaxNonOverflowingValue<T, Mag>::value()) &&
-                          (x >= MinNonOverflowingValue<T, Mag>::value());
-        return !safe;
-    }
-};
-template <typename T, typename Mag>
-struct RationalOverflowChecker<T, Mag, false> {
-    static constexpr bool would_overflow(const T &x) {
-        static_assert(!std::is_signed<T>::value,
-                      "Mismatched instantiation (should never be done manually)");
-        const bool safe = (x <= MaxNonOverflowingValue<T, Mag>::value());
-        return !safe;
-    }
-};
-
-// Applying a (non-integer, non-inverse-integer) rational, for any integral type T.
-template <typename Mag, typename T>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, true> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::RATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) {
-        using P = PromotedType<T>;
-        return static_cast<T>(x * get_value<RealPart<P>>(numerator(Mag{})) /
-                              get_value<RealPart<P>>(denominator(Mag{})));
-    }
-
-    static constexpr bool would_overflow(const T &x) {
-        return RationalOverflowChecker<T, Mag, std::is_signed<T>::value>::would_overflow(x);
-    }
-
-    static constexpr bool would_truncate(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(denominator(Mag{}));
-        return TruncationChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_truncate(x, mag_value_result.value);
-    }
-};
-
-// Applying a (non-integer, non-inverse-integer) rational, for any non-integral type T.
-template <typename Mag, typename T>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::RATIONAL_MULTIPLY, T, false> {
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::RATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(!std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-// Applying an irrational for any type T (although only non-integral T makes sense).
-template <typename Mag, typename T, bool is_T_integral>
-struct ApplyMagnitudeImpl<Mag, ApplyAs::IRRATIONAL_MULTIPLY, T, is_T_integral> {
-    static_assert(!std::is_integral<T>::value, "Cannot apply irrational magnitude to integer type");
-
-    static_assert(categorize_magnitude(Mag{}) == ApplyAs::IRRATIONAL_MULTIPLY,
-                  "Mismatched instantiation (should never be done manually)");
-    static_assert(is_T_integral == std::is_integral<T>::value,
-                  "Mismatched instantiation (should never be done manually)");
-
-    constexpr T operator()(const T &x) { return x * get_value<RealPart<T>>(Mag{}); }
-
-    static constexpr bool would_overflow(const T &x) {
-        constexpr auto mag_value_result = get_value_result<T>(Mag{});
-        return OverflowChecker<T, mag_value_result.outcome == MagRepresentationOutcome::OK>::
-            would_product_overflow(x, mag_value_result.value);
-    }
-
-    static constexpr bool would_truncate(const T &) { return false; }
-};
-
-template <typename T, typename MagT>
-struct ApplyMagnitudeType;
-template <typename T, typename MagT>
-using ApplyMagnitudeT = typename ApplyMagnitudeType<T, MagT>::type;
-template <typename T, typename... BPs>
-struct ApplyMagnitudeType<T, Magnitude<BPs...>>
-    : stdx::type_identity<ApplyMagnitudeImpl<Magnitude<BPs...>,
-                                             categorize_magnitude(Magnitude<BPs...>{}),
-                                             T,
-                                             std::is_integral<T>::value>> {};
-
-template <typename T, typename... BPs>
-constexpr T apply_magnitude(const T &x, Magnitude<BPs...>) {
-    return ApplyMagnitudeT<T, Magnitude<BPs...>>{}(x);
-}
-
-}  // namespace detail
 }  // namespace au
 
 
@@ -5256,12 +6747,45 @@ constexpr auto as_quantity(T &&x) -> CorrespondingQuantityT<T> {
     return make_quantity<typename Q::Unit>(value);
 }
 
+// Callsite-readable way to convert a `Quantity` to a raw number.
+//
+// Only works for dimensionless `Quantities`; will return a compile-time error otherwise.
+//
+// Identity for non-`Quantity` types.
+template <typename U, typename R, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
+constexpr R as_raw_number(Quantity<U, R> q, RiskPolicyT policy = RiskPolicyT{}) {
+    return q.in(UnitProductT<>{}, policy);
+}
+template <typename T>
+constexpr T as_raw_number(T x) {
+    return x;
+}
+
+namespace detail {
+// We implement `Quantity` comparisons by converting to a common unit, and comparing the values
+// stored in the underlying Rep types.  This means we need to know the _sign_ of that common unit,
+// so we can know which order to pass those underlying values (it gets reversed for negative units).
+template <typename SignMag, typename Op>
+struct SignAwareComparison;
+}  // namespace detail
+
 template <typename UnitT, typename RepT>
 class Quantity {
     template <bool ImplicitOk, typename OtherUnit, typename OtherRep>
     using EnableIfImplicitOkIs = std::enable_if_t<
         ImplicitOk ==
         ConstructionPolicy<UnitT, RepT>::template PermitImplicitFrom<OtherUnit, OtherRep>::value>;
+
+    // We could consider making this public someday, if we had a use case.
+    using Sign = UnitSign<UnitT>;
+
+    // Not strictly necessary, but we want to keep each comparator implementation to one line.
+    using Eq = detail::SignAwareComparison<Sign, detail::Equal>;
+    using Ne = detail::SignAwareComparison<Sign, detail::NotEqual>;
+    using Lt = detail::SignAwareComparison<Sign, detail::Less>;
+    using Le = detail::SignAwareComparison<Sign, detail::LessEqual>;
+    using Gt = detail::SignAwareComparison<Sign, detail::Greater>;
+    using Ge = detail::SignAwareComparison<Sign, detail::GreaterEqual>;
 
  public:
     using Rep = RepT;
@@ -5285,6 +6809,14 @@ class Quantity {
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
     explicit constexpr Quantity(Quantity<OtherUnit, OtherRep> other) = delete;
 
+    // Constructor for another Quantity with an explicit conversion risk policy.
+    template <typename OtherUnit,
+              typename OtherRep,
+              typename RiskPolicyT,
+              std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
+    constexpr Quantity(Quantity<OtherUnit, OtherRep> other, RiskPolicyT policy)
+        : value_{other.template in<Rep>(UnitT{}, policy)} {}
+
     // Construct this Quantity with a value of exactly Zero.
     constexpr Quantity(Zero) : value_{0} {}
 
@@ -5296,54 +6828,32 @@ class Quantity {
         std::enable_if_t<std::is_convertible<CorrespondingQuantityT<T>, Quantity>::value, int> = 0>
     constexpr Quantity(T &&x) : Quantity{as_quantity(std::forward<T>(x))} {}
 
+    // `q.as<Rep>(new_unit)`, or `q.as<Rep>(new_unit, risk_policy)`
     template <typename NewRep,
-              typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
-    constexpr auto as(NewUnit) const {
-        using Common = std::common_type_t<Rep, NewRep>;
-        using Factor = UnitRatioT<AssociatedUnitT<Unit>, AssociatedUnitT<NewUnit>>;
-
-        return make_quantity<AssociatedUnitT<NewUnit>>(
-            static_cast<NewRep>(detail::apply_magnitude(static_cast<Common>(value_), Factor{})));
+              typename NewUnitSlot,
+              typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+    constexpr auto as(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return make_quantity<AssociatedUnitT<NewUnitSlot>>(in_impl<NewRep>(u, policy));
     }
 
-    template <typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
-    constexpr auto as(NewUnit u) const {
-        constexpr bool IMPLICIT_OK =
-            implicit_rep_permitted_from_source_to_target<Rep>(unit, NewUnit{});
-        constexpr bool INTEGRAL_REP = std::is_integral<Rep>::value;
-        static_assert(
-            IMPLICIT_OK || INTEGRAL_REP,
-            "Should never occur.  In the following static_assert, we assume that IMPLICIT_OK "
-            "can never fail unless INTEGRAL_REP is true.");
-        static_assert(
-            IMPLICIT_OK,
-            "Dangerous conversion for integer Rep!  See: "
-            "https://aurora-opensource.github.io/au/main/troubleshooting/#dangerous-conversion");
-        return as<Rep>(u);
+    // `q.as(new_unit)`, or `q.as(new_unit, risk_policy)`
+    template <typename NewUnitSlot, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
+    constexpr auto as(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return make_quantity<AssociatedUnitT<NewUnitSlot>>(in_impl<Rep>(u, policy));
     }
 
+    // `q.in<Rep>(new_unit)`, or `q.in<Rep>(new_unit, risk_policy)`
     template <typename NewRep,
-              typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
-    constexpr NewRep in(NewUnit u) const {
-        if (are_units_quantity_equivalent(unit, u) && std::is_same<Rep, NewRep>::value) {
-            return static_cast<NewRep>(value_);
-        } else {
-            return as<NewRep>(u).in(u);
-        }
+              typename NewUnitSlot,
+              typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+    constexpr auto in(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return in_impl<NewRep>(u, policy);
     }
 
-    template <typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitT<NewUnit>>::value>>
-    constexpr Rep in(NewUnit u) const {
-        if (are_units_quantity_equivalent(unit, u)) {
-            return value_;
-        } else {
-            // Since Rep was requested _implicitly_, delegate to `.as()` for its safety checks.
-            return as(u).in(u);
-        }
+    // `q.in(new_unit)`, or `q.in(new_unit, risk_policy)`
+    template <typename NewUnitSlot, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
+    constexpr auto in(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return in_impl<Rep>(u, policy);
     }
 
     // "Forcing" conversions, which explicitly ignore safety checks for overflow and truncation.
@@ -5370,29 +6880,19 @@ class Quantity {
 
     // Direct access to the underlying value member, with any Quantity-equivalent Unit.
     //
-    // Mutable access, QuantityMaker input.
-    template <typename U>
-    Rep &data_in(const QuantityMaker<U> &) {
-        static_assert(AreUnitsQuantityEquivalent<U, Unit>::value,
+    // Mutable access:
+    template <typename UnitSlot>
+    constexpr Rep &data_in(UnitSlot) {
+        static_assert(AreUnitsQuantityEquivalent<AssociatedUnitT<UnitSlot>, Unit>::value,
                       "Can only access value via Quantity-equivalent unit");
         return value_;
     }
-    // Mutable access, Unit input.
-    template <typename U>
-    Rep &data_in(const U &) {
-        return data_in(QuantityMaker<U>{});
-    }
-    // Const access, QuantityMaker input.
-    template <typename U>
-    const Rep &data_in(const QuantityMaker<U> &) const {
-        static_assert(AreUnitsQuantityEquivalent<U, Unit>::value,
+    // Const access:
+    template <typename UnitSlot>
+    constexpr const Rep &data_in(UnitSlot) const {
+        static_assert(AreUnitsQuantityEquivalent<AssociatedUnitT<UnitSlot>, Unit>::value,
                       "Can only access value via Quantity-equivalent unit");
         return value_;
-    }
-    // Const access, Unit input.
-    template <typename U>
-    const Rep &data_in(const U &) const {
-        return data_in(QuantityMaker<U>{});
     }
 
     // Permit this factory functor to access our private constructor.
@@ -5403,12 +6903,17 @@ class Quantity {
     friend struct QuantityMaker<UnitT>;
 
     // Comparison operators.
-    friend constexpr bool operator==(Quantity a, Quantity b) { return a.value_ == b.value_; }
-    friend constexpr bool operator!=(Quantity a, Quantity b) { return a.value_ != b.value_; }
-    friend constexpr bool operator<(Quantity a, Quantity b) { return a.value_ < b.value_; }
-    friend constexpr bool operator<=(Quantity a, Quantity b) { return a.value_ <= b.value_; }
-    friend constexpr bool operator>(Quantity a, Quantity b) { return a.value_ > b.value_; }
-    friend constexpr bool operator>=(Quantity a, Quantity b) { return a.value_ >= b.value_; }
+    friend constexpr bool operator==(Quantity a, Quantity b) { return Eq{}(a.value_, b.value_); }
+    friend constexpr bool operator!=(Quantity a, Quantity b) { return Ne{}(a.value_, b.value_); }
+    friend constexpr bool operator<(Quantity a, Quantity b) { return Lt{}(a.value_, b.value_); }
+    friend constexpr bool operator<=(Quantity a, Quantity b) { return Le{}(a.value_, b.value_); }
+    friend constexpr bool operator>(Quantity a, Quantity b) { return Gt{}(a.value_, b.value_); }
+    friend constexpr bool operator>=(Quantity a, Quantity b) { return Ge{}(a.value_, b.value_); }
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+    using Twc = detail::SignAwareComparison<Sign, detail::ThreeWayCompare>;
+    friend constexpr auto operator<=>(Quantity a, Quantity b) { return Twc{}(a.value_, b.value_); }
+#endif
 
     // Addition and subtraction for like quantities.
     friend constexpr Quantity<UnitT, decltype(std::declval<RepT>() + std::declval<RepT>())>
@@ -5563,6 +7068,14 @@ class Quantity {
         return (v < lo) ? lo : ((hi < v) ? hi : v);
     }
 
+#if defined(__cpp_lib_interpolate) && __cpp_lib_interpolate >= 201902L
+    // `std::lerp` requires C++20 support.
+    template <typename T>
+    friend constexpr auto lerp(Quantity a, Quantity b, T t) {
+        return make_quantity<UnitT>(std::lerp(a.in(unit), b.in(unit), as_raw_number(t)));
+    }
+#endif
+
  private:
     template <typename OtherUnit, typename OtherRep>
     static constexpr void warn_if_integer_division() {
@@ -5571,8 +7084,50 @@ class Quantity {
         constexpr bool are_units_quantity_equivalent =
             AreUnitsQuantityEquivalent<UnitT, OtherUnit>::value;
         static_assert(are_units_quantity_equivalent || !uses_integer_division,
-                      "Integer division forbidden: wrap denominator in `unblock_int_div()` if you "
-                      "really want it");
+                      "Integer division forbidden.  See "
+                      "<https://aurora-opensource.github.io/au/main/troubleshooting/"
+                      "#integer-division-forbidden> for more details about the risks, "
+                      "and your options to resolve this error.");
+    }
+
+    template <typename OtherRep, typename OtherUnitSlot, typename RiskPolicyT>
+    constexpr OtherRep in_impl(OtherUnitSlot, RiskPolicyT) const {
+        using OtherUnit = AssociatedUnitT<OtherUnitSlot>;
+        static_assert(IsUnit<OtherUnit>::value, "Invalid type passed to unit slot");
+
+        using Op = detail::ConversionForRepsAndFactor<Rep, OtherRep, UnitRatioT<Unit, OtherUnit>>;
+
+        constexpr bool should_check_overflow =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Overflow);
+        constexpr bool is_overflow_risk_ok = detail::OverflowRiskAcceptablyLow<Op>::value;
+
+        constexpr bool should_check_truncation =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Truncation);
+        constexpr bool is_truncation_risk_ok = detail::TruncationRiskAcceptablyLow<Op>::value;
+
+        constexpr bool is_overflow_only_unacceptable_risk =
+            (should_check_overflow && !is_overflow_risk_ok && is_truncation_risk_ok);
+        static_assert(!is_overflow_only_unacceptable_risk,
+                      "Overflow risk too high.  See "
+                      "<https://aurora-opensource.github.io/au/main/troubleshooting/#risk-too-high>"
+                      ".  Your \"risk set\" is `OVERFLOW_RISK`.");
+
+        constexpr bool is_truncation_only_unacceptable_risk =
+            (should_check_truncation && !is_truncation_risk_ok && is_overflow_risk_ok);
+        static_assert(!is_truncation_only_unacceptable_risk,
+                      "Truncation risk too high.  See "
+                      "<https://aurora-opensource.github.io/au/main/troubleshooting/#risk-too-high>"
+                      ".  Your \"risk set\" is `TRUNCATION_RISK`.");
+
+        constexpr bool are_both_overflow_and_truncation_unacceptably_risky =
+            (should_check_overflow || should_check_truncation) && !is_overflow_risk_ok &&
+            !is_truncation_risk_ok;
+        static_assert(!are_both_overflow_and_truncation_unacceptably_risky,
+                      "Both truncation and overflow risk too high.  See "
+                      "<https://aurora-opensource.github.io/au/main/troubleshooting/#risk-too-high>"
+                      ".  Your \"risk set\" is `OVERFLOW_RISK | TRUNCATION_RISK`.");
+
+        return Op::apply_to(value_);
     }
 
     constexpr Quantity(Rep value) : value_{value} {}
@@ -5633,41 +7188,17 @@ class AlwaysDivisibleQuantity {
         return make_quantity<UnitInverseT<U>>(x / q.q_.in(U{}));
     }
 
-    friend constexpr AlwaysDivisibleQuantity<U, R> unblock_int_div<U, R>(Quantity<U, R> q);
-    friend constexpr AlwaysDivisibleQuantity<UnitProductT<>, R> unblock_int_div<R>(R x);
+    template <typename UU, typename RR>
+    friend constexpr AlwaysDivisibleQuantity<UU, RR> unblock_int_div(Quantity<UU, RR> q);
+
+    template <typename RR>
+    friend constexpr AlwaysDivisibleQuantity<UnitProductT<>, RR> unblock_int_div(RR x);
 
  private:
     constexpr AlwaysDivisibleQuantity(Quantity<U, R> q) : q_{q} {}
 
     Quantity<U, R> q_;
 };
-
-// Force integer division beteween two integer Quantities, in a callsite-obvious way.
-template <typename U1, typename R1, typename U2, typename R2>
-[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
-integer_quotient(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    static_assert(std::is_integral<R1>::value && std::is_integral<R2>::value,
-                  "integer_quotient() can only be called with integral Rep");
-    return make_quantity<UnitQuotientT<U1, U2>>(q1.in(U1{}) / q2.in(U2{}));
-}
-
-// Force integer division beteween an integer Quantity and a raw number.
-template <typename U, typename R, typename T>
-[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
-integer_quotient(Quantity<U, R> q, T x) {
-    static_assert(std::is_integral<R>::value && std::is_integral<T>::value,
-                  "integer_quotient() can only be called with integral Rep");
-    return make_quantity<U>(q.in(U{}) / x);
-}
-
-// Force integer division beteween a raw number and an integer Quantity.
-template <typename T, typename U, typename R>
-[[deprecated("Replace `integer_quotient(a, b)` with `a / unblock_int_div(b)`")]] constexpr auto
-integer_quotient(T x, Quantity<U, R> q) {
-    static_assert(std::is_integral<T>::value && std::is_integral<R>::value,
-                  "integer_quotient() can only be called with integral Rep");
-    return make_quantity<UnitInverseT<U>>(x / q.in(U{}));
-}
 
 // The modulo operator (i.e., the remainder of an integer division).
 //
@@ -5677,20 +7208,6 @@ template <typename U1, typename R1, typename U2, typename R2>
 constexpr auto operator%(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
     using U = CommonUnitT<U1, U2>;
     return make_quantity<U>(q1.in(U{}) % q2.in(U{}));
-}
-
-// Callsite-readable way to convert a `Quantity` to a raw number.
-//
-// Only works for dimensionless `Quantities`; will return a compile-time error otherwise.
-//
-// Identity for non-`Quantity` types.
-template <typename U, typename R>
-constexpr R as_raw_number(Quantity<U, R> q) {
-    return q.as(UnitProductT<>{});
-}
-template <typename T>
-constexpr T as_raw_number(T x) {
-    return x;
 }
 
 // Type trait to detect whether two Quantity types are equivalent.
@@ -5786,53 +7303,34 @@ constexpr auto root(QuantityMaker<Unit>) {
 
 // Check conversion for overflow (no change of rep).
 template <typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    return detail::ApplyMagnitudeT<R, decltype(unit_ratio(U{}, target_unit))>::would_overflow(
-        q.in(U{}));
+constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
+    using Op =
+        detail::ConversionForRepsAndFactor<R, R, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::would_value_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for overflow (new rep).
 template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    // TODO(#349): Someday, we would like a more efficient implementation --- one that simply
-    // computes, at compile time, the smallest value that would overflow, and then compares against
-    // that.  This version will at least let us get off the ground for now.
-    using Common = std::common_type_t<R, TargetRep>;
-    if (detail::will_static_cast_overflow<Common>(q.in(U{}))) {
-        return true;
-    }
-
-    const auto to_common = rep_cast<Common>(q);
-    if (will_conversion_overflow(to_common, target_unit)) {
-        return true;
-    }
-
-    const auto converted_but_not_narrowed = to_common.coerce_in(target_unit);
-    return detail::will_static_cast_overflow<TargetRep>(converted_but_not_narrowed);
+constexpr bool will_conversion_overflow(Quantity<U, R> q, TargetUnitSlot) {
+    using Op = detail::
+        ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::would_value_overflow<Op>(q.in(U{}));
 }
 
 // Check conversion for truncation (no change of rep).
 template <typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    return detail::ApplyMagnitudeT<R, decltype(unit_ratio(U{}, target_unit))>::would_truncate(
-        q.in(U{}));
+constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot) {
+    using Op =
+        detail::ConversionForRepsAndFactor<R, R, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::TruncationRiskFor<Op>::would_value_truncate(q.in(U{}));
 }
 
 // Check conversion for truncation (new rep).
 template <typename TargetRep, typename U, typename R, typename TargetUnitSlot>
-constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot target_unit) {
-    using Common = std::common_type_t<R, TargetRep>;
-    if (detail::will_static_cast_truncate<Common>(q.in(U{}))) {
-        return true;
-    }
-
-    const auto to_common = rep_cast<Common>(q);
-    if (will_conversion_truncate(to_common, target_unit)) {
-        return true;
-    }
-
-    const auto converted_but_not_narrowed = to_common.coerce_in(target_unit);
-    return detail::will_static_cast_truncate<TargetRep>(converted_but_not_narrowed);
+constexpr bool will_conversion_truncate(Quantity<U, R> q, TargetUnitSlot) {
+    using Op = detail::
+        ConversionForRepsAndFactor<R, TargetRep, UnitRatioT<U, AssociatedUnitT<TargetUnitSlot>>>;
+    return detail::TruncationRiskFor<Op>::would_value_truncate(q.in(U{}));
 }
 
 // Check for any lossiness in conversion (no change of rep).
@@ -5881,32 +7379,42 @@ constexpr auto using_common_type(T t, U u, Func f) {
 
     return f(cast_to_common_type<C>(t), cast_to_common_type<C>(u));
 }
+
+template <typename Op, typename U1, typename U2, typename R1, typename R2>
+constexpr auto convert_and_compare(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+    using U = CommonUnitT<U1, U2>;
+    using ComRep1 = detail::CommonTypeButPreserveIntSignedness<R1, R2>;
+    using ComRep2 = detail::CommonTypeButPreserveIntSignedness<R2, R1>;
+    return detail::SignAwareComparison<UnitSign<U>, Op>{}(
+        q1.template in<ComRep1>(U{}, check_for(ALL_RISKS)),
+        q2.template in<ComRep2>(U{}, check_for(ALL_RISKS)));
+}
 }  // namespace detail
 
 // Comparison functions for compatible Quantity types.
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator==(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::equal);
+    return detail::convert_and_compare<detail::Equal>(q1, q2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator!=(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::not_equal);
+    return detail::convert_and_compare<detail::NotEqual>(q1, q2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator<(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::less);
+    return detail::convert_and_compare<detail::Less>(q1, q2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator<=(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::less_equal);
+    return detail::convert_and_compare<detail::LessEqual>(q1, q2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator>(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::greater);
+    return detail::convert_and_compare<detail::Greater>(q1, q2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr bool operator>=(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
-    return detail::using_common_type(q1, q2, detail::greater_equal);
+    return detail::convert_and_compare<detail::GreaterEqual>(q1, q2);
 }
 
 // Addition and subtraction functions for compatible Quantity types.
@@ -5987,11 +7495,28 @@ constexpr auto operator>=(QLike q1, Quantity<U, R> q2) -> decltype(as_quantity(q
     return as_quantity(q1) >= q2;
 }
 
+namespace detail {
+template <typename Op>
+struct SignAwareComparison<Magnitude<>, Op> {
+    template <typename T1, typename T2>
+    constexpr auto operator()(const T1 &lhs, const T2 &rhs) const {
+        return Op{}(lhs, rhs);
+    }
+};
+
+template <typename Op>
+struct SignAwareComparison<Magnitude<Negative>, Op> {
+    template <typename T1, typename T2>
+    constexpr auto operator()(const T1 &lhs, const T2 &rhs) const {
+        return Op{}(rhs, lhs);
+    }
+};
+}  // namespace detail
+
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 template <typename U1, typename R1, typename U2, typename R2>
 constexpr auto operator<=>(const Quantity<U1, R1> &lhs, const Quantity<U2, R2> &rhs) {
-    using U = CommonUnitT<U1, U2>;
-    return lhs.in(U{}) <=> rhs.in(U{});
+    return detail::convert_and_compare<detail::ThreeWayCompare>(lhs, rhs);
 }
 #endif
 
@@ -6009,6 +7534,82 @@ struct CommonQuantity<Quantity<U1, R1>,
                       Quantity<U2, R2>,
                       std::enable_if_t<HasSameDimension<U1, U2>::value>>
     : stdx::type_identity<Quantity<CommonUnitT<U1, U2>, std::common_type_t<R1, R2>>> {};
+
+//
+// Formatter implementation for fmtlib or `std::format`.
+//
+// To use with fmtlib, add this template specialization to a file that includes both
+// `"au/quantity.hh"`, and `"fmt/format.h"`:
+//
+//    namespace fmt {
+//    template <typename U, typename R>
+//    struct formatter<::au::Quantity<U, R>> : ::au::QuantityFormatter<U, R, ::fmt::formatter> {};
+//    }  // namespace fmt
+//
+// Then, include that file any time you want to format a `Quantity`.
+//
+template <typename U, typename R, template <class...> class Formatter>
+struct QuantityFormatter {
+    template <typename FormatParseContext>
+    constexpr auto parse_unit_label_part(FormatParseContext &ctx) {
+        auto it = ctx.begin();
+
+        if (it == ctx.end()) {
+            return it;
+        }
+
+        if (*it != 'U') {
+            return it;
+        }
+        // Consume the 'U'.
+        ++it;
+
+        // Parse the total width.
+        while (it != ctx.end() && *it >= '0' && *it <= '9') {
+            min_label_width_ = (min_label_width_ * 10) + static_cast<std::size_t>(*it++ - '0');
+        }
+
+        if (it == ctx.end() || *it == '}') {
+            return it;
+        }
+
+        if (*it++ != ';') {
+            // Cause an error condition in further parsing.
+            it = ctx.end();
+        }
+        return it;
+    }
+
+    template <typename FormatParseContext>
+    constexpr auto parse(FormatParseContext &ctx) {
+        ctx.advance_to(parse_unit_label_part(ctx));
+        return value_format.parse(ctx);
+    }
+
+    template <typename FormatContext>
+    constexpr auto format(const au::Quantity<U, R> &q, FormatContext &ctx) const {
+        value_format.format(q.data_in(U{}), ctx);
+        *ctx.out()++ = ' ';
+        return write_and_pad(unit_label(U{}), sizeof(unit_label(U{})), ctx);
+    }
+
+    template <typename FormatContext>
+    constexpr auto write_and_pad(const char *data,
+                                 std::size_t data_size,
+                                 FormatContext &ctx) const {
+        Formatter<const char *> unit_label_formatter{};
+        unit_label_formatter.format(data, ctx);
+        while (data_size <= min_label_width_) {
+            *ctx.out()++ = ' ';
+            ++data_size;
+        }
+        return ctx.out();
+    }
+
+    Formatter<R> value_format{};
+    std::size_t min_label_width_{0};
+};
+
 }  // namespace au
 
 namespace std {
@@ -6021,6 +7622,26 @@ template <typename U1, typename U2, typename R1, typename R2>
 struct common_type<au::Quantity<U1, R1>, au::Quantity<U2, R2>>
     : au::CommonQuantity<au::Quantity<U1, R1>, au::Quantity<U2, R2>> {};
 }  // namespace std
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct UnosLabel {
+    static constexpr const char label[] = "U";
+};
+template <typename T>
+constexpr const char UnosLabel<T>::label[];
+struct Unos : UnitProductT<>, UnosLabel<void> {
+    using UnosLabel<void>::label;
+};
+constexpr auto unos = QuantityMaker<Unos>{};
+
+}  // namespace au
 
 
 // "Mixin" classes to add operations for a "unit wrapper" --- that is, a template with a _single
@@ -6221,6 +7842,28 @@ struct CanScaleByMagnitude {
     friend constexpr auto operator/(UnitWrapper<Unit>, Magnitude<BPs...> m) {
         return UnitWrapper<decltype(Unit{} / m)>{};
     }
+
+    friend constexpr auto operator-(UnitWrapper<Unit>) {
+        return UnitWrapper<decltype(Unit{} * (-mag<1>()))>{};
+    }
+};
+
+//
+// A mixin to enable raising a unit wrapper to a rational power.
+//
+template <template <typename U> class UnitWrapper, typename Unit>
+struct SupportsRationalPowers {
+    // (W^N), for wrapper W and integer N.
+    template <std::intmax_t N>
+    friend constexpr auto pow(UnitWrapper<Unit>) {
+        return UnitWrapper<UnitPowerT<Unit, N>>{};
+    }
+
+    // (W^(1/N)), for wrapper W and integer N.
+    template <std::intmax_t N>
+    friend constexpr auto root(UnitWrapper<Unit>) {
+        return UnitWrapper<UnitPowerT<Unit, 1, N>>{};
+    }
 };
 
 }  // namespace detail
@@ -6247,6 +7890,7 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
                   detail::ComposesWith<Constant, Unit, Constant, Constant>,
                   detail::ComposesWith<Constant, Unit, QuantityMaker, QuantityMaker>,
                   detail::ComposesWith<Constant, Unit, SingularNameFor, SingularNameFor>,
+                  detail::SupportsRationalPowers<Constant, Unit>,
                   detail::CanScaleByMagnitude<Constant, Unit> {
     // Convert this constant to a Quantity of the given rep.
     template <typename T>
@@ -6263,9 +7907,25 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
     // Convert this constant to a Quantity of the given unit and rep.
     template <typename T, typename OtherUnit>
     constexpr auto as(OtherUnit u) const {
-        static_assert(can_store_value_in<T>(OtherUnit{}),
-                      "Cannot represent constant in this unit/rep");
-        return coerce_as<T>(u);
+        return as<T>(u, check_for(ALL_RISKS));
+    }
+
+    // Convert this constant to a Quantity of the given unit and rep, following this risk policy.
+    template <typename T, typename OtherUnit, typename RiskPolicyT>
+    constexpr auto as(OtherUnit, RiskPolicyT) const {
+        constexpr auto this_value = make_quantity<Unit>(static_cast<T>(1));
+
+        constexpr bool has_unacceptable_overflow =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Overflow) &&
+            will_conversion_overflow(this_value, OtherUnit{});
+        static_assert(!has_unacceptable_overflow, "Constant conversion known to overflow");
+
+        constexpr bool has_unacceptable_truncation =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Truncation) &&
+            will_conversion_truncate(this_value, OtherUnit{});
+        static_assert(!has_unacceptable_truncation, "Constant conversion known to truncate");
+
+        return this_value.as(OtherUnit{}, ignore(ALL_RISKS));
     }
 
     // Get the value of this constant in the given unit and rep, ignoring safety checks.
@@ -6277,9 +7937,13 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
     // Get the value of this constant in the given unit and rep.
     template <typename T, typename OtherUnit>
     constexpr auto in(OtherUnit u) const {
-        static_assert(can_store_value_in<T>(OtherUnit{}),
-                      "Cannot represent constant in this unit/rep");
-        return coerce_in<T>(u);
+        return in<T>(u, check_for(ALL_RISKS));
+    }
+
+    // Get the value of this constant in the given unit and rep, following this risk policy.
+    template <typename T, typename OtherUnit, typename RiskPolicyT>
+    constexpr auto in(OtherUnit u, RiskPolicyT policy) const {
+        return as<T>(u, policy).in(u);
     }
 
     // Implicitly convert to any quantity type which passes safety checks.
@@ -6315,29 +7979,48 @@ constexpr Constant<AssociatedUnitT<UnitSlot>> make_constant(UnitSlot) {
     return {};
 }
 
+constexpr Zero make_constant(Zero) { return {}; }
+
 // Support using `Constant` in a unit slot.
 template <typename Unit>
 struct AssociatedUnit<Constant<Unit>> : stdx::type_identity<Unit> {};
 
 }  // namespace au
 
-// Keep corresponding `_fwd.hh` file on top.
-
 
 namespace au {
 
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct UnosLabel {
-    static constexpr const char label[] = "U";
-};
-template <typename T>
-constexpr const char UnosLabel<T>::label[];
-struct Unos : UnitProductT<>, UnosLabel<void> {
-    using UnosLabel<void>::label;
-};
-constexpr auto unos = QuantityMaker<Unos>{};
+//
+// A representation of the symbol for a unit.
+//
+// To use, create an instance variable templated on a unit, and make the instance variable's name
+// the symbol to represent.  For example:
+//
+//     constexpr auto m = SymbolFor<Meters>{};
+//
+template <typename Unit>
+struct SymbolFor : detail::MakesQuantityFromNumber<SymbolFor, Unit>,
+                   detail::ScalesQuantity<SymbolFor, Unit>,
+                   detail::ComposesWith<SymbolFor, Unit, SymbolFor, SymbolFor>,
+                   detail::SupportsRationalPowers<SymbolFor, Unit>,
+                   detail::CanScaleByMagnitude<SymbolFor, Unit> {};
+
+//
+// Create a unit symbol using the more fluent APIs that unit slots make possible.  For example:
+//
+//     constexpr auto mps = symbol_for(meters / second);
+//
+// This is generally easier to work with and makes code that is easier to read, at the cost of being
+// (very slightly) slower to compile.
+//
+template <typename UnitSlot>
+constexpr auto symbol_for(UnitSlot) {
+    return SymbolFor<AssociatedUnitT<UnitSlot>>{};
+}
+
+// Support using symbols in unit slot APIs (e.g., `v.in(m / s)`).
+template <typename U>
+struct AssociatedUnit<SymbolFor<U>> : stdx::type_identity<U> {};
 
 }  // namespace au
 
@@ -6369,19 +8052,28 @@ template <typename P1, typename P2>
 struct AreQuantityPointTypesEquivalent;
 
 namespace detail {
-template <typename TargetRep, typename U1, typename U2>
-struct OriginDisplacementFitsIn;
-
 template <typename FromRep, typename ToRep>
 struct IntermediateRep;
 }  // namespace detail
+
+// Some units have an "origin".  This is not meaningful by itself, but its difference w.r.t. the
+// "origin" of another unit of the same Dimension _is_ meaningful.  This type trait provides access
+// to that difference.
+template <typename U1, typename U2>
+constexpr auto origin_displacement(U1, U2) {
+    return make_constant(detail::ComputeOriginDisplacementUnit<AssociatedUnitForPointsT<U1>,
+                                                               AssociatedUnitForPointsT<U2>>{});
+}
+
+template <typename U1, typename U2>
+using OriginDisplacement = decltype(origin_displacement(U1{}, U2{}));
 
 // QuantityPoint implementation and API elaboration.
 template <typename UnitT, typename RepT>
 class QuantityPoint {
     // Q: When should we enable IMPLICIT construction from another QuantityPoint type?
-    // A: EXACTLY WHEN our own Diff type can be IMPLICITLY constructed from the SUM of the target's
-    //    Diff type, and the offset between our Units' zero points.
+    // A: EXACTLY WHEN our own Diff type can be IMPLICITLY constructed from BOTH the target's Diff
+    //    type AND the offset between our Units' zero points.
     //
     // In other words, there are two ways to fail implicit convertibility.
     //
@@ -6395,10 +8087,8 @@ class QuantityPoint {
     //      OK : QuantityPoint<Celsius, int> -> QuantityPoint<Milli<Kelvins>, int>
     template <typename OtherUnit, typename OtherRep>
     static constexpr bool should_enable_implicit_construction_from() {
-        return std::is_convertible<
-            decltype(std::declval<typename QuantityPoint<OtherUnit, OtherRep>::Diff>() +
-                     origin_displacement(UnitT{}, OtherUnit{})),
-            QuantityPoint::Diff>::value;
+        using Com = CommonUnitT<OtherUnit, detail::ComputeOriginDisplacementUnit<Unit, OtherUnit>>;
+        return std::is_convertible<Quantity<Com, OtherRep>, QuantityPoint::Diff>::value;
     }
 
     // This machinery exists to give us a conditionally explicit constructor, using SFINAE to select
@@ -6415,11 +8105,10 @@ class QuantityPoint {
     static constexpr Unit unit{};
     using Diff = Quantity<Unit, Rep>;
 
-    // The default constructor produces a QuantityPoint in a valid but contractually unspecified
-    // state.  It exists to give you an object you can assign to.  The main motivating factor for
-    // including this is to support `std::atomic`, which requires its types to be
-    // default-constructible.
-    constexpr QuantityPoint() noexcept : x_{ZERO} {}
+    // The default constructor produces a QuantityPoint whose value is default constructed.  It
+    // exists to give you an object you can assign to.  The main motivating factor for including
+    // this is to support `std::atomic`, which requires its types to be default-constructible.
+    constexpr QuantityPoint() noexcept : x_{} {}
 
     template <typename OtherUnit,
               typename OtherRep,
@@ -6434,47 +8123,36 @@ class QuantityPoint {
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
     constexpr explicit QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other) = delete;
 
+    // Construct from another QuantityPoint with an explicit conversion risk policy.
+    template <typename OtherUnit,
+              typename OtherRep,
+              typename RiskPolicyT,
+              std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
+    constexpr QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other, RiskPolicyT policy)
+        : QuantityPoint{other.template as<Rep>(Unit{}, policy)} {}
+
     // The notion of "0" is *not* unambiguous for point types, because different scales can make
     // different decisions about what point is labeled as "0".
     constexpr QuantityPoint(Zero) = delete;
 
-    template <typename NewRep,
-              typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
-    constexpr auto as(NewUnit u) const {
-        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(this->template in<NewRep>(u));
+    template <typename NewRep, typename NewUnit, typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+    constexpr auto as(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(in_impl<NewRep>(u, policy));
     }
 
-    template <typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
-    constexpr auto as(NewUnit u) const {
-        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(in(u));
+    template <typename NewUnit, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
+    constexpr auto as(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return make_quantity_point<AssociatedUnitForPointsT<NewUnit>>(in_impl<Rep>(u, policy));
     }
 
-    template <typename NewRep,
-              typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
-    constexpr NewRep in(NewUnit u) const {
-        using CalcRep = typename detail::IntermediateRep<Rep, NewRep>::type;
-        return (rep_cast<CalcRep>(x_) -
-                rep_cast<CalcRep>(
-                    OriginDisplacement<Unit, AssociatedUnitForPointsT<NewUnit>>::value()))
-            .template in<NewRep>(associated_unit_for_points(u));
+    template <typename NewRep, typename NewUnit, typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+    constexpr NewRep in(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return in_impl<NewRep>(u, policy);
     }
 
-    template <typename NewUnit,
-              typename = std::enable_if_t<IsUnit<AssociatedUnitForPointsT<NewUnit>>::value>>
-    constexpr Rep in(NewUnit u) const {
-        static_assert(
-            detail::OriginDisplacementFitsIn<Rep, AssociatedUnitForPointsT<NewUnit>, Unit>::value,
-            "Cannot represent origin displacement in desired Rep");
-
-        // `rep_cast` is needed because if these are integral types, their difference might become a
-        // different type due to integer promotion.
-        return rep_cast<Rep>(
-                   x_ + rep_cast<Rep>(
-                            OriginDisplacement<AssociatedUnitForPointsT<NewUnit>, Unit>::value()))
-            .in(associated_unit_for_points(u));
+    template <typename NewUnit, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
+    constexpr Rep in(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
+        return in_impl<Rep>(u, policy);
     }
 
     // "Forcing" conversions, which explicitly ignore safety checks for overflow and truncation.
@@ -6501,29 +8179,19 @@ class QuantityPoint {
 
     // Direct access to the underlying value member, with any Point-equivalent Unit.
     //
-    // Mutable access, QuantityPointMaker input.
-    template <typename U>
-    Rep &data_in(const QuantityPointMaker<U> &) {
-        static_assert(AreUnitsPointEquivalent<U, Unit>::value,
+    // Mutable access:
+    template <typename UnitSlot>
+    constexpr Rep &data_in(UnitSlot) {
+        static_assert(AreUnitsPointEquivalent<AssociatedUnitForPointsT<UnitSlot>, Unit>::value,
                       "Can only access value via Point-equivalent unit");
-        return x_.data_in(QuantityMaker<U>{});
+        return x_.data_in(AssociatedUnitForPointsT<UnitSlot>{});
     }
-    // Mutable access, Unit input.
-    template <typename U>
-    Rep &data_in(const U &) {
-        return data_in(QuantityPointMaker<U>{});
-    }
-    // Const access, QuantityPointMaker input.
-    template <typename U>
-    const Rep &data_in(const QuantityPointMaker<U> &) const {
-        static_assert(AreUnitsPointEquivalent<U, Unit>::value,
+    // Const access:
+    template <typename UnitSlot>
+    constexpr const Rep &data_in(UnitSlot) const {
+        static_assert(AreUnitsPointEquivalent<AssociatedUnitForPointsT<UnitSlot>, Unit>::value,
                       "Can only access value via Point-equivalent unit");
-        return x_.data_in(QuantityMaker<U>{});
-    }
-    // Const access, Unit input.
-    template <typename U>
-    const Rep &data_in(const U &) const {
-        return data_in(QuantityPointMaker<U>{});
+        return x_.data_in(AssociatedUnitForPointsT<UnitSlot>{});
     }
 
     // Comparison operators.
@@ -6564,6 +8232,19 @@ class QuantityPoint {
     friend struct QuantityPointMaker<Unit>;
 
  private:
+    template <typename OtherRep, typename OtherPointUnitSlot, typename RiskPolicyT>
+    constexpr OtherRep in_impl(OtherPointUnitSlot, RiskPolicyT policy) const {
+        using OtherUnit = AssociatedUnitForPointsT<OtherPointUnitSlot>;
+        using OriginDisplacementUnit = detail::ComputeOriginDisplacementUnit<Unit, OtherUnit>;
+        using Common = CommonUnitT<Unit, OtherUnit, OriginDisplacementUnit>;
+
+        using CalcRep = typename detail::IntermediateRep<Rep, OtherRep>::type;
+
+        Quantity<Common, CalcRep> intermediate_result =
+            x_.template as<CalcRep>(Common{}, policy) + origin_displacement(OtherUnit{}, unit);
+        return intermediate_result.template in<OtherRep>(OtherUnit{}, policy);
+    }
+
     constexpr explicit QuantityPoint(Diff x) : x_{x} {}
 
     Diff x_;
@@ -6642,32 +8323,42 @@ constexpr auto using_common_point_unit(X x, Y y, Func f) {
     constexpr auto u = CommonPointUnitT<typename X::Unit, typename Y::Unit>{};
     return f(rep_cast<R>(x).as(u), rep_cast<R>(y).as(u));
 }
+
+template <typename Op, typename U1, typename U2, typename R1, typename R2>
+constexpr auto convert_and_compare(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
+    using U = CommonPointUnitT<U1, U2>;
+    using ComRep1 = detail::CommonTypeButPreserveIntSignedness<R1, R2>;
+    using ComRep2 = detail::CommonTypeButPreserveIntSignedness<R2, R1>;
+    return detail::SignAwareComparison<UnitSign<U>, Op>{}(
+        p1.template in<ComRep1>(U{}, check_for(ALL_RISKS)),
+        p2.template in<ComRep2>(U{}, check_for(ALL_RISKS)));
+}
 }  // namespace detail
 
 // Comparison functions for compatible QuantityPoint types.
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator<(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::less);
+    return detail::convert_and_compare<detail::Less>(p1, p2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator>(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::greater);
+    return detail::convert_and_compare<detail::Greater>(p1, p2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator<=(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::less_equal);
+    return detail::convert_and_compare<detail::LessEqual>(p1, p2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator>=(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::greater_equal);
+    return detail::convert_and_compare<detail::GreaterEqual>(p1, p2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator==(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::equal);
+    return detail::convert_and_compare<detail::Equal>(p1, p2);
 }
 template <typename U1, typename U2, typename R1, typename R2>
 constexpr auto operator!=(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
-    return detail::using_common_point_unit(p1, p2, detail::not_equal);
+    return detail::convert_and_compare<detail::NotEqual>(p1, p2);
 }
 
 namespace detail {
@@ -6712,37 +8403,15 @@ constexpr auto operator-(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 template <typename U1, typename R1, typename U2, typename R2>
 constexpr auto operator<=>(const QuantityPoint<U1, R1> &lhs, const QuantityPoint<U2, R2> &rhs) {
-    using U = CommonPointUnitT<U1, U2>;
-    return lhs.in(U{}) <=> rhs.in(U{});
+    return detail::convert_and_compare<detail::ThreeWayCompare>(lhs, rhs);
 }
 #endif
 
 namespace detail {
 
-template <typename TargetRep, typename U, typename R>
-constexpr bool underlying_value_in_range(Quantity<U, R> q) {
-    return stdx::in_range<TargetRep>(q.in(U{}));
-}
-
-template <typename TargetRep>
-constexpr bool underlying_value_in_range(Zero) {
-    return true;
-}
-
-template <typename TargetRep, typename U1, typename U2>
-struct OriginDisplacementFitsIn
-    : std::conditional_t<std::is_integral<TargetRep>::value,
-                         stdx::bool_constant<underlying_value_in_range<TargetRep>(
-                             OriginDisplacement<U1, U2>::value())>,
-                         std::true_type> {};
-
 // We simply want a version of `std::make_signed_t` that won't choke on non-integral types.
-template <typename T, bool IsInt = std::is_integral<T>::value>
-struct MakeSigned;
 template <typename T>
-struct MakeSigned<T, false> : stdx::type_identity<T> {};
-template <typename T>
-struct MakeSigned<T, true> : stdx::type_identity<std::make_signed_t<T>> {};
+struct MakeSigned : std::conditional<std::is_integral<T>::value, std::make_signed_t<T>, T> {};
 
 // If the destination is a signed integer, we want to ensure we do our
 // computations in a signed type.  Otherwise, just use the common type for our
@@ -6761,42 +8430,6 @@ struct IntermediateRep
 }  // namespace detail
 }  // namespace au
 
-
-namespace au {
-
-//
-// A representation of the symbol for a unit.
-//
-// To use, create an instance variable templated on a unit, and make the instance variable's name
-// the symbol to represent.  For example:
-//
-//     constexpr auto m = SymbolFor<Meters>{};
-//
-template <typename Unit>
-struct SymbolFor : detail::MakesQuantityFromNumber<SymbolFor, Unit>,
-                   detail::ScalesQuantity<SymbolFor, Unit>,
-                   detail::ComposesWith<SymbolFor, Unit, SymbolFor, SymbolFor>,
-                   detail::CanScaleByMagnitude<SymbolFor, Unit> {};
-
-//
-// Create a unit symbol using the more fluent APIs that unit slots make possible.  For example:
-//
-//     constexpr auto mps = symbol_for(meters / second);
-//
-// This is generally easier to work with and makes code that is easier to read, at the cost of being
-// (very slightly) slower to compile.
-//
-template <typename UnitSlot>
-constexpr auto symbol_for(UnitSlot) {
-    return SymbolFor<AssociatedUnitT<UnitSlot>>{};
-}
-
-// Support using symbols in unit slot APIs (e.g., `v.in(m / s)`).
-template <typename U>
-struct AssociatedUnit<SymbolFor<U>> : stdx::type_identity<U> {};
-
-}  // namespace au
-
 // Keep corresponding `_fwd.hh` file on top.
 
 
@@ -6805,21 +8438,20 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct AmperesLabel {
-    static constexpr const char label[] = "A";
+struct SecondsLabel {
+    static constexpr const char label[] = "s";
 };
 template <typename T>
-constexpr const char AmperesLabel<T>::label[];
-struct Amperes : UnitImpl<Current>, AmperesLabel<void> {
-    using AmperesLabel<void>::label;
+constexpr const char SecondsLabel<T>::label[];
+struct Seconds : UnitImpl<Time>, SecondsLabel<void> {
+    using SecondsLabel<void>::label;
 };
-constexpr auto ampere = SingularNameFor<Amperes>{};
-constexpr auto amperes = QuantityMaker<Amperes>{};
+constexpr auto second = SingularNameFor<Seconds>{};
+constexpr auto seconds = QuantityMaker<Seconds>{};
 
 namespace symbols {
-constexpr auto A = SymbolFor<Amperes>{};
+constexpr auto s = SymbolFor<Seconds>{};
 }
-
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -7181,31 +8813,6 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct KelvinsLabel {
-    static constexpr const char label[] = "K";
-};
-template <typename T>
-constexpr const char KelvinsLabel<T>::label[];
-struct Kelvins : UnitImpl<Temperature>, KelvinsLabel<void> {
-    using KelvinsLabel<void>::label;
-};
-constexpr auto kelvin = SingularNameFor<Kelvins>{};
-constexpr auto kelvins = QuantityMaker<Kelvins>{};
-constexpr auto kelvins_pt = QuantityPointMaker<Kelvins>{};
-
-namespace symbols {
-constexpr auto K = SymbolFor<Kelvins>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
 struct RadiansLabel {
     static constexpr const char label[] = "rad";
 };
@@ -7278,6 +8885,126 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
+struct KelvinsLabel {
+    static constexpr const char label[] = "K";
+};
+template <typename T>
+constexpr const char KelvinsLabel<T>::label[];
+struct Kelvins : UnitImpl<Temperature>, KelvinsLabel<void> {
+    using KelvinsLabel<void>::label;
+};
+constexpr auto kelvin = SingularNameFor<Kelvins>{};
+constexpr auto kelvins = QuantityMaker<Kelvins>{};
+constexpr auto kelvins_pt = QuantityPointMaker<Kelvins>{};
+
+namespace symbols {
+constexpr auto K = SymbolFor<Kelvins>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct HertzLabel {
+    static constexpr const char label[] = "Hz";
+};
+template <typename T>
+constexpr const char HertzLabel<T>::label[];
+struct Hertz : UnitInverseT<Seconds>, HertzLabel<void> {
+    using HertzLabel<void>::label;
+};
+constexpr auto hertz = QuantityMaker<Hertz>{};
+
+namespace symbols {
+constexpr auto Hz = SymbolFor<Hertz>{};
+}
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SpeedOfLightLabel {
+    static constexpr const char label[] = "c";
+};
+template <typename T>
+constexpr const char SpeedOfLightLabel<T>::label[];
+struct SpeedOfLightUnit : decltype(Meters{} / Seconds{} * mag<299'792'458>()),
+                          SpeedOfLightLabel<void> {
+    using SpeedOfLightLabel<void>::label;
+};
+}  // namespace detail
+
+constexpr auto SPEED_OF_LIGHT = make_constant(detail::SpeedOfLightUnit{});
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct StandardGravityLabel {
+    static constexpr const char label[] = "g_0";
+};
+template <typename T>
+constexpr const char StandardGravityLabel<T>::label[];
+struct StandardGravity
+    : decltype((Meters{} / squared(Seconds{})) * (mag<980'665>() / mag<100'000>())),
+      StandardGravityLabel<void> {
+    using StandardGravityLabel<void>::label;
+};
+constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
+
+namespace symbols {
+constexpr auto g_0 = SymbolFor<StandardGravity>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct AmperesLabel {
+    static constexpr const char label[] = "A";
+};
+template <typename T>
+constexpr const char AmperesLabel<T>::label[];
+struct Amperes : UnitImpl<Current>, AmperesLabel<void> {
+    using AmperesLabel<void>::label;
+};
+constexpr auto ampere = SingularNameFor<Amperes>{};
+constexpr auto amperes = QuantityMaker<Amperes>{};
+
+namespace symbols {
+constexpr auto A = SymbolFor<Amperes>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
 struct InchesLabel {
     static constexpr const char label[] = "in";
 };
@@ -7291,6 +9018,372 @@ constexpr auto inches = QuantityMaker<Inches>{};
 
 namespace symbols {
 constexpr auto in = SymbolFor<Inches>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct DegreesLabel {
+    static constexpr const char label[] = "deg";
+};
+template <typename T>
+constexpr const char DegreesLabel<T>::label[];
+struct Degrees : decltype(Radians{} * Magnitude<Pi>{} / mag<180>()), DegreesLabel<void> {
+    using DegreesLabel<void>::label;
+};
+constexpr auto degree = SingularNameFor<Degrees>{};
+constexpr auto degrees = QuantityMaker<Degrees>{};
+
+namespace symbols {
+constexpr auto deg = SymbolFor<Degrees>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MinutesLabel {
+    static constexpr const char label[] = "min";
+};
+template <typename T>
+constexpr const char MinutesLabel<T>::label[];
+struct Minutes : decltype(Seconds{} * mag<60>()), MinutesLabel<void> {
+    using MinutesLabel<void>::label;
+};
+constexpr auto minute = SingularNameFor<Minutes>{};
+constexpr auto minutes = QuantityMaker<Minutes>{};
+
+namespace symbols {
+constexpr auto min = SymbolFor<Minutes>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct USGallonsLabel {
+    static constexpr const char label[] = "US_gal";
+};
+template <typename T>
+constexpr const char USGallonsLabel<T>::label[];
+struct USGallons : decltype(cubed(Inches{}) * mag<231>()), USGallonsLabel<void> {
+    using USGallonsLabel<void>::label;
+};
+constexpr auto us_gallon = SingularNameFor<USGallons>{};
+constexpr auto us_gallons = QuantityMaker<USGallons>{};
+
+namespace symbols {
+constexpr auto US_gal = SymbolFor<USGallons>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct PoundsMassLabel {
+    static constexpr const char label[] = "lb";
+};
+template <typename T>
+constexpr const char PoundsMassLabel<T>::label[];
+struct PoundsMass : decltype(Micro<Grams>{} * mag<453'592'370>()), PoundsMassLabel<void> {
+    using PoundsMassLabel<void>::label;
+};
+constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
+constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
+
+namespace symbols {
+constexpr auto lb = SymbolFor<PoundsMass>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct NauticalMilesLabel {
+    static constexpr const char label[] = "nmi";
+};
+template <typename T>
+constexpr const char NauticalMilesLabel<T>::label[];
+struct NauticalMiles : decltype(Meters{} * mag<1'852>()), NauticalMilesLabel<void> {
+    using NauticalMilesLabel<void>::label;
+};
+constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
+constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
+
+namespace symbols {
+constexpr auto nmi = SymbolFor<NauticalMiles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct CelsiusLabel {
+    static constexpr const char label[] = "degC";
+};
+template <typename T>
+constexpr const char CelsiusLabel<T>::label[];
+struct Celsius : Kelvins, CelsiusLabel<void> {
+    using CelsiusLabel<void>::label;
+    static constexpr auto origin() { return centi(kelvins)(273'15); }
+};
+constexpr auto celsius_qty = QuantityMaker<Celsius>{};
+constexpr auto celsius_pt = QuantityPointMaker<Celsius>{};
+
+[[deprecated(
+    "`celsius()` is ambiguous.  Use `celsius_pt()` for _points_, or `celsius_qty()` for "
+    "_quantities_")]] constexpr auto celsius = QuantityMaker<Celsius>{};
+
+namespace symbols {
+constexpr auto degC_qty = SymbolFor<Celsius>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FeetLabel {
+    static constexpr const char label[] = "ft";
+};
+template <typename T>
+constexpr const char FeetLabel<T>::label[];
+struct Feet : decltype(Inches{} * mag<12>()), FeetLabel<void> {
+    using FeetLabel<void>::label;
+};
+constexpr auto foot = SingularNameFor<Feet>{};
+constexpr auto feet = QuantityMaker<Feet>{};
+
+namespace symbols {
+constexpr auto ft = SymbolFor<Feet>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BecquerelLabel {
+    static constexpr const char label[] = "Bq";
+};
+template <typename T>
+constexpr const char BecquerelLabel<T>::label[];
+struct Becquerel : UnitInverseT<Seconds>, BecquerelLabel<void> {
+    using BecquerelLabel<void>::label;
+};
+constexpr auto becquerel = QuantityMaker<Becquerel>{};
+
+namespace symbols {
+constexpr auto Bq = SymbolFor<Becquerel>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BitsLabel {
+    static constexpr const char label[] = "b";
+};
+template <typename T>
+constexpr const char BitsLabel<T>::label[];
+struct Bits : UnitImpl<Information>, BitsLabel<void> {
+    using BitsLabel<void>::label;
+};
+constexpr auto bit = SingularNameFor<Bits>{};
+constexpr auto bits = QuantityMaker<Bits>{};
+
+namespace symbols {
+constexpr auto b = SymbolFor<Bits>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct YardsLabel {
+    static constexpr const char label[] = "yd";
+};
+template <typename T>
+constexpr const char YardsLabel<T>::label[];
+struct Yards : decltype(Feet{} * mag<3>()), YardsLabel<void> {
+    using YardsLabel<void>::label;
+};
+constexpr auto yard = SingularNameFor<Yards>{};
+constexpr auto yards = QuantityMaker<Yards>{};
+
+namespace symbols {
+constexpr auto yd = SymbolFor<Yards>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FootballFieldsLabel {
+    static constexpr const char label[] = "ftbl_fld";
+};
+template <typename T>
+constexpr const char FootballFieldsLabel<T>::label[];
+struct FootballFields : decltype(Yards{} * mag<100>()), FootballFieldsLabel<void> {
+    using FootballFieldsLabel<void>::label;
+};
+constexpr auto football_field = SingularNameFor<FootballFields>{};
+constexpr auto football_fields = QuantityMaker<FootballFields>{};
+
+namespace symbols {
+constexpr auto ftbl_fld = SymbolFor<FootballFields>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FathomsLabel {
+    static constexpr const char label[] = "ftm";
+};
+template <typename T>
+constexpr const char FathomsLabel<T>::label[];
+struct Fathoms : decltype(Feet{} * mag<6>()), FathomsLabel<void> {
+    using FathomsLabel<void>::label;
+};
+constexpr auto fathom = SingularNameFor<Fathoms>{};
+constexpr auto fathoms = QuantityMaker<Fathoms>{};
+
+namespace symbols {
+constexpr auto ftm = SymbolFor<Fathoms>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct ArcsecondsLabel {
+    static constexpr const char label[] = "\"";
+};
+template <typename T>
+constexpr const char ArcsecondsLabel<T>::label[];
+struct Arcseconds : decltype(Degrees{} / mag<3600>()), ArcsecondsLabel<void> {
+    using ArcsecondsLabel<void>::label;
+};
+constexpr auto arcsecond = SingularNameFor<Arcseconds>{};
+constexpr auto arcseconds = QuantityMaker<Arcseconds>{};
+
+namespace symbols {
+constexpr auto as = SymbolFor<Arcseconds>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BytesLabel {
+    static constexpr const char label[] = "B";
+};
+template <typename T>
+constexpr const char BytesLabel<T>::label[];
+struct Bytes : decltype(Bits{} * mag<8>()), BytesLabel<void> {
+    using BytesLabel<void>::label;
+};
+constexpr auto byte = SingularNameFor<Bytes>{};
+constexpr auto bytes = QuantityMaker<Bytes>{};
+
+namespace symbols {
+constexpr auto B = SymbolFor<Bytes>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LitersLabel {
+    static constexpr const char label[] = "L";
+};
+template <typename T>
+constexpr const char LitersLabel<T>::label[];
+struct Liters : decltype(cubed(Deci<Meters>{})), LitersLabel<void> {
+    using LitersLabel<void>::label;
+};
+constexpr auto liter = SingularNameFor<Liters>{};
+constexpr auto liters = QuantityMaker<Liters>{};
+
+namespace symbols {
+constexpr auto L = SymbolFor<Liters>{};
 }
 }  // namespace au
 
@@ -7333,243 +9426,18 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct USQuartsLabel {
-    static constexpr const char label[] = "US_qt";
+struct PercentLabel {
+    static constexpr const char label[] = "%";
 };
 template <typename T>
-constexpr const char USQuartsLabel<T>::label[];
-struct USQuarts : decltype(cubed(Inches{}) * (mag<231>() / mag<4>())), USQuartsLabel<void> {
-    using USQuartsLabel<void>::label;
+constexpr const char PercentLabel<T>::label[];
+struct Percent : decltype(Unos{} / mag<100>()), PercentLabel<void> {
+    using PercentLabel<void>::label;
 };
-constexpr auto us_quart = SingularNameFor<USQuarts>{};
-constexpr auto us_quarts = QuantityMaker<USQuarts>{};
+constexpr auto percent = QuantityMaker<Percent>{};
 
 namespace symbols {
-constexpr auto US_qt = SymbolFor<USQuarts>{};
-}
-
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BitsLabel {
-    static constexpr const char label[] = "b";
-};
-template <typename T>
-constexpr const char BitsLabel<T>::label[];
-struct Bits : UnitImpl<Information>, BitsLabel<void> {
-    using BitsLabel<void>::label;
-};
-constexpr auto bit = SingularNameFor<Bits>{};
-constexpr auto bits = QuantityMaker<Bits>{};
-
-namespace symbols {
-constexpr auto b = SymbolFor<Bits>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct NauticalMilesLabel {
-    static constexpr const char label[] = "nmi";
-};
-template <typename T>
-constexpr const char NauticalMilesLabel<T>::label[];
-struct NauticalMiles : decltype(Meters{} * mag<1'852>()), NauticalMilesLabel<void> {
-    using NauticalMilesLabel<void>::label;
-};
-constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
-constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
-
-namespace symbols {
-constexpr auto nmi = SymbolFor<NauticalMiles>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct USPintsLabel {
-    static constexpr const char label[] = "US_pt";
-};
-template <typename T>
-constexpr const char USPintsLabel<T>::label[];
-struct USPints : decltype(cubed(Inches{}) * (mag<231>() / mag<8>())), USPintsLabel<void> {
-    using USPintsLabel<void>::label;
-};
-constexpr auto us_pint = SingularNameFor<USPints>{};
-constexpr auto us_pints = QuantityMaker<USPints>{};
-
-namespace symbols {
-constexpr auto US_pt = SymbolFor<USPints>{};
-}
-
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PoundsMassLabel {
-    static constexpr const char label[] = "lb";
-};
-template <typename T>
-constexpr const char PoundsMassLabel<T>::label[];
-struct PoundsMass : decltype(Micro<Grams>{} * mag<453'592'370>()), PoundsMassLabel<void> {
-    using PoundsMassLabel<void>::label;
-};
-constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
-constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
-
-namespace symbols {
-constexpr auto lb = SymbolFor<PoundsMass>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LitersLabel {
-    static constexpr const char label[] = "L";
-};
-template <typename T>
-constexpr const char LitersLabel<T>::label[];
-struct Liters : decltype(cubed(Deci<Meters>{})), LitersLabel<void> {
-    using LitersLabel<void>::label;
-};
-constexpr auto liter = SingularNameFor<Liters>{};
-constexpr auto liters = QuantityMaker<Liters>{};
-
-namespace symbols {
-constexpr auto L = SymbolFor<Liters>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct CelsiusLabel {
-    static constexpr const char label[] = "degC";
-};
-template <typename T>
-constexpr const char CelsiusLabel<T>::label[];
-struct Celsius : Kelvins, CelsiusLabel<void> {
-    using CelsiusLabel<void>::label;
-    static constexpr auto origin() { return centi(kelvins)(273'15); }
-};
-constexpr auto celsius_qty = QuantityMaker<Celsius>{};
-constexpr auto celsius_pt = QuantityPointMaker<Celsius>{};
-
-[[deprecated(
-    "`celsius()` is ambiguous.  Use `celsius_pt()` for _points_, or `celsius_qty()` for "
-    "_quantities_")]] constexpr auto celsius = QuantityMaker<Celsius>{};
-
-namespace symbols {
-constexpr auto degC_qty = SymbolFor<Celsius>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct USGallonsLabel {
-    static constexpr const char label[] = "US_gal";
-};
-template <typename T>
-constexpr const char USGallonsLabel<T>::label[];
-struct USGallons : decltype(cubed(Inches{}) * mag<231>()), USGallonsLabel<void> {
-    using USGallonsLabel<void>::label;
-};
-constexpr auto us_gallon = SingularNameFor<USGallons>{};
-constexpr auto us_gallons = QuantityMaker<USGallons>{};
-
-namespace symbols {
-constexpr auto US_gal = SymbolFor<USGallons>{};
-}
-
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BytesLabel {
-    static constexpr const char label[] = "B";
-};
-template <typename T>
-constexpr const char BytesLabel<T>::label[];
-struct Bytes : decltype(Bits{} * mag<8>()), BytesLabel<void> {
-    using BytesLabel<void>::label;
-};
-constexpr auto byte = SingularNameFor<Bytes>{};
-constexpr auto bytes = QuantityMaker<Bytes>{};
-
-namespace symbols {
-constexpr auto B = SymbolFor<Bytes>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct DegreesLabel {
-    static constexpr const char label[] = "deg";
-};
-template <typename T>
-constexpr const char DegreesLabel<T>::label[];
-struct Degrees : decltype(Radians{} * Magnitude<Pi>{} / mag<180>()), DegreesLabel<void> {
-    using DegreesLabel<void>::label;
-};
-constexpr auto degree = SingularNameFor<Degrees>{};
-constexpr auto degrees = QuantityMaker<Degrees>{};
-
-namespace symbols {
-constexpr auto deg = SymbolFor<Degrees>{};
+constexpr auto pct = SymbolFor<Percent>{};
 }
 }  // namespace au
 
@@ -7605,18 +9473,44 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct PercentLabel {
-    static constexpr const char label[] = "%";
+struct USQuartsLabel {
+    static constexpr const char label[] = "US_qt";
 };
 template <typename T>
-constexpr const char PercentLabel<T>::label[];
-struct Percent : decltype(Unos{} / mag<100>()), PercentLabel<void> {
-    using PercentLabel<void>::label;
+constexpr const char USQuartsLabel<T>::label[];
+struct USQuarts : decltype(cubed(Inches{}) * (mag<231>() / mag<4>())), USQuartsLabel<void> {
+    using USQuartsLabel<void>::label;
 };
-constexpr auto percent = QuantityMaker<Percent>{};
+constexpr auto us_quart = SingularNameFor<USQuarts>{};
+constexpr auto us_quarts = QuantityMaker<USQuarts>{};
 
 namespace symbols {
-constexpr auto pct = SymbolFor<Percent>{};
+constexpr auto US_qt = SymbolFor<USQuarts>{};
+}
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct KatalsLabel {
+    static constexpr const char label[] = "kat";
+};
+template <typename T>
+constexpr const char KatalsLabel<T>::label[];
+struct Katals : decltype(Moles{} / Seconds{}), KatalsLabel<void> {
+    using KatalsLabel<void>::label;
+};
+constexpr auto katal = SingularNameFor<Katals>{};
+constexpr auto katals = QuantityMaker<Katals>{};
+
+namespace symbols {
+constexpr auto kat = SymbolFor<Katals>{};
 }
 }  // namespace au
 
@@ -7628,9 +9522,12 @@ namespace au {
 // Lookup will stop once it hits `::au::sin()`, hiding the `::sin()` overload in the global
 // namespace.  To learn more about Name Lookup, see this article (https://abseil.io/tips/49).
 using std::abs;
+using std::cbrt;
 using std::copysign;
 using std::cos;
 using std::fmod;
+using std::hypot;
+using std::isinf;
 using std::isnan;
 using std::max;
 using std::min;
@@ -7750,6 +9647,12 @@ auto arctan2(Quantity<U1, R1> y, Quantity<U2, R2> x) {
     return arctan2(y.in(common_unit), x.in(common_unit));
 }
 
+// Wrapper for std::cbrt() which handles Quantity types.
+template <typename U, typename R>
+auto cbrt(Quantity<U, R> q) {
+    return make_quantity<UnitPowerT<U, 1, 3>>(std::cbrt(q.in(U{})));
+}
+
 // Clamp the first quantity to within the range of the second two.
 template <typename UV, typename ULo, typename UHi, typename RV, typename RLo, typename RHi>
 constexpr auto clamp(Quantity<UV, RV> v, Quantity<ULo, RLo> lo, Quantity<UHi, RHi> hi) {
@@ -7768,6 +9671,12 @@ constexpr auto clamp(QuantityPoint<UV, RV> v,
     using R = std::common_type_t<RV, RLo, RHi>;
     using ResultT = QuantityPoint<U, R>;
     return (v < lo) ? ResultT{lo} : (hi < v) ? ResultT{hi} : ResultT{v};
+}
+
+template <typename U1, typename R1, typename U2, typename R2>
+auto hypot(Quantity<U1, R1> x, Quantity<U2, R2> y) {
+    using U = CommonUnitT<U1, U2>;
+    return make_quantity<U>(std::hypot(x.in(U{}), y.in(U{})));
 }
 
 // Copysign where the magnitude has units.
@@ -7883,6 +9792,20 @@ constexpr auto inverse_as(TargetUnits target_units, Quantity<U, R> q) {
 }
 
 //
+// Check whether the value stored is (positive or negative) infinity.
+//
+template <typename U, typename R>
+constexpr bool isinf(Quantity<U, R> q) {
+    return std::isinf(q.in(U{}));
+}
+
+// Overload of `isinf` for `QuantityPoint`.
+template <typename U, typename R>
+constexpr bool isinf(QuantityPoint<U, R> p) {
+    return std::isinf(p.in(U{}));
+}
+
+//
 // Check whether the value stored is "not a number" (NaN).
 //
 template <typename U, typename R>
@@ -7895,6 +9818,29 @@ template <typename U, typename R>
 constexpr bool isnan(QuantityPoint<U, R> p) {
     return std::isnan(p.in(U{}));
 }
+
+//
+// Linear interpolation between two values of the same dimension, as per `std::lerp`.
+//
+// Note that `std::lerp` is not defined until C++20, so neither is `au::lerp`.
+//
+// Note, too, that the implementation for same-type `Quantity` instances lives inside of the
+// `Quantity` class implementation as a hidden friend, so that we can support shapeshifter types
+// such as `Zero` or `Constant<U>`.
+//
+#if defined(__cpp_lib_interpolate) && __cpp_lib_interpolate >= 201902L
+template <typename U1, typename R1, typename U2, typename R2, typename T>
+constexpr auto lerp(Quantity<U1, R1> q1, Quantity<U2, R2> q2, T t) {
+    using U = CommonUnitT<U1, U2>;
+    return make_quantity<U>(std::lerp(q1.in(U{}), q2.in(U{}), as_raw_number(t)));
+}
+
+template <typename U1, typename R1, typename U2, typename R2, typename T>
+constexpr auto lerp(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2, T t) {
+    using U = CommonPointUnitT<U1, U2>;
+    return make_quantity_point<U>(std::lerp(p1.in(U{}), p2.in(U{}), as_raw_number(t)));
+}
+#endif
 
 namespace detail {
 // We can't use lambdas in `constexpr` contexts until C++17, so we make a manual function object.
@@ -7958,6 +9904,34 @@ constexpr auto min(QuantityPoint<U1, R1> p1, QuantityPoint<U2, R2> p2) {
 template <typename U, typename R>
 constexpr auto min(QuantityPoint<U, R> a, QuantityPoint<U, R> b) {
     return std::min(a, b);
+}
+
+template <typename U0, typename R0, typename... Us, typename... Rs>
+constexpr auto mean(Quantity<U0, R0> q0, Quantity<Us, Rs>... qs) {
+    static_assert(sizeof...(qs) > 0, "mean() requires at least two inputs");
+    using R = std::common_type_t<R0, Rs...>;
+    using Common = Quantity<CommonUnitT<U0, Us...>, R>;
+    const auto base = Common{q0};
+    Common diffs[] = {(Common{qs} - base)...};
+    Common sum_diffs = diffs[0];
+    for (auto i = 1u; i < sizeof...(qs); ++i) {
+        sum_diffs += diffs[i];
+    }
+    return base + (sum_diffs / static_cast<R>(1u + sizeof...(qs)));
+}
+
+template <typename U0, typename R0, typename... Us, typename... Rs>
+constexpr auto mean(QuantityPoint<U0, R0> p0, QuantityPoint<Us, Rs>... ps) {
+    static_assert(sizeof...(ps) > 0, "mean() requires at least two inputs");
+    using U = CommonPointUnitT<U0, Us...>;
+    using R = std::common_type_t<R0, Rs...>;
+    const auto base = QuantityPoint<U, R>{p0};
+    Quantity<U, R> diffs[] = {(QuantityPoint<U, R>{ps} - base)...};
+    Quantity<U, R> sum_diffs = diffs[0];
+    for (auto i = 1u; i < sizeof...(ps); ++i) {
+        sum_diffs += diffs[i];
+    }
+    return base + (sum_diffs / static_cast<R>(1u + sizeof...(ps)));
 }
 
 // The (zero-centered) floating point remainder of two values of the same dimension.
@@ -8381,30 +10355,24 @@ inline std::ostream &operator<<(std::ostream &out, Zero) {
     return out;
 }
 
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SecondsLabel {
-    static constexpr const char label[] = "s";
-};
-template <typename T>
-constexpr const char SecondsLabel<T>::label[];
-struct Seconds : UnitImpl<Time>, SecondsLabel<void> {
-    using SecondsLabel<void>::label;
-};
-constexpr auto second = SingularNameFor<Seconds>{};
-constexpr auto seconds = QuantityMaker<Seconds>{};
-
-namespace symbols {
-constexpr auto s = SymbolFor<Seconds>{};
+// Streaming support for Magnitude: print the magnitude label.
+template <typename... BPs>
+std::ostream &operator<<(std::ostream &out, Magnitude<BPs...> m) {
+    return (out << mag_label(m));
 }
+
+// Streaming support for Constant: print the unit label.
+template <typename U>
+std::ostream &operator<<(std::ostream &out, Constant<U>) {
+    return (out << unit_label(U{}));
+}
+
+// Streaming support for unit symbols: print the unit label.
+template <typename U>
+std::ostream &operator<<(std::ostream &out, SymbolFor<U>) {
+    return (out << unit_label(U{}));
+}
+
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -8429,76 +10397,6 @@ constexpr auto newtons = QuantityMaker<Newtons>{};
 namespace symbols {
 constexpr auto N = SymbolFor<Newtons>{};
 }
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HertzLabel {
-    static constexpr const char label[] = "Hz";
-};
-template <typename T>
-constexpr const char HertzLabel<T>::label[];
-struct Hertz : UnitInverseT<Seconds>, HertzLabel<void> {
-    using HertzLabel<void>::label;
-};
-constexpr auto hertz = QuantityMaker<Hertz>{};
-
-namespace symbols {
-constexpr auto Hz = SymbolFor<Hertz>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct StandardGravityLabel {
-    static constexpr const char label[] = "g_0";
-};
-template <typename T>
-constexpr const char StandardGravityLabel<T>::label[];
-struct StandardGravity
-    : decltype((Meters{} / squared(Seconds{})) * (mag<980'665>() / mag<100'000>())),
-      StandardGravityLabel<void> {
-    using StandardGravityLabel<void>::label;
-};
-constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
-
-namespace symbols {
-constexpr auto g_0 = SymbolFor<StandardGravity>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SpeedOfLightLabel {
-    static constexpr const char label[] = "c";
-};
-template <typename T>
-constexpr const char SpeedOfLightLabel<T>::label[];
-struct SpeedOfLightUnit : decltype(Meters{} / Seconds{} * mag<299'792'458>()),
-                          SpeedOfLightLabel<void> {
-    using SpeedOfLightLabel<void>::label;
-};
-}  // namespace detail
-
-constexpr auto SPEED_OF_LIGHT = make_constant(detail::SpeedOfLightUnit{});
-
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -8547,6 +10445,36 @@ constexpr auto AVOGADRO_CONSTANT = make_constant(detail::AvogadroConstantUnit{})
 
 }  // namespace au
 
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct CesiumHyperfineTransitionFrequencyLabel {
+    static constexpr const char label[] = "Delta_nu_Cs";
+};
+template <typename T>
+constexpr const char CesiumHyperfineTransitionFrequencyLabel<T>::label[];
+struct CesiumHyperfineTransitionFrequencyUnit : decltype(Hertz{} * mag<9'192'631'770>()),
+                                                CesiumHyperfineTransitionFrequencyLabel<void> {
+    using CesiumHyperfineTransitionFrequencyLabel<void>::label;
+};
+}  // namespace detail
+
+constexpr auto CESIUM_HYPERFINE_TRANSITION_FREQUENCY =
+    make_constant(detail::CesiumHyperfineTransitionFrequencyUnit{});
+
+}  // namespace au
+
+
+namespace au {
+
+constexpr auto STANDARD_GRAVITY = make_constant(StandardGravity{});
+
+}  // namespace au
+
 // Keep corresponding `_fwd.hh` file on top.
 
 
@@ -8555,19 +10483,19 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct MinutesLabel {
-    static constexpr const char label[] = "min";
+struct CoulombsLabel {
+    static constexpr const char label[] = "C";
 };
 template <typename T>
-constexpr const char MinutesLabel<T>::label[];
-struct Minutes : decltype(Seconds{} * mag<60>()), MinutesLabel<void> {
-    using MinutesLabel<void>::label;
+constexpr const char CoulombsLabel<T>::label[];
+struct Coulombs : decltype(Amperes{} * Seconds{}), CoulombsLabel<void> {
+    using CoulombsLabel<void>::label;
 };
-constexpr auto minute = SingularNameFor<Minutes>{};
-constexpr auto minutes = QuantityMaker<Minutes>{};
+constexpr auto coulomb = SingularNameFor<Coulombs>{};
+constexpr auto coulombs = QuantityMaker<Coulombs>{};
 
 namespace symbols {
-constexpr auto min = SymbolFor<Minutes>{};
+constexpr auto C = SymbolFor<Coulombs>{};
 }
 }  // namespace au
 
@@ -8579,19 +10507,20 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct FeetLabel {
-    static constexpr const char label[] = "ft";
+struct PascalsLabel {
+    static constexpr const char label[] = "Pa";
 };
 template <typename T>
-constexpr const char FeetLabel<T>::label[];
-struct Feet : decltype(Inches{} * mag<12>()), FeetLabel<void> {
-    using FeetLabel<void>::label;
+constexpr const char PascalsLabel<T>::label[];
+struct Pascals : decltype(Newtons{} / squared(Meters{})), PascalsLabel<void> {
+    using PascalsLabel<void>::label;
 };
-constexpr auto foot = SingularNameFor<Feet>{};
-constexpr auto feet = QuantityMaker<Feet>{};
+
+constexpr auto pascals = QuantityMaker<Pascals>{};
+constexpr QuantityPointMaker<Pascals> pascals_pt{};
 
 namespace symbols {
-constexpr auto ft = SymbolFor<Feet>{};
+constexpr auto Pa = SymbolFor<Pascals>{};
 }
 }  // namespace au
 
@@ -8603,19 +10532,21 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct BecquerelLabel {
-    static constexpr const char label[] = "Bq";
+struct USPintsLabel {
+    static constexpr const char label[] = "US_pt";
 };
 template <typename T>
-constexpr const char BecquerelLabel<T>::label[];
-struct Becquerel : UnitInverseT<Seconds>, BecquerelLabel<void> {
-    using BecquerelLabel<void>::label;
+constexpr const char USPintsLabel<T>::label[];
+struct USPints : decltype(cubed(Inches{}) * (mag<231>() / mag<8>())), USPintsLabel<void> {
+    using USPintsLabel<void>::label;
 };
-constexpr auto becquerel = QuantityMaker<Becquerel>{};
+constexpr auto us_pint = SingularNameFor<USPints>{};
+constexpr auto us_pints = QuantityMaker<USPints>{};
 
 namespace symbols {
-constexpr auto Bq = SymbolFor<Becquerel>{};
+constexpr auto US_pt = SymbolFor<USPints>{};
 }
+
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -8626,20 +10557,21 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct KatalsLabel {
-    static constexpr const char label[] = "kat";
+struct ArcminutesLabel {
+    static constexpr const char label[] = "'";
 };
 template <typename T>
-constexpr const char KatalsLabel<T>::label[];
-struct Katals : decltype(Moles{} / Seconds{}), KatalsLabel<void> {
-    using KatalsLabel<void>::label;
+constexpr const char ArcminutesLabel<T>::label[];
+struct Arcminutes : decltype(Degrees{} / mag<60>()), ArcminutesLabel<void> {
+    using ArcminutesLabel<void>::label;
 };
-constexpr auto katal = SingularNameFor<Katals>{};
-constexpr auto katals = QuantityMaker<Katals>{};
+constexpr auto arcminute = SingularNameFor<Arcminutes>{};
+constexpr auto arcminutes = QuantityMaker<Arcminutes>{};
 
 namespace symbols {
-constexpr auto kat = SymbolFor<Katals>{};
+constexpr auto am = SymbolFor<Arcminutes>{};
 }
+
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -8650,43 +10582,19 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct MilesLabel {
-    static constexpr const char label[] = "mi";
+struct HoursLabel {
+    static constexpr const char label[] = "h";
 };
 template <typename T>
-constexpr const char MilesLabel<T>::label[];
-struct Miles : decltype(Feet{} * mag<5'280>()), MilesLabel<void> {
-    using MilesLabel<void>::label;
+constexpr const char HoursLabel<T>::label[];
+struct Hours : decltype(Minutes{} * mag<60>()), HoursLabel<void> {
+    using HoursLabel<void>::label;
 };
-constexpr auto mile = SingularNameFor<Miles>{};
-constexpr auto miles = QuantityMaker<Miles>{};
+constexpr auto hour = SingularNameFor<Hours>{};
+constexpr auto hours = QuantityMaker<Hours>{};
 
 namespace symbols {
-constexpr auto mi = SymbolFor<Miles>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct YardsLabel {
-    static constexpr const char label[] = "yd";
-};
-template <typename T>
-constexpr const char YardsLabel<T>::label[];
-struct Yards : decltype(Feet{} * mag<3>()), YardsLabel<void> {
-    using YardsLabel<void>::label;
-};
-constexpr auto yard = SingularNameFor<Yards>{};
-constexpr auto yards = QuantityMaker<Yards>{};
-
-namespace symbols {
-constexpr auto yd = SymbolFor<Yards>{};
+constexpr auto h = SymbolFor<Hours>{};
 }
 }  // namespace au
 
@@ -8722,366 +10630,19 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct PascalsLabel {
-    static constexpr const char label[] = "Pa";
+struct MilesLabel {
+    static constexpr const char label[] = "mi";
 };
 template <typename T>
-constexpr const char PascalsLabel<T>::label[];
-struct Pascals : decltype(Newtons{} / squared(Meters{})), PascalsLabel<void> {
-    using PascalsLabel<void>::label;
+constexpr const char MilesLabel<T>::label[];
+struct Miles : decltype(Feet{} * mag<5'280>()), MilesLabel<void> {
+    using MilesLabel<void>::label;
 };
-
-#ifndef pascal
-[[deprecated(
-    "Conflicts with the `pascal` macro from <Windows.h>; declare manually "
-    "instead.")]] constexpr auto pascal = SingularNameFor<Pascals>{};
-#endif
-
-constexpr auto pascals = QuantityMaker<Pascals>{};
-constexpr QuantityPointMaker<Pascals> pascals_pt{};
+constexpr auto mile = SingularNameFor<Miles>{};
+constexpr auto miles = QuantityMaker<Miles>{};
 
 namespace symbols {
-constexpr auto Pa = SymbolFor<Pascals>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BarsLabel {
-    static constexpr const char label[] = "bar";
-};
-template <typename T>
-constexpr const char BarsLabel<T>::label[];
-struct Bars : decltype(Kilo<Pascals>{} * mag<100>()), BarsLabel<void> {
-    using BarsLabel<void>::label;
-};
-constexpr auto bar = SingularNameFor<Bars>{};
-constexpr auto bars = QuantityMaker<Bars>{};
-
-namespace symbols {
-constexpr auto bar = SymbolFor<Bars>{};
-}  // namespace symbols
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct CoulombsLabel {
-    static constexpr const char label[] = "C";
-};
-template <typename T>
-constexpr const char CoulombsLabel<T>::label[];
-struct Coulombs : decltype(Amperes{} * Seconds{}), CoulombsLabel<void> {
-    using CoulombsLabel<void>::label;
-};
-constexpr auto coulomb = SingularNameFor<Coulombs>{};
-constexpr auto coulombs = QuantityMaker<Coulombs>{};
-
-namespace symbols {
-constexpr auto C = SymbolFor<Coulombs>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct JoulesLabel {
-    static constexpr const char label[] = "J";
-};
-template <typename T>
-constexpr const char JoulesLabel<T>::label[];
-struct Joules : decltype(Newtons{} * Meters{}), JoulesLabel<void> {
-    using JoulesLabel<void>::label;
-};
-constexpr auto joule = SingularNameFor<Joules>{};
-constexpr auto joules = QuantityMaker<Joules>{};
-
-namespace symbols {
-constexpr auto J = SymbolFor<Joules>{};
-}
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct CesiumHyperfineTransitionFrequencyLabel {
-    static constexpr const char label[] = "Delta_nu_Cs";
-};
-template <typename T>
-constexpr const char CesiumHyperfineTransitionFrequencyLabel<T>::label[];
-struct CesiumHyperfineTransitionFrequencyUnit : decltype(Hertz{} * mag<9'192'631'770>()),
-                                                CesiumHyperfineTransitionFrequencyLabel<void> {
-    using CesiumHyperfineTransitionFrequencyLabel<void>::label;
-};
-}  // namespace detail
-
-constexpr auto CESIUM_HYPERFINE_TRANSITION_FREQUENCY =
-    make_constant(detail::CesiumHyperfineTransitionFrequencyUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-constexpr auto STANDARD_GRAVITY = make_constant(StandardGravity{});
-
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PlanckConstantLabel {
-    static constexpr const char label[] = "h";
-};
-template <typename T>
-constexpr const char PlanckConstantLabel<T>::label[];
-struct PlanckConstantUnit
-    : decltype(Joules{} * Seconds{} * mag<662'607'015>() * pow<-42>(mag<10>())),
-      PlanckConstantLabel<void> {
-    using PlanckConstantLabel<void>::label;
-};
-}  // namespace detail
-
-constexpr auto PLANCK_CONSTANT = make_constant(detail::PlanckConstantUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BoltzmannConstantLabel {
-    static constexpr const char label[] = "k_B";
-};
-template <typename T>
-constexpr const char BoltzmannConstantLabel<T>::label[];
-struct BoltzmannConstantUnit
-    : decltype((Joules{} / Kelvins{}) * mag<1'380'649>() * pow<-29>(mag<10>())),
-      BoltzmannConstantLabel<void> {
-    using BoltzmannConstantLabel<void>::label;
-};
-}  // namespace detail
-
-constexpr auto BOLTZMANN_CONSTANT = make_constant(detail::BoltzmannConstantUnit{});
-
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct WattsLabel {
-    static constexpr const char label[] = "W";
-};
-template <typename T>
-constexpr const char WattsLabel<T>::label[];
-struct Watts : decltype(Joules{} / Seconds{}), WattsLabel<void> {
-    using WattsLabel<void>::label;
-};
-constexpr auto watt = SingularNameFor<Watts>{};
-constexpr auto watts = QuantityMaker<Watts>{};
-
-namespace symbols {
-constexpr auto W = SymbolFor<Watts>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LumensLabel {
-    static constexpr const char label[] = "lm";
-};
-template <typename T>
-constexpr const char LumensLabel<T>::label[];
-struct Lumens : decltype(Candelas{} * Steradians{}), LumensLabel<void> {
-    using LumensLabel<void>::label;
-};
-constexpr auto lumen = SingularNameFor<Lumens>{};
-constexpr auto lumens = QuantityMaker<Lumens>{};
-
-namespace symbols {
-constexpr auto lm = SymbolFor<Lumens>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HoursLabel {
-    static constexpr const char label[] = "h";
-};
-template <typename T>
-constexpr const char HoursLabel<T>::label[];
-struct Hours : decltype(Minutes{} * mag<60>()), HoursLabel<void> {
-    using HoursLabel<void>::label;
-};
-constexpr auto hour = SingularNameFor<Hours>{};
-constexpr auto hours = QuantityMaker<Hours>{};
-
-namespace symbols {
-constexpr auto h = SymbolFor<Hours>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FathomsLabel {
-    static constexpr const char label[] = "ftm";
-};
-template <typename T>
-constexpr const char FathomsLabel<T>::label[];
-struct Fathoms : decltype(Feet{} * mag<6>()), FathomsLabel<void> {
-    using FathomsLabel<void>::label;
-};
-constexpr auto fathom = SingularNameFor<Fathoms>{};
-constexpr auto fathoms = QuantityMaker<Fathoms>{};
-
-namespace symbols {
-constexpr auto ftm = SymbolFor<Fathoms>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct VoltsLabel {
-    static constexpr const char label[] = "V";
-};
-template <typename T>
-constexpr const char VoltsLabel<T>::label[];
-struct Volts : decltype(Watts{} / Amperes{}), VoltsLabel<void> {
-    using VoltsLabel<void>::label;
-};
-constexpr auto volt = SingularNameFor<Volts>{};
-constexpr auto volts = QuantityMaker<Volts>{};
-
-namespace symbols {
-constexpr auto V = SymbolFor<Volts>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct KnotsLabel {
-    static constexpr const char label[] = "kn";
-};
-template <typename T>
-constexpr const char KnotsLabel<T>::label[];
-struct Knots : decltype(NauticalMiles{} / Hours{}), KnotsLabel<void> {
-    using KnotsLabel<void>::label;
-};
-constexpr auto knot = SingularNameFor<Knots>{};
-constexpr auto knots = QuantityMaker<Knots>{};
-
-namespace symbols {
-constexpr auto kn = SymbolFor<Knots>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct OhmsLabel {
-    static constexpr const char label[] = "ohm";
-};
-template <typename T>
-constexpr const char OhmsLabel<T>::label[];
-struct Ohms : decltype(Volts{} / Amperes{}), OhmsLabel<void> {
-    using OhmsLabel<void>::label;
-};
-constexpr auto ohm = SingularNameFor<Ohms>{};
-constexpr auto ohms = QuantityMaker<Ohms>{};
-
-namespace symbols {
-constexpr auto ohm = SymbolFor<Ohms>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FurlongsLabel {
-    static constexpr const char label[] = "fur";
-};
-template <typename T>
-constexpr const char FurlongsLabel<T>::label[];
-struct Furlongs : decltype(Miles{} / mag<8>()), FurlongsLabel<void> {
-    using FurlongsLabel<void>::label;
-};
-constexpr auto furlong = SingularNameFor<Furlongs>{};
-constexpr auto furlongs = QuantityMaker<Furlongs>{};
-
-namespace symbols {
-constexpr auto fur = SymbolFor<Furlongs>{};
+constexpr auto mi = SymbolFor<Miles>{};
 }
 }  // namespace au
 
@@ -9117,19 +10678,19 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct DaysLabel {
-    static constexpr const char label[] = "d";
+struct FurlongsLabel {
+    static constexpr const char label[] = "fur";
 };
 template <typename T>
-constexpr const char DaysLabel<T>::label[];
-struct Days : decltype(Hours{} * mag<24>()), DaysLabel<void> {
-    using DaysLabel<void>::label;
+constexpr const char FurlongsLabel<T>::label[];
+struct Furlongs : decltype(Miles{} / mag<8>()), FurlongsLabel<void> {
+    using FurlongsLabel<void>::label;
 };
-constexpr auto day = SingularNameFor<Days>{};
-constexpr auto days = QuantityMaker<Days>{};
+constexpr auto furlong = SingularNameFor<Furlongs>{};
+constexpr auto furlongs = QuantityMaker<Furlongs>{};
 
 namespace symbols {
-constexpr auto d = SymbolFor<Days>{};
+constexpr auto fur = SymbolFor<Furlongs>{};
 }
 }  // namespace au
 
@@ -9141,20 +10702,20 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct GraysLabel {
-    static constexpr const char label[] = "Gy";
+struct BarsLabel {
+    static constexpr const char label[] = "bar";
 };
 template <typename T>
-constexpr const char GraysLabel<T>::label[];
-struct Grays : decltype(Joules{} / Kilo<Grams>{}), GraysLabel<void> {
-    using GraysLabel<void>::label;
+constexpr const char BarsLabel<T>::label[];
+struct Bars : decltype(Kilo<Pascals>{} * mag<100>()), BarsLabel<void> {
+    using BarsLabel<void>::label;
 };
-constexpr auto gray = SingularNameFor<Grays>{};
-constexpr auto grays = QuantityMaker<Grays>{};
+constexpr auto bar = SingularNameFor<Bars>{};
+constexpr auto bars = QuantityMaker<Bars>{};
 
 namespace symbols {
-constexpr auto Gy = SymbolFor<Grays>{};
-}
+constexpr auto bar = SymbolFor<Bars>{};
+}  // namespace symbols
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -9165,42 +10726,19 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct FaradsLabel {
-    static constexpr const char label[] = "F";
+struct KnotsLabel {
+    static constexpr const char label[] = "kn";
 };
 template <typename T>
-constexpr const char FaradsLabel<T>::label[];
-struct Farads : decltype(Coulombs{} / Volts{}), FaradsLabel<void> {
-    using FaradsLabel<void>::label;
+constexpr const char KnotsLabel<T>::label[];
+struct Knots : decltype(NauticalMiles{} / Hours{}), KnotsLabel<void> {
+    using KnotsLabel<void>::label;
 };
-constexpr auto farad = SingularNameFor<Farads>{};
-constexpr auto farads = QuantityMaker<Farads>{};
+constexpr auto knot = SingularNameFor<Knots>{};
+constexpr auto knots = QuantityMaker<Knots>{};
 
 namespace symbols {
-constexpr auto F = SymbolFor<Farads>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LuxLabel {
-    static constexpr const char label[] = "lx";
-};
-template <typename T>
-constexpr const char LuxLabel<T>::label[];
-struct Lux : decltype(Lumens{} / squared(Meters{})), LuxLabel<void> {
-    using LuxLabel<void>::label;
-};
-constexpr auto lux = QuantityMaker<Lux>{};
-
-namespace symbols {
-constexpr auto lx = SymbolFor<Lux>{};
+constexpr auto kn = SymbolFor<Knots>{};
 }
 }  // namespace au
 
@@ -9259,10 +10797,129 @@ template <typename U, typename R>
 constexpr auto as_chrono_duration(Quantity<U, R> dt) {
     constexpr auto ratio = unit_ratio(U{}, seconds);
     static_assert(is_rational(ratio), "Cannot convert to chrono::duration with non-rational ratio");
+    static_assert(is_positive(ratio), "Chrono library does not support negative duration units");
     return std::chrono::duration<R,
                                  std::ratio<get_value<std::intmax_t>(numerator(ratio)),
                                             get_value<std::intmax_t>(denominator(ratio))>>{dt};
 }
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct JoulesLabel {
+    static constexpr const char label[] = "J";
+};
+template <typename T>
+constexpr const char JoulesLabel<T>::label[];
+struct Joules : decltype(Newtons{} * Meters{}), JoulesLabel<void> {
+    using JoulesLabel<void>::label;
+};
+constexpr auto joule = SingularNameFor<Joules>{};
+constexpr auto joules = QuantityMaker<Joules>{};
+
+namespace symbols {
+constexpr auto J = SymbolFor<Joules>{};
+}
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct PlanckConstantLabel {
+    static constexpr const char label[] = "h";
+};
+template <typename T>
+constexpr const char PlanckConstantLabel<T>::label[];
+struct PlanckConstantUnit
+    : decltype(Joules{} * Seconds{} * mag<662'607'015>() * pow<-42>(mag<10>())),
+      PlanckConstantLabel<void> {
+    using PlanckConstantLabel<void>::label;
+};
+}  // namespace detail
+
+constexpr auto PLANCK_CONSTANT = make_constant(detail::PlanckConstantUnit{});
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct WattsLabel {
+    static constexpr const char label[] = "W";
+};
+template <typename T>
+constexpr const char WattsLabel<T>::label[];
+struct Watts : decltype(Joules{} / Seconds{}), WattsLabel<void> {
+    using WattsLabel<void>::label;
+};
+constexpr auto watt = SingularNameFor<Watts>{};
+constexpr auto watts = QuantityMaker<Watts>{};
+
+namespace symbols {
+constexpr auto W = SymbolFor<Watts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LumensLabel {
+    static constexpr const char label[] = "lm";
+};
+template <typename T>
+constexpr const char LumensLabel<T>::label[];
+struct Lumens : decltype(Candelas{} * Steradians{}), LumensLabel<void> {
+    using LumensLabel<void>::label;
+};
+constexpr auto lumen = SingularNameFor<Lumens>{};
+constexpr auto lumens = QuantityMaker<Lumens>{};
+
+namespace symbols {
+constexpr auto lm = SymbolFor<Lumens>{};
+}
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BoltzmannConstantLabel {
+    static constexpr const char label[] = "k_B";
+};
+template <typename T>
+constexpr const char BoltzmannConstantLabel<T>::label[];
+struct BoltzmannConstantUnit
+    : decltype((Joules{} / Kelvins{}) * mag<1'380'649>() * pow<-29>(mag<10>())),
+      BoltzmannConstantLabel<void> {
+    using BoltzmannConstantLabel<void>::label;
+};
+}  // namespace detail
+
+constexpr auto BOLTZMANN_CONSTANT = make_constant(detail::BoltzmannConstantUnit{});
 
 }  // namespace au
 
@@ -9287,6 +10944,174 @@ struct ElementaryChargeUnit : decltype(Coulombs{} * mag<1'602'176'634>() * pow<-
 constexpr auto ELEMENTARY_CHARGE = make_constant(detail::ElementaryChargeUnit{});
 
 }  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct VoltsLabel {
+    static constexpr const char label[] = "V";
+};
+template <typename T>
+constexpr const char VoltsLabel<T>::label[];
+struct Volts : decltype(Watts{} / Amperes{}), VoltsLabel<void> {
+    using VoltsLabel<void>::label;
+};
+constexpr auto volt = SingularNameFor<Volts>{};
+constexpr auto volts = QuantityMaker<Volts>{};
+
+namespace symbols {
+constexpr auto V = SymbolFor<Volts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct OhmsLabel {
+    static constexpr const char label[] = "ohm";
+};
+template <typename T>
+constexpr const char OhmsLabel<T>::label[];
+struct Ohms : decltype(Volts{} / Amperes{}), OhmsLabel<void> {
+    using OhmsLabel<void>::label;
+};
+constexpr auto ohm = SingularNameFor<Ohms>{};
+constexpr auto ohms = QuantityMaker<Ohms>{};
+
+namespace symbols {
+constexpr auto ohm = SymbolFor<Ohms>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct DaysLabel {
+    static constexpr const char label[] = "d";
+};
+template <typename T>
+constexpr const char DaysLabel<T>::label[];
+struct Days : decltype(Hours{} * mag<24>()), DaysLabel<void> {
+    using DaysLabel<void>::label;
+};
+constexpr auto day = SingularNameFor<Days>{};
+constexpr auto days = QuantityMaker<Days>{};
+
+namespace symbols {
+constexpr auto d = SymbolFor<Days>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SiemensLabel {
+    static constexpr const char label[] = "S";
+};
+template <typename T>
+constexpr const char SiemensLabel<T>::label[];
+struct Siemens : UnitInverseT<Ohms>, SiemensLabel<void> {
+    using SiemensLabel<void>::label;
+};
+constexpr auto siemen = SingularNameFor<Siemens>{};
+constexpr auto siemens = QuantityMaker<Siemens>{};
+
+namespace symbols {
+constexpr auto S = SymbolFor<Siemens>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FaradsLabel {
+    static constexpr const char label[] = "F";
+};
+template <typename T>
+constexpr const char FaradsLabel<T>::label[];
+struct Farads : decltype(Coulombs{} / Volts{}), FaradsLabel<void> {
+    using FaradsLabel<void>::label;
+};
+constexpr auto farad = SingularNameFor<Farads>{};
+constexpr auto farads = QuantityMaker<Farads>{};
+
+namespace symbols {
+constexpr auto F = SymbolFor<Farads>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct GraysLabel {
+    static constexpr const char label[] = "Gy";
+};
+template <typename T>
+constexpr const char GraysLabel<T>::label[];
+struct Grays : decltype(Joules{} / Kilo<Grams>{}), GraysLabel<void> {
+    using GraysLabel<void>::label;
+};
+constexpr auto gray = SingularNameFor<Grays>{};
+constexpr auto grays = QuantityMaker<Grays>{};
+
+namespace symbols {
+constexpr auto Gy = SymbolFor<Grays>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LuxLabel {
+    static constexpr const char label[] = "lx";
+};
+template <typename T>
+constexpr const char LuxLabel<T>::label[];
+struct Lux : decltype(Lumens{} / squared(Meters{})), LuxLabel<void> {
+    using LuxLabel<void>::label;
+};
+constexpr auto lux = QuantityMaker<Lux>{};
+
+namespace symbols {
+constexpr auto lx = SymbolFor<Lux>{};
+}
+}  // namespace au
+
 
 
 namespace au {
@@ -9366,54 +11191,6 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct TeslaLabel {
-    static constexpr const char label[] = "T";
-};
-template <typename T>
-constexpr const char TeslaLabel<T>::label[];
-struct Tesla : decltype(Webers{} / squared(Meters{})), TeslaLabel<void> {
-    using TeslaLabel<void>::label;
-};
-constexpr auto tesla = QuantityMaker<Tesla>{};
-
-namespace symbols {
-constexpr auto T = SymbolFor<Tesla>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SiemensLabel {
-    static constexpr const char label[] = "S";
-};
-template <typename T>
-constexpr const char SiemensLabel<T>::label[];
-struct Siemens : UnitInverseT<Ohms>, SiemensLabel<void> {
-    using SiemensLabel<void>::label;
-};
-constexpr auto siemen = SingularNameFor<Siemens>{};
-constexpr auto siemens = QuantityMaker<Siemens>{};
-
-namespace symbols {
-constexpr auto S = SymbolFor<Siemens>{};
-}
-}  // namespace au
-
-
-// Keep corresponding `_fwd.hh` file on top.
-
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
 struct HenriesLabel {
     static constexpr const char label[] = "H";
 };
@@ -9427,5 +11204,28 @@ constexpr auto henries = QuantityMaker<Henries>{};
 
 namespace symbols {
 constexpr auto H = SymbolFor<Henries>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct TeslaLabel {
+    static constexpr const char label[] = "T";
+};
+template <typename T>
+constexpr const char TeslaLabel<T>::label[];
+struct Tesla : decltype(Webers{} / squared(Meters{})), TeslaLabel<void> {
+    using TeslaLabel<void>::label;
+};
+constexpr auto tesla = QuantityMaker<Tesla>{};
+
+namespace symbols {
+constexpr auto T = SymbolFor<Tesla>{};
 }
 }  // namespace au

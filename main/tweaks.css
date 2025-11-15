@@ -35,7 +35,7 @@ td.best, td.best * {
     color: white;
 }
 
-td.na {
+td.na, td.invalid {
     background-color: #d9d9d9;
 }
 
@@ -45,4 +45,18 @@ td.fair pre, td.poor pre, td.good pre, td.best pre {
 
 a {
     text-decoration: underline;
+}
+
+li.check, li.x {
+    list-style: none;
+    margin-left: 0;
+    text-indent: -2ch;
+}
+
+li.check:before {
+    content: "\2713  ";
+}
+
+li.x:before {
+    content: "\2717  ";
 }
