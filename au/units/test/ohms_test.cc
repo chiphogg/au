@@ -16,7 +16,6 @@
 
 #include "au/testing.hh"
 #include "au/units/amperes.hh"
-#include "au/units/ohms.hh"
 #include "au/units/volts.hh"
 #include "au/units/watts.hh"
 #include "gmock/gmock.h"
