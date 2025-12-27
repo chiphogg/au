@@ -18,6 +18,7 @@
 #include "au/units/hours.hh"
 #include "au/units/knots.hh"
 #include "au/units/meters.hh"
+#include "au/units/nautical_miles.hh"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
