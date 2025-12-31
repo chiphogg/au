@@ -1085,7 +1085,7 @@ constexpr const auto &unit_label(Unit) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// `UnitProduct` implementation.
+// `UnitProductPack` implementation.
 //
 // It's just a standard pack product, so all we need to do is carefully define the total ordering.
 
@@ -1154,10 +1154,11 @@ struct OrderByOrigin
     : stdx::bool_constant<(detail::OriginOf<A>::value() < detail::OriginOf<B>::value())> {};
 
 // "Unit avoidance" is a tiebreaker for quantity-equivalent units.  Anonymous units, such as
-// `UnitImpl<...>`, `ScaledUnit<...>`, and `UnitProduct<...>`, are more "avoidable" than units which
-// are none of these, because the latter are likely explicitly named and thus more user-facing.  The
-// relative ordering among these built-in template types is probably less important than the fact
-// that there _is_ a relative ordering among them (because we need to have a strict total ordering).
+// `UnitImpl<...>`, `ScaledUnit<...>`, and `UnitProductPack<...>`, are more "avoidable" than units
+// which are none of these, because the latter are likely explicitly named and thus more
+// user-facing.  The relative ordering among these built-in template types is probably less
+// important than the fact that there _is_ a relative ordering among them (because we need to have a
+// strict total ordering).
 template <typename T>
 struct CoarseUnitOrdering : std::integral_constant<int, 0> {};
 
