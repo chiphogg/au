@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -33,7 +33,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -2857,7 +2857,7 @@ In what follows, we&rsquo;ll use this convention:</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For <em>types</em> <code>M1</code> and <code>M2</code>:<ul>
-<li><code>MagProductT&lt;M1, M2&gt;</code></li>
+<li><code>MagProduct&lt;M1, M2&gt;</code></li>
 </ul>
 </li>
 <li>For <em>instances</em> <code>m1</code> and <code>m2</code>:<ul>
@@ -2865,12 +2865,17 @@ In what follows, we&rsquo;ll use this convention:</p>
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>MagProductT</code> (with the <code>T</code> suffix) instead of <code>MagProduct</code>.  Prefer
+<code>MagProduct</code>.  <code>MagProductT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="division">Division<a class="headerlink" href="#division" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The quotient of two <code>Magnitude</code> values.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For <em>types</em> <code>M1</code> and <code>M2</code>:<ul>
-<li><code>MagQuotientT&lt;M1, M2&gt;</code></li>
+<li><code>MagQuotient&lt;M1, M2&gt;</code></li>
 </ul>
 </li>
 <li>For <em>instances</em> <code>m1</code> and <code>m2</code>:<ul>
@@ -2878,6 +2883,11 @@ In what follows, we&rsquo;ll use this convention:</p>
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>MagQuotientT</code> (with the <code>T</code> suffix) instead of <code>MagQuotient</code>.  Prefer
+<code>MagQuotient</code>.  <code>MagQuotientT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="negation">Negation<a class="headerlink" href="#negation" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The negative of a <code>Magnitude</code>.</p>
 <p><strong>Syntax:</strong></p>
@@ -2897,7 +2907,7 @@ In what follows, we&rsquo;ll use this convention:</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>M</code>, and an integral power <code>N</code>:<ul>
-<li><code>MagPowerT&lt;M, N&gt;</code></li>
+<li><code>MagPower&lt;M, N&gt;</code></li>
 </ul>
 </li>
 <li>For an <em>instance</em> <code>m</code>, and an integral power <code>N</code>:<ul>
@@ -2905,12 +2915,17 @@ In what follows, we&rsquo;ll use this convention:</p>
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>MagPowerT</code> (with the <code>T</code> suffix) instead of <code>MagPower</code>.  Prefer
+<code>MagPower</code>.  <code>MagPowerT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="roots">Roots<a class="headerlink" href="#roots" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> An integral root of a <code>Magnitude</code>.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>M</code>, and an integral root <code>N</code>:<ul>
-<li><code>MagPowerT&lt;M, 1, N&gt;</code> (because the <span class="arithmatex"><span class="MathJax_Preview">N^\text{th}</span><script type="math/tex">N^\text{th}</script></span> root is equivalent to the
+<li><code>MagPower&lt;M, 1, N&gt;</code> (because the <span class="arithmatex"><span class="MathJax_Preview">N^\text{th}</span><script type="math/tex">N^\text{th}</script></span> root is equivalent to the
   <span class="arithmatex"><span class="MathJax_Preview">\left(\frac{1}{N}\right)^\text{th}</span><script type="math/tex">\left(\frac{1}{N}\right)^\text{th}</script></span> power)</li>
 </ul>
 </li>
@@ -2982,7 +2997,7 @@ that can be extracted from the numerator (that is, the base powers with positive
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>M</code>:<ul>
-<li><code>IntegerPartT&lt;M&gt;</code></li>
+<li><code>IntegerPart&lt;M&gt;</code></li>
 </ul>
 </li>
 <li>For an <em>instance</em> <code>m</code>:<ul>
@@ -2990,6 +3005,11 @@ that can be extracted from the numerator (that is, the base powers with positive
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>IntegerPartT</code> (with the <code>T</code> suffix) instead of <code>IntegerPart</code>.  Prefer
+<code>IntegerPart</code>.  <code>IntegerPartT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="numerator-integer-part">Numerator (integer part)<a class="headerlink" href="#numerator-integer-part" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The numerator we would have if a <code>Magnitude</code> were written as a fraction.  This result is
 another <code>Magnitude</code>.</p>
@@ -2997,7 +3017,7 @@ another <code>Magnitude</code>.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>M</code>:<ul>
-<li><code>NumeratorT&lt;M&gt;</code></li>
+<li><code>Numerator&lt;M&gt;</code></li>
 </ul>
 </li>
 <li>For an <em>instance</em> <code>m</code>:<ul>
@@ -3005,6 +3025,11 @@ another <code>Magnitude</code>.</p>
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>NumeratorT</code> (with the <code>T</code> suffix) instead of <code>Numerator</code>.  Prefer
+<code>Numerator</code>.  <code>NumeratorT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="denominator-integer-part">Denominator (integer part)<a class="headerlink" href="#denominator-integer-part" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The denominator we would have if a <code>Magnitude</code> were written as a fraction.  This result is
 another <code>Magnitude</code>.</p>
@@ -3012,7 +3037,7 @@ another <code>Magnitude</code>.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>M</code>:<ul>
-<li><code>DenominatorT&lt;M&gt;</code></li>
+<li><code>Denominator&lt;M&gt;</code></li>
 </ul>
 </li>
 <li>For an <em>instance</em> <code>m</code>:<ul>
@@ -3020,6 +3045,11 @@ another <code>Magnitude</code>.</p>
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>DenominatorT</code> (with the <code>T</code> suffix) instead of <code>Denominator</code>.  Prefer
+<code>Denominator</code>.  <code>DenominatorT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="absolute-value">Absolute value<a class="headerlink" href="#absolute-value" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The absolute value of a <code>Magnitude</code>, which is another <code>Magnitude</code>.</p>
 <p><strong>Syntax:</strong></p>
@@ -3153,10 +3183,10 @@ magnitudes, by breaking them into the same kinds of pieces that a human reader w
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
       

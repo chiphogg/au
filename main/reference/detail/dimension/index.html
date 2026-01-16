@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../../assets/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -33,7 +33,7 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
       
 
@@ -2505,7 +2505,7 @@ which each carry their own dimension information.  The main situation where an e
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For <em>types</em> <code>D1</code> and <code>D2</code>:<ul>
-<li><code>DimProductT&lt;D1, D2&gt;</code></li>
+<li><code>DimProduct&lt;D1, D2&gt;</code></li>
 </ul>
 </li>
 <li>For <em>instances</em> <code>d1</code> and <code>d2</code>:<ul>
@@ -2513,12 +2513,17 @@ which each carry their own dimension information.  The main situation where an e
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>DimProductT</code> (with the <code>T</code> suffix) instead of <code>DimProduct</code>.  Prefer
+<code>DimProduct</code>.  <code>DimProductT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="division">Division<a class="headerlink" href="#division" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> The quotient of two <code>Dimension</code> values.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For <em>types</em> <code>D1</code> and <code>D2</code>:<ul>
-<li><code>DimQuotientT&lt;D1, D2&gt;</code></li>
+<li><code>DimQuotient&lt;D1, D2&gt;</code></li>
 </ul>
 </li>
 <li>For <em>instances</em> <code>d1</code> and <code>d2</code>:<ul>
@@ -2526,12 +2531,17 @@ which each carry their own dimension information.  The main situation where an e
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>DimQuotientT</code> (with the <code>T</code> suffix) instead of <code>DimQuotient</code>.  Prefer
+<code>DimQuotient</code>.  <code>DimQuotientT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="powers">Powers<a class="headerlink" href="#powers" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> A <code>Dimension</code> raised to an integral power.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>D</code>, and an integral power <code>N</code>:<ul>
-<li><code>DimPowerT&lt;D, N&gt;</code></li>
+<li><code>DimPower&lt;D, N&gt;</code></li>
 </ul>
 </li>
 <li>For an <em>instance</em> <code>d</code>, and an integral power <code>N</code>:<ul>
@@ -2539,12 +2549,17 @@ which each carry their own dimension information.  The main situation where an e
 </ul>
 </li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Older releases used <code>DimPowerT</code> (with the <code>T</code> suffix) instead of <code>DimPower</code>.  Prefer
+<code>DimPower</code>.  <code>DimPowerT</code> is deprecated, and will be removed in future releases.</p>
+</div>
 <h3 id="roots">Roots<a class="headerlink" href="#roots" title="Permanent link">&para;</a></h3>
 <p><strong>Result:</strong> An integral root of a <code>Dimension</code>.</p>
 <p><strong>Syntax:</strong></p>
 <ul>
 <li>For a <em>type</em> <code>D</code>, and an integral root <code>N</code>:<ul>
-<li><code>DimPowerT&lt;D, 1, N&gt;</code> (because the <span class="arithmatex"><span class="MathJax_Preview">N^\text{th}</span><script type="math/tex">N^\text{th}</script></span> root is equivalent to the
+<li><code>DimPower&lt;D, 1, N&gt;</code> (because the <span class="arithmatex"><span class="MathJax_Preview">N^\text{th}</span><script type="math/tex">N^\text{th}</script></span> root is equivalent to the
   <span class="arithmatex"><span class="MathJax_Preview">\left(\frac{1}{N}\right)^\text{th}</span><script type="math/tex">\left(\frac{1}{N}\right)^\text{th}</script></span> power)</li>
 </ul>
 </li>
@@ -2664,10 +2679,10 @@ a dimension instance <code>d</code>, you can write <code>sqrt(d)</code> as a mor
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.footer", "toc.integrate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
       
