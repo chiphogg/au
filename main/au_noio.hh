@@ -24,7 +24,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 434ced9
+// Version identifier: 8ae4715
 // <iostream> support: EXCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -2864,6 +2864,14 @@ constexpr const auto &mag_label(MagT = MagT{});
 template <std::uintmax_t N>
 constexpr auto mag();
 
+// Check whether a Magnitude is representable in type T.
+template <typename T, typename... BPs>
+constexpr bool representable_in(Magnitude<BPs...> m);
+
+// Get the value of this Magnitude in a "traditional" numeric type T.
+template <typename T, typename... BPs>
+constexpr T get_value(Magnitude<BPs...>);
+
 // A base type for prime numbers.
 template <std::uintmax_t N>
 struct Prime {
@@ -2948,6 +2956,51 @@ struct IsRational
 template <typename MagT>
 struct IsInteger : std::is_same<MagT, IntegerPart<MagT>> {};
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Validation utilities for rational Magnitude arithmetic operations.
+//
+// Many common mathematical operations (comparison, addition, etc.) are not feasible in _general_
+// for magnitudes.  However, we _can_ support them for _specific subsets_ of magnitudes, the
+// simplest being purely rational magnitudes, whose absolute numerator and denominator fit in a
+// 64-bit integer.  We have decided to provide these operations for _this subset only_, as it
+// satisfies many practical use cases.
+
+namespace detail {
+template <typename MagT>
+struct IsMagnitudeU64RationalCompatibleHelper {
+    static constexpr bool is_rational() { return IsRational<MagT>::value; }
+    static constexpr bool numerator_fits() {
+        return representable_in<std::uint64_t>(Abs<Numerator<MagT>>{});
+    }
+    static constexpr bool denominator_fits() {
+        return representable_in<std::uint64_t>(Denominator<MagT>{});
+    }
+};
+template <>
+struct IsMagnitudeU64RationalCompatibleHelper<Zero> {
+    static constexpr bool is_rational() { return true; }
+    static constexpr bool numerator_fits() { return true; }
+    static constexpr bool denominator_fits() { return true; }
+};
+
+template <typename MagT>
+struct IsMagnitudeU64RationalCompatible : IsMagnitudeU64RationalCompatibleHelper<MagT> {
+    using IsMagnitudeU64RationalCompatibleHelper<MagT>::is_rational;
+    using IsMagnitudeU64RationalCompatibleHelper<MagT>::numerator_fits;
+    using IsMagnitudeU64RationalCompatibleHelper<MagT>::denominator_fits;
+};
+
+// Instantiating this struct will produce clear compiler errors if the Magnitude doesn't meet the
+// requirements for arithmetic operations.
+template <typename MagT>
+struct AssertMagnitudeU64RationalCompatible {
+    using Check = IsMagnitudeU64RationalCompatible<MagT>;
+    static_assert(Check::is_rational(), "Mag must be purely rational");
+    static_assert(Check::numerator_fits(), "Mag numerator too large to fit in uint64_t");
+    static_assert(Check::denominator_fits(), "Mag denominator too large to fit in uint64_t");
+};
+}  // namespace detail
+
 // The "common magnitude" of two Magnitudes is the largest Magnitude that evenly divides both.
 //
 // This is possible only if the quotient of the inputs is rational.  If it's not, then the "common
@@ -2993,6 +3046,101 @@ constexpr auto operator==(Magnitude<BP1s...>, Magnitude<BP2s...>) {
 template <typename... BP1s, typename... BP2s>
 constexpr auto operator!=(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
     return !(m1 == m2);
+}
+
+namespace detail {
+
+// Compare absolute values of two magnitudes.
+//
+// Returns:
+//   -1 if |m1| < |m2|
+//    0 if |m1| == |m2|
+//   +1 if |m1| > |m2|
+template <typename M1, typename M2>
+constexpr int compare_absolute_magnitudes(M1, M2) {
+    using AbsM1OverM2 = Abs<MagQuotient<M1, M2>>;
+    (void)AssertMagnitudeU64RationalCompatible<AbsM1OverM2>{};
+
+    constexpr auto lhs = get_value<std::uint64_t>(Numerator<AbsM1OverM2>{});
+    constexpr auto rhs = get_value<std::uint64_t>(Denominator<AbsM1OverM2>{});
+    return (lhs > rhs) - (lhs < rhs);
+}
+
+}  // namespace detail
+
+// Comparison operators for Magnitude types.
+//
+// These will only be defined for the subset of Magnitudes where this is easy to compute.
+template <typename... BP1s, typename... BP2s>
+constexpr bool operator<(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    constexpr bool m1_positive = is_positive(m1);
+    constexpr bool m2_positive = is_positive(m2);
+
+    if (!m1_positive && m2_positive) {
+        return true;
+    }
+    if (m1_positive && !m2_positive) {
+        return false;
+    }
+
+    constexpr int abs_cmp = detail::compare_absolute_magnitudes(m1, m2);
+    return m1_positive ? (abs_cmp < 0) : (abs_cmp > 0);
+}
+
+template <typename... BP1s, typename... BP2s>
+constexpr bool operator>(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return m2 < m1;
+}
+
+template <typename... BP1s, typename... BP2s>
+constexpr bool operator<=(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return !(m2 < m1);
+}
+
+template <typename... BP1s, typename... BP2s>
+constexpr bool operator>=(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return !(m1 < m2);
+}
+
+// Zero/Magnitude comparisons: Zero is less than any positive magnitude, greater than any negative.
+template <typename... BPs>
+constexpr bool operator<(Zero, Magnitude<BPs...>) {
+    return IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator>(Zero, Magnitude<BPs...>) {
+    return !IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator<=(Zero, Magnitude<BPs...>) {
+    return IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator>=(Zero, Magnitude<BPs...>) {
+    return !IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator<(Magnitude<BPs...>, Zero) {
+    return !IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator>(Magnitude<BPs...>, Zero) {
+    return IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator<=(Magnitude<BPs...>, Zero) {
+    return !IsPositive<Magnitude<BPs...>>::value;
+}
+
+template <typename... BPs>
+constexpr bool operator>=(Magnitude<BPs...>, Zero) {
+    return IsPositive<Magnitude<BPs...>>::value;
 }
 
 template <typename... BPs>
@@ -4932,6 +5080,11 @@ template <typename U>
 using AssociatedUnitForPoints = typename AssociatedUnitForPointsImpl<U>::type;
 template <typename U>
 using AssociatedUnitForPointsT = AssociatedUnitForPoints<U>;
+
+template <template <class, class> class QType, typename U>
+struct AppropriateAssociatedUnitImpl;
+template <template <class, class> class QType, typename U>
+using AppropriateAssociatedUnit = typename AppropriateAssociatedUnitImpl<QType, U>::type;
 
 // `CommonUnit`: the largest unit that evenly divides all input units.
 //
@@ -7150,6 +7303,8 @@ struct QuantityMaker {
 
 template <typename U>
 struct AssociatedUnitImpl<QuantityMaker<U>> : stdx::type_identity<U> {};
+template <typename U>
+struct AppropriateAssociatedUnitImpl<Quantity, U> : AssociatedUnitImpl<U> {};
 
 template <int Exp, typename Unit>
 constexpr auto pow(QuantityMaker<Unit>) {
@@ -8271,6 +8426,8 @@ struct QuantityPointMaker {
 
 template <typename U>
 struct AssociatedUnitForPointsImpl<QuantityPointMaker<U>> : stdx::type_identity<U> {};
+template <typename U>
+struct AppropriateAssociatedUnitImpl<QuantityPoint, U> : AssociatedUnitForPointsImpl<U> {};
 
 // Provide nicer error messages when users try passing a `QuantityPoint` to a unit slot.
 template <typename U, typename R>
@@ -9565,6 +9722,274 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(
         ceil_in<OutputRep>(rounding_units, p));
+}
+
+//
+// Rounding function that does not leave the integral domain.  Does not use `std::round`.
+//
+// This is the "Unit-only" format (i.e., `int_round_in(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename RoundingUnits, template <class, class> class QType, typename U, typename R>
+constexpr auto int_round_as_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<R>::value, "int_round_as requires integral Rep type");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.as(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) += (val - trunced).in(target / mag<2>(), ignore(TRUNCATION_RISK));
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_round_as_impl(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_round_as_impl(rounding_units, p);
+}
+
+//
+// Rounding function that does not leave the integral domain.  Does not use `std::round`.
+//
+// This is the "Explicit-Rep" format (e.g., `int_round_as<int>(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename OutputRep,
+          typename RoundingUnits,
+          template <class, class>
+          class QType,
+          typename U,
+          typename R>
+constexpr auto int_round_as_explicit_rep_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<OutputRep>::value, "int_round_as output must be integral");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.template as<OutputRep>(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) +=
+        (val - trunced).template in<OutputRep>(target / mag<2>(), ignore(TRUNCATION_RISK));
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_round_as_explicit_rep_impl<OutputRep>(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_round_as_explicit_rep_impl<OutputRep>(rounding_units, p);
+}
+
+//
+// Version of `int_round_as` with raw number outputs.
+//
+// This is the "Units-only" format (i.e., `int_round_in(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_round_as(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_round_as(rounding_units, p).in(associated_unit_for_points(rounding_units));
+}
+
+//
+// Version of `int_round_as` with raw number outputs.
+//
+// This is the "Explicit-Rep" format (e.g., `int_round_in<int>(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_round_as<OutputRep>(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_round_as<OutputRep>(rounding_units, p).in(rounding_units);
+}
+
+//
+// Floor function that does not leave the integral domain.  Does not use `std::floor`.
+//
+// This is the "Unit-only" format (i.e., `int_floor_in(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename RoundingUnits, template <class, class> class QType, typename U, typename R>
+constexpr auto int_floor_as_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<R>::value, "int_floor_as requires integral Rep type");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.as(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) -= R{trunced > val};
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_floor_as_impl(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_floor_as_impl(rounding_units, p);
+}
+
+//
+// Floor function that does not leave the integral domain.  Does not use `std::floor`.
+//
+// This is the "Explicit-Rep" format (e.g., `int_floor_as<int>(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename OutputRep,
+          typename RoundingUnits,
+          template <class, class>
+          class QType,
+          typename U,
+          typename R>
+constexpr auto int_floor_as_explicit_rep_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<OutputRep>::value, "int_floor_as output must be integral");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.template as<OutputRep>(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) -= OutputRep{trunced > val};
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_floor_as_explicit_rep_impl<OutputRep>(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_floor_as_explicit_rep_impl<OutputRep>(rounding_units, p);
+}
+
+//
+// Version of `int_floor_as` with raw number outputs.
+//
+// This is the "Units-only" format (i.e., `int_floor_in(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_floor_as(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_floor_as(rounding_units, p).in(associated_unit_for_points(rounding_units));
+}
+
+//
+// Version of `int_floor_as` with raw number outputs.
+//
+// This is the "Explicit-Rep" format (e.g., `int_floor_in<int>(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_floor_as<OutputRep>(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_floor_as<OutputRep>(rounding_units, p).in(rounding_units);
+}
+
+//
+// Ceil function that does not leave the integral domain.  Does not use `std::ceil`.
+//
+// This is the "Unit-only" format (i.e., `int_ceil_in(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename RoundingUnits, template <class, class> class QType, typename U, typename R>
+constexpr auto int_ceil_as_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<R>::value, "int_ceil_as requires integral Rep type");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.as(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) += R{trunced < val};
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_ceil_as_impl(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_ceil_as_impl(rounding_units, p);
+}
+
+//
+// Ceil function that does not leave the integral domain.  Does not use `std::ceil`.
+//
+// This is the "Explicit-Rep" format (e.g., `int_ceil_as<int>(rounding_units, q)`).
+//
+// Common implementation helper:
+template <typename OutputRep,
+          typename RoundingUnits,
+          template <class, class>
+          class QType,
+          typename U,
+          typename R>
+constexpr auto int_ceil_as_explicit_rep_impl(RoundingUnits, QType<U, R> val) {
+    static_assert(std::is_integral<OutputRep>::value, "int_ceil_as output must be integral");
+
+    constexpr auto target = AppropriateAssociatedUnit<QType, RoundingUnits>{};
+    auto trunced = val.template as<OutputRep>(target, ignore(TRUNCATION_RISK));
+    trunced.data_in(target) += OutputRep{trunced < val};
+    return trunced;
+}
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_ceil_as_explicit_rep_impl<OutputRep>(rounding_units, q);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_ceil_as_explicit_rep_impl<OutputRep>(rounding_units, p);
+}
+
+//
+// Version of `int_ceil_as` with raw number outputs.
+//
+// This is the "Units-only" format (i.e., `int_ceil_in(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_ceil_as(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_ceil_as(rounding_units, p).in(associated_unit_for_points(rounding_units));
+}
+
+//
+// Version of `int_ceil_as` with raw number outputs.
+//
+// This is the "Explicit-Rep" format (e.g., `int_ceil_in<int>(rounding_units, q)`).
+//
+// (a) Version for Quantity.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+    return int_ceil_as<OutputRep>(rounding_units, q).in(rounding_units);
+}
+// (b) Version for QuantityPoint.
+template <typename OutputRep, typename RoundingUnits, typename U, typename R>
+constexpr auto int_ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+    return int_ceil_as<OutputRep>(rounding_units, p).in(rounding_units);
 }
 
 // Wrapper for std::sin() which accepts a strongly typed angle quantity.
