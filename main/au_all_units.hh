@@ -18,6 +18,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <compare>
 #include <cstdint>
 #include <limits>
 #include <ostream>
@@ -25,7 +26,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 8ae4715
+// Version identifier: cd25d11
 // <iostream> support: INCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -1268,6 +1269,9 @@ struct IsQuotientValidRep
 
 }  // namespace au
 
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
+
 
 // This file provides alternatives to certain standard library function objects for comparison and
 // arithmetic: `std::less<void>`, `std::plus<void>`, etc.
@@ -1807,6 +1811,9 @@ struct Knots;
 }  // namespace au
 
 
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
+
 
 namespace au {
 
@@ -1851,6 +1858,10 @@ inline constexpr bool operator<=(Zero, Zero) { return true; }
 inline constexpr bool operator!=(Zero, Zero) { return false; }
 inline constexpr bool operator>(Zero, Zero) { return false; }
 inline constexpr bool operator<(Zero, Zero) { return false; }
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+inline constexpr auto operator<=>(Zero, Zero) { return 0 <=> 0; }
+#endif
 
 // Implementation helper for "a type where value() returns 0".
 template <typename T>
@@ -2599,6 +2610,10 @@ struct SortAsImpl<PackForOrdering, Pack<T, Ts...>>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `FlatDedupedTypeListT` implementation.
 
+// 0-ary trivial case:
+template <template <class...> class List>
+struct FlatDedupedTypeListImpl<List> : stdx::type_identity<List<>> {};
+
 // 1-ary Base case: a list with a single element is already done.
 //
 // (We explicitly assumed that any `List<...>` inputs would already be in sorted order.)
@@ -3114,6 +3129,9 @@ constexpr T int_pow(T base, std::uintmax_t exp) {
 }  // namespace au
 
 
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
+
 
 // "Magnitude" is a collection of templated types, representing positive real numbers.
 //
@@ -3212,6 +3230,12 @@ constexpr bool representable_in(Magnitude<BPs...> m);
 // Get the value of this Magnitude in a "traditional" numeric type T.
 template <typename T, typename... BPs>
 constexpr T get_value(Magnitude<BPs...>);
+
+// Let `Zero` "act like" a `Magnitude` for purposes of `get_value`.
+template <typename T>
+constexpr T get_value(Zero) {
+    return T{0};
+}
 
 // A base type for prime numbers.
 template <std::uintmax_t N>
@@ -3354,8 +3378,21 @@ using CommonMagnitude = typename CommonMagnitudeImpl<Ms...>::type;
 template <typename... Ms>
 using CommonMagnitudeT = CommonMagnitude<Ms...>;
 
+// The sum of arbitrarily many `Magnitude` and/or `Zero` types.
+//
+// We only support this when it is "easy" to compute, where "easy" is defined as:
+// 1) all inputs being expressible as integer multiples of some common factor;
+// 2) each such integer's absolute value fitting in a `uint64_t`;
+// 3) *and*, the absolute value of the sum also fitting in a `uint64_t`.
+//
+// For all other cases, we currently produce a compile time error.
+template <typename... Ms>
+struct MagSumImpl;
+template <typename... Ms>
+using MagSum = typename MagSumImpl<Ms...>::type;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Value based interface for Magnitude.
+// Value based interface for Magnitude (and Zero).
 
 static constexpr auto ONE = Magnitude<>{};
 
@@ -3363,10 +3400,22 @@ template <typename... BP1s, typename... BP2s>
 constexpr auto operator*(Magnitude<BP1s...>, Magnitude<BP2s...>) {
     return MagProduct<Magnitude<BP1s...>, Magnitude<BP2s...>>{};
 }
+template <typename... BPs>
+constexpr Zero operator*(Zero, Magnitude<BPs...>) {
+    return {};
+}
+template <typename... BPs>
+constexpr Zero operator*(Magnitude<BPs...>, Zero) {
+    return {};
+}
 
 template <typename... BP1s, typename... BP2s>
 constexpr auto operator/(Magnitude<BP1s...>, Magnitude<BP2s...>) {
     return MagQuotient<Magnitude<BP1s...>, Magnitude<BP2s...>>{};
+}
+template <typename... BPs>
+constexpr Zero operator/(Zero, Magnitude<BPs...>) {
+    return {};
 }
 
 template <int E, typename... BPs>
@@ -3383,10 +3432,26 @@ template <typename... BP1s, typename... BP2s>
 constexpr auto operator==(Magnitude<BP1s...>, Magnitude<BP2s...>) {
     return std::is_same<Magnitude<BP1s...>, Magnitude<BP2s...>>::value;
 }
+template <typename... BPs>
+constexpr auto operator==(Zero, Magnitude<BPs...>) {
+    return false;
+}
+template <typename... BPs>
+constexpr auto operator==(Magnitude<BPs...>, Zero) {
+    return false;
+}
 
 template <typename... BP1s, typename... BP2s>
 constexpr auto operator!=(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
     return !(m1 == m2);
+}
+template <typename... BPs>
+constexpr auto operator!=(Zero, Magnitude<BPs...>) {
+    return true;
+}
+template <typename... BPs>
+constexpr auto operator!=(Magnitude<BPs...>, Zero) {
+    return true;
 }
 
 namespace detail {
@@ -3443,6 +3508,13 @@ constexpr bool operator>=(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
     return !(m1 < m2);
 }
 
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+template <typename... BP1s, typename... BP2s>
+constexpr auto operator<=>(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return ((m1 > m2) - (m1 < m2)) <=> 0;
+}
+#endif
+
 // Zero/Magnitude comparisons: Zero is less than any positive magnitude, greater than any negative.
 template <typename... BPs>
 constexpr bool operator<(Zero, Magnitude<BPs...>) {
@@ -3483,6 +3555,119 @@ template <typename... BPs>
 constexpr bool operator>=(Magnitude<BPs...>, Zero) {
     return IsPositive<Magnitude<BPs...>>::value;
 }
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+template <typename... BPs>
+constexpr auto operator<=>(Zero, Magnitude<BPs...> m) {
+    return 0 <=> get_value<int>(sign(m));
+}
+template <typename... BPs>
+constexpr auto operator<=>(Magnitude<BPs...> m, Zero) {
+    return get_value<int>(sign(m)) <=> 0;
+}
+#endif
+
+//
+// Rounding helpers for Magnitudes: versions of trunc, round, ceil, floor.
+//
+// Again, these are only defined for the subset of Magnitudes where this is easy to compute.
+//
+
+// `mag_trunc(m)`: truncates `m` toward zero.
+template <typename... BPs>
+constexpr auto mag_trunc(Magnitude<BPs...> m) {
+    using AbsMag = Abs<Magnitude<BPs...>>;
+    (void)detail::AssertMagnitudeU64RationalCompatible<AbsMag>{};
+
+    constexpr auto abs_quotient = get_value<std::uint64_t>(Numerator<AbsMag>{}) /
+                                  get_value<std::uint64_t>(Denominator<AbsMag>{});
+
+    return std::conditional_t<abs_quotient == 0u,
+                              Zero,
+                              // The extra `== 0u` avoids asking the compiler for `mag<0>()`.
+                              // Note that it will never be used anyway.
+                              decltype(sign(m) * mag<abs_quotient + (abs_quotient == 0u)>())>{};
+}
+
+// `mag_floor(m)`: rounds `m` down toward negative infinity.
+template <typename... BPs>
+constexpr auto mag_floor(Magnitude<BPs...> m) {
+    constexpr auto trunced = mag_trunc(m);
+    return std::conditional_t<(is_positive(m) || (m == trunced)),
+                              decltype(trunced),
+                              decltype(trunced - Magnitude<>{})>{};
+}
+
+// `mag_ceil(m)`: rounds `m` up toward positive infinity.
+template <typename... BPs>
+constexpr auto mag_ceil(Magnitude<BPs...> m) {
+    constexpr auto trunced = mag_trunc(m);
+    return std::conditional_t<(!is_positive(m) || (m == trunced)),
+                              decltype(trunced),
+                              decltype(trunced + Magnitude<>{})>{};
+}
+
+// `mag_round(m)`: rounds `m` to the nearest integer, rounding halfway cases away from zero.
+template <typename... BPs>
+constexpr auto mag_round(Magnitude<BPs...> m) {
+    constexpr auto trunced = mag_trunc(m);
+    return trunced + std::conditional_t<abs(m - trunced) >= Magnitude<Pow<Prime<2>, -1>>{},
+                                        Sign<Magnitude<BPs...>>,
+                                        Zero>{};
+}
+
+constexpr Zero mag_trunc(Zero) { return {}; }
+constexpr Zero mag_floor(Zero) { return {}; }
+constexpr Zero mag_ceil(Zero) { return {}; }
+constexpr Zero mag_round(Zero) { return {}; }
+
+//
+// Addition, subtraction, and mod for Magnitudes (and Zero).
+//
+// Again, these are only defined for the subset of Magnitudes where this is easy to compute.
+//
+
+// Addition:
+template <typename... BP1s, typename... BP2s>
+constexpr auto operator+(Magnitude<BP1s...>, Magnitude<BP2s...>) {
+    return MagSum<Magnitude<BP1s...>, Magnitude<BP2s...>>{};
+}
+template <typename... BPs>
+constexpr auto operator+(Zero, Magnitude<BPs...> m) {
+    return m;
+}
+template <typename... BPs>
+constexpr auto operator+(Magnitude<BPs...> m, Zero) {
+    return m;
+}
+
+// Subtraction:
+template <typename... BP1s, typename... BP2s>
+constexpr auto operator-(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return m1 + (-m2);
+}
+template <typename... BPs>
+constexpr auto operator-(Zero, Magnitude<BPs...> m) {
+    return -m;
+}
+template <typename... BPs>
+constexpr auto operator-(Magnitude<BPs...> m, Zero) {
+    return m;
+}
+
+// Mod:
+template <typename... BP1s, typename... BP2s>
+constexpr auto operator%(Magnitude<BP1s...> m1, Magnitude<BP2s...> m2) {
+    return m1 - mag_trunc(m1 / m2) * m2;
+}
+template <typename... BPs>
+constexpr Zero operator%(Zero, Magnitude<BPs...>) {
+    return {};
+}
+
+//
+// Value-based interface for Magnitude type traits.
+//
 
 template <typename... BPs>
 constexpr auto integer_part(Magnitude<BPs...>) {
@@ -4169,6 +4354,82 @@ template <typename M>
 struct CommonMagnitudeImpl<Zero, M> : stdx::type_identity<M> {};
 template <>
 struct CommonMagnitudeImpl<Zero, Zero> : stdx::type_identity<Zero> {};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `MagSum` implementation.
+
+namespace detail {
+
+// `U64MagSum<Ms...>` is the `Magnitude` (or `Zero`) equal to the sum of the Magnitudes `Ms...`, as
+// long as these preconditions are met:
+//
+// 1. The absolute value of each member of `Ms...` fits in a `std::uint64_t`.
+// 2. The absolute value of the sum of all members of `Ms...` fits in a `std::uint64_t`.
+template <typename... Ms>
+struct U64MagSumImpl {
+    struct U64SumResult {
+        std::uint64_t sum = 0u;
+        int overflow = 0;
+    };
+
+    static constexpr U64SumResult compute() {
+        const std::uint64_t abs_values[] = {get_value<std::uint64_t>(Abs<Ms>{})...};
+        const int overflows[] = {(IsPositive<Ms>::value ? 0 : -1)...};
+
+        U64SumResult result = {0u, 0};
+        for (std::size_t i = 0u; i < sizeof...(Ms); ++i) {
+            std::uint64_t old_sum = result.sum;
+            result.sum += (overflows[i] >= 0) ? abs_values[i] : -abs_values[i];
+            result.overflow += overflows[i] + (result.sum < old_sum);
+        }
+
+        return result;
+    }
+    static constexpr std::uint64_t sum = compute().sum;
+    static constexpr int overflow = compute().overflow;
+
+    static_assert((overflow == 0) || (overflow == -1 && sum > 0u),
+                  "Magnitude sum overflowed uint64_t");
+
+    using Sign = std::conditional_t<(overflow == -1), Magnitude<Negative>, Magnitude<>>;
+
+    using AbsMag = std::conditional_t<(overflow == 0) && (sum == 0u),
+                                      Zero,
+                                      // The surprising `sum == 0u` avoids asking for `mag<0>()`.
+                                      // It's fine, because it can never actually be used.
+                                      decltype(mag<(overflow == -1 ? -sum : sum) + (sum == 0u)>())>;
+
+    using type = decltype(Sign{} * AbsMag{});
+};
+template <typename... Ms>
+using U64MagSum = typename U64MagSumImpl<Ms...>::type;
+
+template <typename... Ms>
+constexpr std::uint64_t U64MagSumImpl<Ms...>::sum;
+
+template <typename... Ms>
+constexpr int U64MagSumImpl<Ms...>::overflow;
+
+template <typename... Ms>
+struct MagSumImplHelper {
+    using Common = CommonMagnitude<Ms...>;
+    using type = decltype(Common{} * U64MagSum<decltype(Ms{} / Common{})...>{});
+};
+
+// The sum of no things is nothing.
+template <>
+struct MagSumImplHelper<> : stdx::type_identity<Zero> {};
+
+// Keep stripping off zeros until we find at least one nonzero element, so that the common magnitude
+// machinery can find something meaningful and avoid dividing by zero.  (Zeros in the middle will be
+// automatically handled correctly as long as there are nonzero elements.)
+template <typename... Ms>
+struct MagSumImplHelper<Zero, Ms...> : MagSumImplHelper<Ms...> {};
+
+}  // namespace detail
+
+template <typename... Ms>
+struct MagSumImpl : detail::MagSumImplHelper<Ms...> {};
 
 }  // namespace  au
 
@@ -5607,6 +5868,18 @@ struct UnitProductPack {
     using Mag = MagProduct<detail::MagT<UnitPows>...>;
 };
 
+// Type template to hold a sum of Units (of the same dimension).
+template <typename... Units>
+struct UnitSumPack;
+template <typename U, typename... Us>
+struct UnitSumPack<U, Us...> {
+    static_assert(HasSameDimension<U, Us...>::value, "All units in a sum must have same dimension");
+    using Dim = detail::DimT<U>;
+    using Mag = MagSum<detail::MagT<U>, detail::MagT<Us>...>;
+
+    static_assert(!std::is_same<Mag, Zero>::value, "Improper zero-magnitude unit formed");
+};
+
 // Helper to make a canonicalized product of units.
 //
 // On the input side, we treat every input unit as a UnitProductPack.  Once we get our final result,
@@ -6030,6 +6303,85 @@ using ReplaceCommonPointUnitWithCommonUnit =
 template <typename A, typename B>
 struct InOrderFor<detail::CommonUnitLabelImpl, A, B> : InOrderFor<UnitProductPack, A, B> {};
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `UnitSum` helper implementation.
+
+namespace detail {
+
+// Compute the coefficient for a unit in a sum: the ratio of the unit to its unscaled version.
+template <typename U>
+using UnitCoefficient = UnitRatio<U, UnscaledUnit<U>>;
+
+// Given a list of distinct unscaled units, and a list of input units, compute the sum of
+// coefficients for each unscaled unit.
+template <typename DistinctUnscaled, typename... Us>
+struct ComputeCoefficientSumsImpl;
+template <typename DistinctUnscaled, typename... Us>
+using ComputeCoefficientSums = typename ComputeCoefficientSumsImpl<DistinctUnscaled, Us...>::type;
+
+template <template <class...> class Pack, typename... Unscaled, typename... Us>
+struct ComputeCoefficientSumsImpl<Pack<Unscaled...>, Us...> {
+    // For each unscaled unit, sum coefficients from all matching input units.
+    template <typename Target>
+    using CoeffSum = MagSum<std::conditional_t<std::is_same<UnscaledUnit<Us>, Target>::value,
+                                               UnitCoefficient<Us>,
+                                               Zero>...>;
+
+    // Produce the scaled unit (or Zero if coefficient is zero).
+    template <typename Target>
+    using ScaledResult = std::conditional_t<std::is_same<CoeffSum<Target>, Zero>::value,
+                                            Zero,
+                                            ComputeScaledUnit<Target, CoeffSum<Target>>>;
+
+    using type = Pack<ScaledResult<Unscaled>...>;
+};
+
+// Filter out Zero entries from a Pack.
+template <typename T>
+struct IsNonzero : stdx::negation<std::is_same<T, Zero>> {};
+
+template <typename UL>
+struct FilterOutZeroImpl;
+template <typename UL>
+using FilterOutZero = typename FilterOutZeroImpl<UL>::type;
+template <template <class...> class Pack, typename... Us>
+struct FilterOutZeroImpl<Pack<Us...>> {
+    using type = IncludeInPackIf<IsNonzero, Pack, Us...>;
+};
+
+// Convert a pack to `UnitSumPack`, mapping 0-ary results onto `Zero`, and unpacking 1-ary.
+template <typename UL>
+struct AsUnitSumPackImpl;
+template <typename UL>
+using AsSortedUnitSumPack = typename AsUnitSumPackImpl<SortAs<UnitSumPack, UL>>::type;
+template <template <class...> class Pack>
+struct AsUnitSumPackImpl<Pack<>> : stdx::type_identity<Zero> {};
+template <template <class...> class Pack, typename U>
+struct AsUnitSumPackImpl<Pack<U>> : stdx::type_identity<U> {};
+template <template <class...> class Pack, typename U, typename... Us>
+struct AsUnitSumPackImpl<Pack<U, Us...>> : stdx::type_identity<UnitSumPack<U, Us...>> {};
+
+// Helper to apply UnitSumImpl to a flattened UnitSumPack.
+template <typename FlatPack>
+struct CollectLikeTermsImpl;
+template <typename... Us>
+struct CollectLikeTermsImpl<UnitSumPack<Us...>>
+    : stdx::type_identity<AsSortedUnitSumPack<FilterOutZero<
+          ComputeCoefficientSums<FlatDedupedTypeList<UnitList, UnscaledUnit<Us>...>, Us...>>>> {};
+
+// Main implementation: first flatten any UnitSumPack arguments, then collect like terms.
+template <typename... Us>
+struct UnitSumImpl : CollectLikeTermsImpl<FlattenAs<UnitSumPack, Us...>> {};
+
+}  // namespace detail
+
+// Helper to make a canonicalized sum of units.
+//
+// Collects like terms (same unscaled unit), filters zeros, and sorts with positive coefficients
+// first. Returns Zero if all terms cancel, the single unit if only one remains, or a UnitSumPack.
+template <typename... Us>
+using UnitSum = typename detail::UnitSumImpl<Us...>::type;
+
 template <typename... Us>
 using CommonUnitLabel = FlatDedupedTypeListT<detail::CommonUnitLabelImpl, Us...>;
 
@@ -6279,6 +6631,64 @@ struct QuotientLabeler<UnitProductPack<>, UnitProductPack<>, T> {
 };
 template <typename T>
 constexpr const char QuotientLabeler<UnitProductPack<>, UnitProductPack<>, T>::value[1];
+
+enum class SumTermPosition {
+    FIRST,
+    SUBSEQUENT,
+};
+
+// Sign label (if necessary) for a unit in a sum, adding spaces for later terms.
+template <SumTermPosition Pos, typename M>
+struct SignLabel;
+template <>
+struct SignLabel<SumTermPosition::FIRST, Magnitude<>> {
+    static constexpr auto value() { return as_string_constant(""); }
+};
+template <>
+struct SignLabel<SumTermPosition::SUBSEQUENT, Magnitude<>> {
+    static constexpr auto value() { return as_string_constant(" + "); }
+};
+template <SumTermPosition Pos>
+struct SignLabel<Pos, Magnitude<Negative>> {
+    static constexpr auto value() {
+        return wrap_if<Pos == SumTermPosition::SUBSEQUENT, ' ', ' '>("-");
+    }
+};
+
+// Coefficient label (if necessary) for a term in the sum.
+template <typename Coeff>
+struct CoefficientLabel {
+    using MagLab = MagnitudeLabel<Coeff>;
+    static constexpr auto value() {
+        return concatenate(parens_if<MagLab::has_exposed_slash>(MagLab::value), " ");
+    }
+};
+template <>
+struct CoefficientLabel<Magnitude<>> {
+    static constexpr auto value() { return as_string_constant(""); }
+};
+
+// Labeler for a single term in a sum: sign + coefficient + "core" label.
+template <SumTermPosition Pos, typename U>
+struct SumTermLabeler {
+    using Coeff = MagProduct<UnitSign<U>, UnitRatio<U, UnscaledUnit<U>>>;
+    static constexpr auto value() {
+        return concatenate(SignLabel<Pos, UnitSign<U>>::value(),
+                           CoefficientLabel<Coeff>::value(),
+                           as_string_constant(unit_label<UnscaledUnit<U>>()));
+    }
+};
+
+// The implementation for UnitSumPack labels.
+template <typename U, typename... Us>
+struct SumPackLabeler {
+    static constexpr auto value() {
+        return concatenate("(",
+                           SumTermLabeler<SumTermPosition::FIRST, U>::value(),
+                           SumTermLabeler<SumTermPosition::SUBSEQUENT, Us>::value()...,
+                           ")");
+    }
+};
 }  // namespace detail
 
 // Unified implementation.
@@ -6303,6 +6713,15 @@ struct UnitLabel<UnitProductPack<Us...>>
     : detail::QuotientLabeler<detail::NumeratorPart<UnitProductPack<Us...>>,
                               detail::DenominatorPart<UnitProductPack<Us...>>,
                               void> {};
+
+// Implementation for UnitSumPack: join with + or - based on sign.
+template <typename U, typename... Us>
+struct UnitLabel<UnitSumPack<U, Us...>> {
+    using LabelT = detail::StringConstant<detail::SumPackLabeler<U, Us...>::value().size()>;
+    static constexpr LabelT value = detail::SumPackLabeler<U, Us...>::value();
+};
+template <typename U, typename... Us>
+constexpr typename UnitLabel<UnitSumPack<U, Us...>>::LabelT UnitLabel<UnitSumPack<U, Us...>>::value;
 
 // Implementation for ScaledUnit: scaling unit U by M gets label `"[M U]"`.
 template <typename U, typename M>
@@ -6474,6 +6893,25 @@ struct InOrderFor<UnitProductPack, A, B>
                                  detail::OrderAsUnitProductPack,
                                  detail::OrderAsOriginDisplacementUnit,
                                  detail::OrderByUnitOrderTiebreaker> {};
+
+namespace detail {
+// Order by sign: positive coefficients come before negative.
+template <typename A, typename B>
+struct OrderByPositiveCoefficient
+    : stdx::bool_constant<(IsPositive<MagT<A>>::value && !IsPositive<MagT<B>>::value)> {};
+
+// Order by unscaled unit, using UnitProductPack ordering.
+template <typename A, typename B>
+struct OrderByUnscaledUnit : InOrderFor<UnitProductPack, UnscaledUnit<A>, UnscaledUnit<B>> {};
+}  // namespace detail
+
+template <typename A, typename B>
+struct InOrderFor<UnitSumPack, A, B>
+    : LexicographicTotalOrdering<A,
+                                 B,
+                                 detail::OrderByPositiveCoefficient,
+                                 detail::OrderByUnscaledUnit,
+                                 detail::OrderByMag> {};
 
 }  // namespace au
 
@@ -6993,6 +7431,9 @@ struct ConstructionPolicy {
 
 }  // namespace au
 
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
 
 
 namespace au {
@@ -8215,6 +8656,12 @@ struct CanScaleByMagnitude {
         return UnitWrapper<decltype(Unit{} / m)>{};
     }
 
+    // (0 * W) and (W * 0), for wrapper W.
+    friend constexpr Zero operator*(Zero, UnitWrapper<Unit>) { return {}; }
+    friend constexpr Zero operator*(UnitWrapper<Unit>, Zero) { return {}; }
+
+    // Unary Plus and Negation.
+    friend constexpr auto operator+(UnitWrapper<Unit> u) { return u; }
     friend constexpr auto operator-(UnitWrapper<Unit>) {
         return UnitWrapper<decltype(Unit{} * (-mag<1>()))>{};
     }
@@ -8240,6 +8687,9 @@ struct SupportsRationalPowers {
 
 }  // namespace detail
 }  // namespace au
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
 
 
 namespace au {
@@ -8357,6 +8807,109 @@ constexpr Zero make_constant(Zero) { return {}; }
 template <typename Unit>
 struct AssociatedUnitImpl<Constant<Unit>> : stdx::type_identity<Unit> {};
 
+// Relational operators.
+//
+// Note that these inherit the limitations of the Magnitude comparisons: they will not work for
+// every combination of Constant.  We decided that supporting many common use cases was worth this
+// tradeoff.
+template <typename U1, typename U2>
+constexpr bool operator==(Constant<U1>, Constant<U2>) {
+    return UnitRatio<U1, U2>{} == mag<1>();
+}
+template <typename U1, typename U2>
+constexpr bool operator<(Constant<U1>, Constant<U2>) {
+    using SignU2 = Sign<detail::MagT<U2>>;
+    using AbsU2 = decltype(U2{} * SignU2{});
+    return UnitRatio<U1, AbsU2>{} < SignU2{};
+}
+template <typename U1, typename U2>
+constexpr bool operator!=(Constant<U1> lhs, Constant<U2> rhs) {
+    return !(lhs == rhs);
+}
+template <typename U1, typename U2>
+constexpr bool operator<=(Constant<U1> lhs, Constant<U2> rhs) {
+    return (lhs < rhs) || (lhs == rhs);
+}
+template <typename U1, typename U2>
+constexpr bool operator>(Constant<U1> lhs, Constant<U2> rhs) {
+    return !(lhs <= rhs);
+}
+template <typename U1, typename U2>
+constexpr bool operator>=(Constant<U1> lhs, Constant<U2> rhs) {
+    return !(lhs < rhs);
+}
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+template <typename U1, typename U2>
+constexpr std::strong_ordering operator<=>(Constant<U1>, Constant<U2>) {
+    using SignU2 = Sign<detail::MagT<U2>>;
+    using AbsU2 = decltype(U2{} * SignU2{});
+    return UnitRatio<U1, AbsU2>{} <=> SignU2{};
+}
+#endif
+
+// Arithmetic operators.
+//
+// Note that these inherit the limitations of the Magnitude comparisons: they will not work for
+// every combination of Constant.  Again, we decided that supporting many common use cases was worth
+// this tradeoff.
+
+// Mod (%) for `Constant`.
+template <typename U1, typename U2>
+constexpr auto operator%(Constant<U1>, Constant<U2>) {
+    // This slightly complicated dance tends to produce more intuitive, human-friendly labels.
+    //
+    // The basic idea for `%` with `Constant` is to perform the operation in the constants' common
+    // unit.  But those constants' units may be scaled, and the scale factor is _part of the unit_
+    // as far as the _library_ is concerned.  Human readers, on the other hand, tend to look at the
+    // _unscaled_ unit.
+    //
+    // To bridge this gap, we make the actual constant (which determines the label) from the common
+    // unit among all _unscaled_ input units.  Everything else is applied as a multiplicative
+    // magnitude against this.
+    using U = CommonUnit<U1, U2>;
+    using CommonUnscaled = CommonUnit<detail::UnscaledUnit<U1>, detail::UnscaledUnit<U2>>;
+    return make_constant(CommonUnscaled{}) * (UnitRatio<U1, U>{} % UnitRatio<U2, U>{}) *
+           UnitRatio<U, CommonUnscaled>{};
+}
+
+// Arithmetic operators mixing `Constant` with `Zero`.
+template <typename U>
+constexpr Zero operator%(Zero, Constant<U>) {
+    return {};
+}
+
+// Addition (+) for `Constant`.
+template <typename U1, typename U2>
+constexpr auto operator+(Constant<U1>, Constant<U2>) {
+    return make_constant(UnitSum<U1, U2>{});
+}
+
+// Subtraction (-) for `Constant`.
+template <typename U1, typename U2>
+constexpr auto operator-(Constant<U1>, Constant<U2>) {
+    using NegU2 = decltype(U2{} * Magnitude<Negative>{});
+    return make_constant(UnitSum<U1, NegU2>{});
+}
+
+// Arithmetic operators mixing `Constant` with `Zero`.
+template <typename U>
+constexpr Constant<U> operator+(Constant<U>, Zero) {
+    return {};
+}
+template <typename U>
+constexpr Constant<U> operator+(Zero, Constant<U>) {
+    return {};
+}
+template <typename U>
+constexpr Constant<U> operator-(Constant<U>, Zero) {
+    return {};
+}
+template <typename U>
+constexpr auto operator-(Zero, Constant<U>) {
+    return -Constant<U>{};
+}
+
 }  // namespace au
 
 
@@ -8395,6 +8948,9 @@ template <typename U>
 struct AssociatedUnitImpl<SymbolFor<U>> : stdx::type_identity<U> {};
 
 }  // namespace au
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
 
 
 namespace au {
@@ -11494,6 +12050,11 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(round_in(rounding_units, p));
 }
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto round_in(RoundingUnits rounding_units, Constant<U> c) {
+    return get_value<OutputRep>(mag_round(unit_ratio(c, rounding_units)));
+}
 
 //
 // The integral-valued Quantity or QuantityPoint, in this unit, nearest to the input.
@@ -11509,6 +12070,11 @@ auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(round_in(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto round_as(RoundingUnits rounding_units, Constant<U> c) {
+    return mag_round(unit_ratio(c, rounding_units)) * make_constant(rounding_units);
 }
 
 //
@@ -11562,6 +12128,11 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(floor_in(rounding_units, p));
 }
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto floor_in(RoundingUnits rounding_units, Constant<U> c) {
+    return get_value<OutputRep>(mag_floor(unit_ratio(c, rounding_units)));
+}
 
 //
 // The largest integral-valued Quantity or QuantityPoint, in this unit, not greater than the input.
@@ -11577,6 +12148,11 @@ auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(floor_in(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto floor_as(RoundingUnits rounding_units, Constant<U> c) {
+    return mag_floor(unit_ratio(c, rounding_units)) * make_constant(rounding_units);
 }
 
 //
@@ -11630,6 +12206,11 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(ceil_in(rounding_units, p));
 }
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto ceil_in(RoundingUnits rounding_units, Constant<U> c) {
+    return get_value<OutputRep>(mag_ceil(unit_ratio(c, rounding_units)));
+}
 
 //
 // The smallest integral-valued Quantity or QuantityPoint, in this unit, not less than the input.
@@ -11645,6 +12226,11 @@ auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(ceil_in(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto ceil_as(RoundingUnits rounding_units, Constant<U> c) {
+    return mag_ceil(unit_ratio(c, rounding_units)) * make_constant(rounding_units);
 }
 
 //
@@ -11689,6 +12275,11 @@ constexpr auto int_round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 constexpr auto int_round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_round_as_impl(rounding_units, p);
+}
+// (c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto int_round_as(RoundingUnits rounding_units, Constant<U> c) {
+    return round_as(rounding_units, c);  // For `Constant`, identical to `round_as`.
 }
 
 //
@@ -11754,6 +12345,11 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 constexpr auto int_round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_round_as<OutputRep>(rounding_units, p).in(rounding_units);
 }
+// (c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto int_round_in(RoundingUnits rounding_units, Constant<U> c) {
+    return round_in<OutputRep>(rounding_units, c);  // For `Constant`, identical to `round_in`.
+}
 
 //
 // Floor function that does not leave the integral domain.  Does not use `std::floor`.
@@ -11779,6 +12375,11 @@ constexpr auto int_floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 constexpr auto int_floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_floor_as_impl(rounding_units, p);
+}
+// (c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto int_floor_as(RoundingUnits rounding_units, Constant<U> c) {
+    return floor_as(rounding_units, c);  // For `Constant`, identical to `floor_as`.
 }
 
 //
@@ -11843,6 +12444,11 @@ template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 constexpr auto int_floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_floor_as<OutputRep>(rounding_units, p).in(rounding_units);
 }
+// (c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto int_floor_in(RoundingUnits rounding_units, Constant<U> c) {
+    return floor_in<OutputRep>(rounding_units, c);  // For `Constant`, identical to `floor_in`.
+}
 
 //
 // Ceil function that does not leave the integral domain.  Does not use `std::ceil`.
@@ -11868,6 +12474,11 @@ constexpr auto int_ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename RoundingUnits, typename U, typename R>
 constexpr auto int_ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_ceil_as_impl(rounding_units, p);
+}
+// (c) Version for Constant.
+template <typename RoundingUnits, typename U>
+constexpr auto int_ceil_as(RoundingUnits rounding_units, Constant<U> c) {
+    return ceil_as(rounding_units, c);  // For `Constant`, identical to `ceil_as`.
 }
 
 //
@@ -11931,6 +12542,11 @@ constexpr auto int_ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 constexpr auto int_ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_ceil_as<OutputRep>(rounding_units, p).in(rounding_units);
+}
+// (c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+constexpr auto int_ceil_in(RoundingUnits rounding_units, Constant<U> c) {
+    return ceil_in<OutputRep>(rounding_units, c);  // For `Constant`, identical to `ceil_in`.
 }
 
 // Wrapper for std::sin() which accepts a strongly typed angle quantity.

@@ -1753,6 +1753,51 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison †
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unary-and-" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unary + and -
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rounding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rounding †
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiplication-and-division" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multiplication and division
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multiplication and division">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#raw-numeric-type-t" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1819,6 +1864,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#zero" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zero
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#quantitypointmakeru-deleted" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1834,6 +1890,33 @@
     <span class="md-ellipsis">
       
         QuantityPoint&lt;U, R&gt; (deleted)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modulo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modulo †
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#addition-and-subtraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Addition and subtraction †
       
     </span>
   </a>
@@ -2979,9 +3062,108 @@ it would work for <em>this specific value</em> (which is <code>1</code>), this q
 too dangerous for <code>int</code> in general.</p>
 </div>
 <h2 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h2>
-<p>Each operation with a <code>Constant</code> consists in multiplying or dividing with some other family of
-types.</p>
-<h3 id="raw-numeric-type-t">Raw numeric type <code>T</code><a class="headerlink" href="#raw-numeric-type-t" title="Permanent link">&para;</a></h3>
+<h3 id="comparison">Comparison †<a class="headerlink" href="#comparison" title="Permanent link">&para;</a></h3>
+<p>Two <code>Constant</code> instances can be compared if they have the same dimension.  The result indicates
+which constant is larger.</p>
+<p>† <em>This feature is subject to the same <a href="../magnitude/#compile-time-arithmetic-limitations">compile-time arithmetic
+limitations</a> as <code>Magnitude</code> ordering, because
+the comparison is built on <code>Magnitude</code> comparison.</em></p>
+<p><strong>Syntax:</strong></p>
+<p>For instances <code>c1</code> and <code>c2</code>:</p>
+<ul>
+<li><code>c1 == c2</code></li>
+<li><code>c1 != c2</code></li>
+<li><code>c1 &lt; c2</code></li>
+<li><code>c1 &gt; c2</code></li>
+<li><code>c1 &lt;= c2</code></li>
+<li><code>c1 &gt;= c2</code></li>
+<li><code>c1 &lt;=&gt; c2</code> <em>(C++20 or later)</em></li>
+</ul>
+<h3 id="unary-and-">Unary <code>+</code> and <code>-</code><a class="headerlink" href="#unary-and-" title="Permanent link">&para;</a></h3>
+<p>For a <code>Constant</code> instance <code>c</code>, you can apply a &ldquo;unary plus&rdquo; (<code>+c</code>) or &ldquo;unary minus&rdquo; (<code>-c</code>).  The
+unary plus returns the constant unchanged (it is the identity operation), while the unary minus
+returns a new <code>Constant</code> representing the negation.</p>
+<p><strong>Syntax:</strong></p>
+<ul>
+<li><code>+c</code> returns <code>c</code> (same type and value)</li>
+<li><code>-c</code> returns a <code>Constant</code> with the negated value</li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SPEED_OF_LIGHT</span><span class="p">;</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1">// Unary plus returns the same constant.</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">pos_c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">+</span><span class="n">c</span><span class="p">;</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="c1">// Unary minus negates the constant.</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">neg_c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">c</span><span class="p">;</span>
+</code></pre></div>
+<h3 id="rounding">Rounding †<a class="headerlink" href="#rounding" title="Permanent link">&para;</a></h3>
+<p><code>Constant</code> can be passed to the rounding functions.  The <code>_as</code> functions return a new <code>Constant</code>,
+while the <code>_in</code> functions return a raw numeric value of an explicitly specified type.</p>
+<p>† <em>This feature is subject to the same <a href="../magnitude/#compile-time-arithmetic-limitations">compile-time arithmetic
+limitations</a> as <code>Magnitude</code> rounding, because
+the computation is built on <code>Magnitude</code> rounding.</em></p>
+<p><strong>Syntax:</strong></p>
+<p>For a <code>Constant</code> instance <code>c</code> and a unit <code>u</code>:</p>
+<p><strong><code>_as</code> functions</strong> (return a <code>Constant</code> with a unit quantity-equivalent to <code>u</code>):</p>
+<ul>
+<li><code>round_as(u, c)</code> — rounds <code>c</code> to the nearest integer in unit <code>u</code></li>
+<li><code>floor_as(u, c)</code> — rounds <code>c</code> down to the largest integer not greater than <code>c</code> in unit <code>u</code></li>
+<li><code>ceil_as(u, c)</code> — rounds <code>c</code> up to the smallest integer not less than <code>c</code> in unit <code>u</code></li>
+<li><code>int_round_as(u, c)</code> — same as <code>round_as(u, c)</code> for <code>Constant</code> inputs</li>
+<li><code>int_floor_as(u, c)</code> — same as <code>floor_as(u, c)</code> for <code>Constant</code> inputs</li>
+<li><code>int_ceil_as(u, c)</code> — same as <code>ceil_as(u, c)</code> for <code>Constant</code> inputs</li>
+</ul>
+<p><strong><code>_in</code> functions</strong> (return a raw numeric value; explicit <code>Rep</code> required):</p>
+<ul>
+<li><code>round_in&lt;T&gt;(u, c)</code> — rounds <code>c</code> to the nearest integer in unit <code>u</code>, returning type <code>T</code></li>
+<li><code>floor_in&lt;T&gt;(u, c)</code> — rounds <code>c</code> down, returning type <code>T</code></li>
+<li><code>ceil_in&lt;T&gt;(u, c)</code> — rounds <code>c</code> up, returning type <code>T</code></li>
+<li><code>int_round_in&lt;T&gt;(u, c)</code> — same as <code>round_in&lt;T&gt;(u, c)</code> for <code>Constant</code> inputs</li>
+<li><code>int_floor_in&lt;T&gt;(u, c)</code> — same as <code>floor_in&lt;T&gt;(u, c)</code> for <code>Constant</code> inputs</li>
+<li><code>int_ceil_in&lt;T&gt;(u, c)</code> — same as <code>ceil_in&lt;T&gt;(u, c)</code> for <code>Constant</code> inputs</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Pay attention to the peculiar pattern of presence and absence of the explicit <code>Rep</code> in these
+functions.  In particular, an explicit rep is <em>required</em> for the <code>_in</code> functions, but
+<em>forbidden</em> for the <code>_as</code> functions!</p>
+<p>This is a simple consequence of the fact that <code>Constant</code> <em>has</em> no rep.  The type itself
+represents only a single, specific value (that is, it is a <a href="../detail/monovalue_types/">monovalue
+type</a>).</p>
+<p>Here is the pattern to remember:</p>
+<ul>
+<li>
+<p>The <code>_in</code> functions require an explicit rep because the input <code>Constant</code> has no rep, so we
+  would have no idea what rep to use &ldquo;by default&rdquo;.</p>
+</li>
+<li>
+<p>The <code>_as</code> functions forbid an explicit rep because the output is another <code>Constant</code>, and thus
+  no rep would even be possible.</p>
+</li>
+</ul>
+</div>
+<details class="example">
+<summary>Example: using <code>int_ceil_in</code> for array dimensions</summary>
+<p>Suppose you have a constant representing a key length in bits, and you need to determine the
+number of bytes required to store it.  Let&rsquo;s say the key length is <em>not</em> an even multiple of
+8 bits, so you couldn&rsquo;t just write <code>MAX_KEY_LEN.in&lt;std::size_t&gt;(bytes)</code>: the <code>Constant</code> would
+detect the truncation, and produce a compile-time error!  What we really need is the smallest
+number of <em>whole bytes</em> that can hold this many bits.  We can achieve this with <code>int_ceil_in</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">MAX_KEY_LEN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">make_constant</span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mag</span><span class="o">&lt;</span><span class="mi">250</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">bytes_needed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">int_ceil_in</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="kt">size_t</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bytes</span><span class="p">,</span><span class="w"> </span><span class="n">MAX_KEY_LEN</span><span class="p">);</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">std</span><span class="o">::</span><span class="n">array</span><span class="o">&lt;</span><span class="kt">uint8_t</span><span class="p">,</span><span class="w"> </span><span class="n">bytes_needed</span><span class="o">&gt;</span><span class="w"> </span><span class="n">key_storage</span><span class="p">;</span><span class="w">  </span><span class="c1">// Array of 32 bytes</span>
+</code></pre></div>
+<p>In this particular case, we could just as well have used <code>ceil_in</code> as <code>int_ceil_in</code>: for
+<code>Constant</code>, they are identical.  However, using <code>int_ceil_in</code> makes us agnostic as to whether
+<code>MAX_KEY_LEN</code> is a <code>Constant</code> or a <code>Quantity</code>.  Recall that the <code>ceil_in</code> family of functions
+for <code>Quantity</code> are based on <code>std::ceil</code>, which is not <code>constexpr</code> compatible.  The <code>int_ceil_in</code>
+family, by contrast, is <code>constexpr</code> for all its inputs, and uses only integer-domain math.</p>
+</details>
+<h3 id="multiplication-and-division">Multiplication and division<a class="headerlink" href="#multiplication-and-division" title="Permanent link">&para;</a></h3>
+<p>Each of the following operations with a <code>Constant</code> consists in multiplying or dividing with some
+other family of types.</p>
+<h4 id="raw-numeric-type-t">Raw numeric type <code>T</code><a class="headerlink" href="#raw-numeric-type-t" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a raw numeric type <code>T</code> produces a <code>Quantity</code> whose rep
 is <code>T</code>, and whose unit is derived from <code>Unit</code>.</p>
 <p>In the following table, we will use <code>x</code> to represent the value that was stored in the input of type
@@ -3022,7 +3204,7 @@ is <code>T</code>, and whose unit is derived from <code>Unit</code>.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="quantityu-r"><code>Quantity&lt;U, R&gt;</code><a class="headerlink" href="#quantityu-r" title="Permanent link">&para;</a></h3>
+<h4 id="quantityu-r"><code>Quantity&lt;U, R&gt;</code><a class="headerlink" href="#quantityu-r" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>Quantity&lt;U, R&gt;</code> produces a <code>Quantity</code> whose rep is
 <code>R</code>, and whose unit is derived from <code>Unit</code> and <code>U</code>.</p>
 <p>In the following table, we will use <code>x</code> to represent the underlying value in the input quantity &mdash;
@@ -3063,7 +3245,7 @@ that is, if the input quantity was <code>q</code>, then <code>x</code> is <code>
 </tr>
 </tbody>
 </table>
-<h3 id="constantu"><code>Constant&lt;U&gt;</code><a class="headerlink" href="#constantu" title="Permanent link">&para;</a></h3>
+<h4 id="constantu"><code>Constant&lt;U&gt;</code><a class="headerlink" href="#constantu" title="Permanent link">&para;</a></h4>
 <p>Constants compose: the product or quotient of two <code>Constant</code> instances is a new <code>Constant</code> instance.</p>
 <table>
 <thead>
@@ -3083,7 +3265,7 @@ that is, if the input quantity was <code>q</code>, then <code>x</code> is <code>
 </tr>
 </tbody>
 </table>
-<h3 id="quantitymakeru"><code>QuantityMaker&lt;U&gt;</code><a class="headerlink" href="#quantitymakeru" title="Permanent link">&para;</a></h3>
+<h4 id="quantitymakeru"><code>QuantityMaker&lt;U&gt;</code><a class="headerlink" href="#quantitymakeru" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>QuantityMaker&lt;U&gt;</code> produces a new <code>QuantityMaker</code>
 whose unit is derived from <code>Unit</code> and <code>U</code>.</p>
 <table>
@@ -3112,7 +3294,7 @@ whose unit is derived from <code>Unit</code> and <code>U</code>.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="singularnameforu"><code>SingularNameFor&lt;U&gt;</code><a class="headerlink" href="#singularnameforu" title="Permanent link">&para;</a></h3>
+<h4 id="singularnameforu"><code>SingularNameFor&lt;U&gt;</code><a class="headerlink" href="#singularnameforu" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>SingularNameFor&lt;U&gt;</code> produces a new
 <code>SingularNameFor</code> whose unit is derived from <code>Unit</code> and <code>U</code>.</p>
 <table>
@@ -3141,7 +3323,7 @@ whose unit is derived from <code>Unit</code> and <code>U</code>.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="magnitudebps"><code>Magnitude&lt;BPs...&gt;</code><a class="headerlink" href="#magnitudebps" title="Permanent link">&para;</a></h3>
+<h4 id="magnitudebps"><code>Magnitude&lt;BPs...&gt;</code><a class="headerlink" href="#magnitudebps" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>Magnitude</code> produces a new <code>Constant</code> which is
 scaled by that magnitude.</p>
 <p>In the following table, let <code>m</code> be an instance of <code>Magnitude&lt;BPs...&gt;</code>.</p>
@@ -3171,12 +3353,100 @@ scaled by that magnitude.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="quantitypointmakeru-deleted"><code>QuantityPointMaker&lt;U&gt;</code> (deleted)<a class="headerlink" href="#quantitypointmakeru-deleted" title="Permanent link">&para;</a></h3>
+<h4 id="zero"><code>Zero</code><a class="headerlink" href="#zero" title="Permanent link">&para;</a></h4>
+<p>Multiplying <code>Constant&lt;Unit&gt;</code> with <a href="../zero/"><code>Zero</code></a> produces <code>Zero</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Resulting Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Constant&lt;Unit&gt; * Zero</code></td>
+<td><code>Zero</code></td>
+</tr>
+<tr>
+<td><code>Zero * Constant&lt;Unit&gt;</code></td>
+<td><code>Zero</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="quantitypointmakeru-deleted"><code>QuantityPointMaker&lt;U&gt;</code> (deleted)<a class="headerlink" href="#quantitypointmakeru-deleted" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>QuantityPointMaker&lt;U&gt;</code> is explicitly deleted,
 because quantity points do not support multiplication.</p>
-<h3 id="quantitypointu-r-deleted"><code>QuantityPoint&lt;U, R&gt;</code> (deleted)<a class="headerlink" href="#quantitypointu-r-deleted" title="Permanent link">&para;</a></h3>
+<h4 id="quantitypointu-r-deleted"><code>QuantityPoint&lt;U, R&gt;</code> (deleted)<a class="headerlink" href="#quantitypointu-r-deleted" title="Permanent link">&para;</a></h4>
 <p>Multiplying or dividing <code>Constant&lt;Unit&gt;</code> with a <code>QuantityPoint&lt;U, R&gt;</code> is explicitly deleted,
 because quantity points do not support multiplication.</p>
+<h3 id="modulo">Modulo †<a class="headerlink" href="#modulo" title="Permanent link">&para;</a></h3>
+<p>The modulo operator computes the remainder after dividing one <code>Constant</code> by another, returning
+another <code>Constant</code> (or <code>Zero</code>).  The operands must have the same dimension.</p>
+<p>The result is well defined, independently of the units of the inputs &mdash; that is, it is a sensible
+&ldquo;pure quantity&rdquo; operation.  For positive inputs, we can define it as the result of continually
+subtracting the second argument from the first, until what remains is less than the second argument.
+(This is not how we actually <em>implement</em> it, but it is useful for understanding the semantics.)  If
+either or both of the inputs is signed, the result follows the same sign rules as the built-in C++
+<code>%</code> operator, since this is a C++ library.</p>
+<p>This operator interacts with <code>Zero</code> in several ways.</p>
+<ul>
+<li>When the second argument exactly divides the first (no remainder), the result is <code>Zero</code>.</li>
+<li><code>Zero</code> may be provided as the first argument, in which case the result is always <code>Zero</code>.</li>
+<li><code>Zero</code> may <strong>not</strong> be provided as the second argument, because division by zero is undefined.</li>
+</ul>
+<p>† <em>This feature is subject to the same <a href="../magnitude/#compile-time-arithmetic-limitations">compile-time arithmetic
+limitations</a> as <code>Magnitude</code> modulo, because the
+computation is built on <code>Magnitude</code> modulo.</em></p>
+<p><strong>Syntax:</strong></p>
+<p>For <code>Constant</code> instances <code>c1</code> and <code>c2</code> with the same dimension:</p>
+<ul>
+<li><code>c1 % c2</code></li>
+</ul>
+<p><strong>Result:</strong> A new <code>Constant</code> representing the remainder.  The result&rsquo;s unit is based on the common
+unit of the inputs, which generally produces human-friendly labels.</p>
+<p><strong>Example:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">five_feet</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">make_constant</span><span class="p">(</span><span class="n">feet</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mag</span><span class="o">&lt;</span><span class="mi">5</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">seven_inches</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">make_constant</span><span class="p">(</span><span class="n">inches</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">mag</span><span class="o">&lt;</span><span class="mi">7</span><span class="o">&gt;</span><span class="p">());</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1">// 5 feet = 60 inches; 60 % 7 = 4</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">five_feet</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="n">seven_inches</span><span class="p">;</span><span class="w">  </span><span class="c1">// Constant representing 4 inches</span>
+</code></pre></div>
+<h3 id="addition-and-subtraction">Addition and subtraction †<a class="headerlink" href="#addition-and-subtraction" title="Permanent link">&para;</a></h3>
+<p>Two <code>Constant</code> instances of the same dimension can be added or subtracted, producing a new
+<code>Constant</code>.  Like other <code>Constant</code> operations, this is performed purely at compile time.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Unlike &ldquo;core&rdquo; operations, such as powers and products, <code>Constant</code> is not fully closed under
+addition and subtraction.  If the inputs completely additively cancel, the result will either be
+<code>Zero</code>, or else a compile time error.</p>
+<p>Users should generally avoid forming this kind of <code>Constant</code>.</p>
+</div>
+<p><code>Constant</code> also interacts with <code>Zero</code> for addition and subtraction:</p>
+<ul>
+<li>Adding <code>Zero</code> to a <code>Constant</code> (in either order) returns the original <code>Constant</code>.</li>
+<li>Subtracting <code>Zero</code> from a <code>Constant</code> returns the original <code>Constant</code>.</li>
+<li>Subtracting a <code>Constant</code> from <code>Zero</code> returns the negation of that <code>Constant</code>.</li>
+</ul>
+<p>† <em>This feature is subject to the same <a href="../magnitude/#compile-time-arithmetic-limitations">compile-time arithmetic
+limitations</a> as <code>Magnitude</code> arithmetic, because
+the computation is built on <code>Magnitude</code> operations.</em></p>
+<p><strong>Syntax:</strong></p>
+<p>For <code>Constant</code> instances <code>c1</code> and <code>c2</code> with the same dimension:</p>
+<ul>
+<li><code>c1 + c2</code></li>
+<li><code>c1 - c2</code></li>
+</ul>
+<p><strong>Result:</strong> Whenever the result is nonzero, a new <code>Constant</code> representing the sum or difference.</p>
+<p><strong>Example:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">one_foot</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">make_constant</span><span class="p">(</span><span class="n">feet</span><span class="p">);</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">one_inch</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">make_constant</span><span class="p">(</span><span class="n">inches</span><span class="p">);</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1">// Sum of 1 foot and 1 inch</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">one_foot</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">one_inch</span><span class="p">;</span><span class="w">  </span><span class="c1">// Constant representing (ft + in)</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1">// Difference</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="k">constexpr</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">diff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">one_foot</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">one_inch</span><span class="p">;</span><span class="w">  </span><span class="c1">// Constant representing (ft - in)</span>
+</code></pre></div>
 
 
 
