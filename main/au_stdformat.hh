@@ -27,7 +27,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: cd25d11
+// Version identifier: 860ae5f
 // <iostream> support: INCLUDED
 // <format> support: INCLUDED
 // List of included units:
@@ -3774,9 +3774,9 @@ struct GetValueResultImplForDefaultCase<T, Magnitude<BPs...>> {
         if ((widened_result.outcome != MagRepresentationOutcome::OK) ||
             !safe_to_cast_to<T>(widened_result.value)) {
             return {MagRepresentationOutcome::ERR_CANNOT_FIT};
+        } else {
+            return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
         }
-
-        return {MagRepresentationOutcome::OK, static_cast<T>(widened_result.value)};
     }
 };
 
@@ -5671,6 +5671,15 @@ constexpr auto pow(SingularNameFor<Unit>) {
 template <typename U>
 struct UnitOrderTiebreaker;
 
+// Library-internal helper to check representability of ratio between two units in a numeric type.
+//
+// This will return `false` (rather than producing a compiler error) if the units don't have the
+// same dimension.
+namespace detail {
+template <typename T, typename U1, typename U2>
+struct IsUnitRatioRepresentableIn;
+}  // namespace detail
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation details below
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -6574,6 +6583,24 @@ struct InOrderFor<UnitSumPack, A, B>
                                  detail::OrderByUnscaledUnit,
                                  detail::OrderByMag> {};
 
+//////////////////////////////////////////////////////////////////////////////////////////////////
+// `IsUnitRatioRepresentableIn` implementation.
+
+namespace detail {
+// Helper simply delegates to `representable_in` in the usual case.
+template <typename T, typename U1, typename U2, bool SameDim = HasSameDimension<U1, U2>::value>
+struct IsUnitRatioRepresentableInImpl
+    : stdx::bool_constant<representable_in<T>(UnitRatio<U1, U2>{})> {};
+
+// If dimensions differ, just return false.
+template <typename T, typename U1, typename U2>
+struct IsUnitRatioRepresentableInImpl<T, U1, U2, false> : std::false_type {};
+
+// Delegate to the appropriate helper.
+template <typename T, typename U1, typename U2>
+struct IsUnitRatioRepresentableIn : IsUnitRatioRepresentableInImpl<T, U1, U2> {};
+}  // namespace detail
+
 }  // namespace au
 
 
@@ -6934,6 +6961,20 @@ template <uint8_t RiskFlags>
 struct CheckTheseRisks<RiskSet<RiskFlags>> {
     constexpr bool should_check(ConversionRisk risk) const {
         return (RiskFlags & static_cast<uint8_t>(risk)) != 0u;
+    }
+
+    // Remove risks from the checked set.
+    template <uint8_t OtherFlags>
+    constexpr CheckTheseRisks<RiskSet<RiskFlags & ~OtherFlags>> but_ignoring(
+        RiskSet<OtherFlags>) const {
+        return {};
+    }
+
+    // Add risks to the checked set.
+    template <uint8_t OtherFlags>
+    constexpr CheckTheseRisks<RiskSet<RiskFlags | OtherFlags>> but_also_checking_for(
+        RiskSet<OtherFlags>) const {
+        return {};
     }
 };
 
@@ -8704,8 +8745,8 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
     // Static function to check whether this constant can be exactly-represented in the given rep
     // `T` and unit `OtherUnit`.
     template <typename T, typename OtherUnit>
-    static constexpr bool can_store_value_in(OtherUnit other) {
-        return representable_in<T>(unit_ratio(Unit{}, other));
+    static constexpr bool can_store_value_in(OtherUnit) {
+        return detail::IsUnitRatioRepresentableIn<T, Unit, AssociatedUnit<OtherUnit>>::value;
     }
 
     // Implicitly convert to type with an exactly corresponding quantity that passes safety checks.
@@ -8717,6 +8758,26 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
         return as<typename CorrespondingQuantity<T>::Rep>(
             typename CorrespondingQuantity<T>::Unit{});
     }
+
+    // Comparison with Zero.
+    //
+    // A Constant represents a value of 1 in its unit, which is never zero.
+    friend constexpr bool operator==(Constant, Zero) { return false; }
+    friend constexpr bool operator!=(Constant, Zero) { return true; }
+    friend constexpr bool operator<(Constant, Zero) { return !is_positive(); }
+    friend constexpr bool operator<=(Constant, Zero) { return !is_positive(); }
+    friend constexpr bool operator>(Constant, Zero) { return is_positive(); }
+    friend constexpr bool operator>=(Constant, Zero) { return is_positive(); }
+
+    friend constexpr bool operator==(Zero, Constant) { return false; }
+    friend constexpr bool operator!=(Zero, Constant) { return true; }
+    friend constexpr bool operator<(Zero, Constant) { return is_positive(); }
+    friend constexpr bool operator<=(Zero, Constant) { return is_positive(); }
+    friend constexpr bool operator>(Zero, Constant) { return !is_positive(); }
+    friend constexpr bool operator>=(Zero, Constant) { return !is_positive(); }
+
+ private:
+    static constexpr bool is_positive() { return IsPositive<detail::MagT<Unit>>::value; }
 };
 
 // Make a constant from the given unit.
