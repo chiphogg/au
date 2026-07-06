@@ -15,6 +15,8 @@
 #pragma once
 
 #include <cstddef>
+#include <type_traits>
+#include <utility>
 
 #include "au/au.hh"
 
@@ -23,9 +25,16 @@ namespace au {
 // Force evaluation of a Quantity whose rep is an Eigen expression template.
 //
 // Use this to materialize lazy expressions before the operands go out of scope.
+//
+// Implementation note: we deliberately do NOT write `q.data_in(U{}).eval()`.  Eigen's `.eval()`
+// returns a *`const`* plain object, and a `const` prvalue cannot be moved --- so handing it to
+// `make_quantity` would force a full deep copy of the freshly materialized rep.  Instead we name
+// the plain-object type and materialize straight into a *non-`const`* one, which then moves cleanly
+// through `make_quantity` for a single total pass over the data.
 template <typename U, typename R>
 auto eval(const Quantity<U, R> &q) {
-    return make_quantity<U>(q.data_in(U{}).eval());
+    using Materialized = std::decay_t<decltype(q.data_in(U{}).eval())>;
+    return make_quantity<U>(static_cast<Materialized>(q.data_in(U{})));
 }
 
 //

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <type_traits>
 #include <utility>
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -39,14 +40,14 @@ namespace au {
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
 //
 template <typename UnitT, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity(T value) {
-    return QuantityMaker<UnitT>{}(value);
+AU_DEVICE_FUNC constexpr auto make_quantity(T &&value) {
+    return QuantityMaker<UnitT>{}(std::forward<T>(value));
 }
 
 template <typename Unit, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(T value) {
+AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(T &&value) {
     return std::conditional_t<IsUnitlessUnit<Unit>::value, stdx::identity, QuantityMaker<Unit>>{}(
-        value);
+        std::forward<T>(value));
 }
 
 // Trait to check whether two Quantity types are exactly equivalent.
@@ -157,11 +158,14 @@ class Quantity {
     static_assert(IsValidRep<Rep>::value, "Rep must meet our requirements for a rep");
 
     // IMPLICIT constructor for another Quantity of the same Dimension.
+    //
+    // We take `other` by `const &` (not by value): the conversion below reads its value to produce
+    // a fresh result, so copying `other` first would needlessly duplicate a heap-backed rep.
     template <typename OtherUnit,
               typename OtherRep,
               typename Enable = EnableIfImplicitOkIs<true, OtherUnit, OtherRep>>
     AU_DEVICE_FUNC constexpr Quantity(
-        Quantity<OtherUnit, OtherRep> other)  // NOLINT(runtime/explicit)
+        const Quantity<OtherUnit, OtherRep> &other)  // NOLINT(runtime/explicit)
         : value_{other.template in_impl<detail::UseImplicitConversion, Rep>(
               UnitT{}, check_for(ALL_RISKS))} {}
 
@@ -171,14 +175,15 @@ class Quantity {
               typename Enable = EnableIfImplicitOkIs<false, OtherUnit, OtherRep>,
               typename ThisUnusedTemplateParameterDistinguishesUsFromTheAboveConstructor = void>
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
-    explicit constexpr Quantity(Quantity<OtherUnit, OtherRep> other) = delete;
+    explicit constexpr Quantity(const Quantity<OtherUnit, OtherRep> &other) = delete;
 
     // Constructor for another Quantity with an explicit conversion risk policy.
     template <typename OtherUnit,
               typename OtherRep,
               typename RiskPolicyT,
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
-    AU_DEVICE_FUNC constexpr Quantity(Quantity<OtherUnit, OtherRep> other, RiskPolicyT policy)
+    AU_DEVICE_FUNC constexpr Quantity(const Quantity<OtherUnit, OtherRep> &other,
+                                      RiskPolicyT policy)
         : value_{other.template in<Rep>(UnitT{}, policy)} {}
 
     // Construct this Quantity with a value of exactly Zero.
@@ -618,7 +623,7 @@ class Quantity {
         return Op::apply_to(value_);
     }
 
-    AU_DEVICE_FUNC constexpr Quantity(Rep value) : value_{value} {}
+    AU_DEVICE_FUNC constexpr Quantity(Rep value) : value_{std::move(value)} {}
 
     Rep value_{};
 };
@@ -739,8 +744,8 @@ struct QuantityMaker {
     static constexpr auto unit = Unit{};
 
     template <typename T>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, T> operator()(T value) const {
-        return {value};
+    AU_DEVICE_FUNC constexpr Quantity<Unit, std::decay_t<T>> operator()(T &&value) const {
+        return Quantity<Unit, std::decay_t<T>>{std::forward<T>(value)};
     }
 
     template <typename U, typename R>

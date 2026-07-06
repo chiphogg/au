@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <type_traits>
+#include <utility>
+
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 #include <compare>
 #endif
@@ -43,8 +46,8 @@ namespace au {
 
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
 template <typename UnitT, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity_point(T value) {
-    return QuantityPointMaker<UnitT>{}(value);
+AU_DEVICE_FUNC constexpr auto make_quantity_point(T &&value) {
+    return QuantityPointMaker<UnitT>{}(std::forward<T>(value));
 }
 
 // Trait to check whether two QuantityPoint types are exactly equivalent.
@@ -110,11 +113,13 @@ class QuantityPoint {
     // this is to support `std::atomic`, which requires its types to be default-constructible.
     AU_DEVICE_FUNC constexpr QuantityPoint() noexcept : x_{} {}
 
+    // We take `other` by `const &` (not by value): the conversion below reads its value to produce
+    // a fresh result, so copying `other` first would needlessly duplicate a heap-backed rep.
     template <typename OtherUnit,
               typename OtherRep,
               typename Enable = EnableIfImplicitOkIs<true, OtherUnit, OtherRep>>
     AU_DEVICE_FUNC constexpr QuantityPoint(
-        QuantityPoint<OtherUnit, OtherRep> other)  // NOLINT(runtime/explicit)
+        const QuantityPoint<OtherUnit, OtherRep> &other)  // NOLINT(runtime/explicit)
         : QuantityPoint{other.template as<Rep>(unit)} {}
 
     template <typename OtherUnit,
@@ -122,14 +127,14 @@ class QuantityPoint {
               typename Enable = EnableIfImplicitOkIs<false, OtherUnit, OtherRep>,
               typename ThisUnusedTemplateParameterDistinguishesUsFromTheAboveConstructor = void>
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
-    constexpr explicit QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other) = delete;
+    constexpr explicit QuantityPoint(const QuantityPoint<OtherUnit, OtherRep> &other) = delete;
 
     // Construct from another QuantityPoint with an explicit conversion risk policy.
     template <typename OtherUnit,
               typename OtherRep,
               typename RiskPolicyT,
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
-    AU_DEVICE_FUNC constexpr QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other,
+    AU_DEVICE_FUNC constexpr QuantityPoint(const QuantityPoint<OtherUnit, OtherRep> &other,
                                            RiskPolicyT policy)
         : QuantityPoint{other.template as<Rep>(Unit{}, policy)} {}
 
@@ -284,7 +289,7 @@ class QuantityPoint {
         return intermediate_result.template in<OtherRep>(OtherUnit{}, policy);
     }
 
-    AU_DEVICE_FUNC constexpr explicit QuantityPoint(Diff x) : x_{x} {}
+    AU_DEVICE_FUNC constexpr explicit QuantityPoint(Diff x) : x_{std::move(x)} {}
 
     Diff x_;
 };
@@ -294,8 +299,8 @@ struct QuantityPointMaker {
     static constexpr auto unit = Unit{};
 
     template <typename T>
-    AU_DEVICE_FUNC constexpr auto operator()(T value) const {
-        return QuantityPoint<Unit, T>{make_quantity<Unit>(value)};
+    AU_DEVICE_FUNC constexpr auto operator()(T &&value) const {
+        return QuantityPoint<Unit, std::decay_t<T>>{make_quantity<Unit>(std::forward<T>(value))};
     }
 
     template <typename U, typename R>
