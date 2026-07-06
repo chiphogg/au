@@ -15,6 +15,7 @@
 #include "au/rep.hh"
 
 #include <complex>
+#include <cstdint>
 
 #include "au/chrono_interop.hh"
 #include "au/constant.hh"
@@ -169,6 +170,103 @@ TEST(ProductTypeOrVoid, GivesProductTypeForArithmeticInputs) {
 TEST(ProductTypeOrVoid, GivesVoidForInputsWithNoProductType) {
     StaticAssertTypeEq<void, ProductTypeOrVoid<IntWithNoOps, int>>();
     StaticAssertTypeEq<void, ProductTypeOrVoid<int, IntWithNoOps>>();
+}
+
+// The blast-radius guarantee: `NormalizeRep` is the identity on every standard integer type, so no
+// rep a user would normally write ever changes.
+TEST(NormalizeRep, IsIdentityOnStandardIntegerTypes) {
+    StaticAssertTypeEq<NormalizeRep<bool>, bool>();
+    StaticAssertTypeEq<NormalizeRep<char>, char>();
+    StaticAssertTypeEq<NormalizeRep<signed char>, signed char>();
+    StaticAssertTypeEq<NormalizeRep<unsigned char>, unsigned char>();
+    StaticAssertTypeEq<NormalizeRep<short>, short>();
+    StaticAssertTypeEq<NormalizeRep<unsigned short>, unsigned short>();
+    StaticAssertTypeEq<NormalizeRep<int>, int>();
+    StaticAssertTypeEq<NormalizeRep<unsigned int>, unsigned int>();
+    StaticAssertTypeEq<NormalizeRep<long>, long>();
+    StaticAssertTypeEq<NormalizeRep<unsigned long>, unsigned long>();
+    StaticAssertTypeEq<NormalizeRep<long long>, long long>();
+    StaticAssertTypeEq<NormalizeRep<unsigned long long>, unsigned long long>();
+
+    // Fixed-width aliases are just spellings of the above, so they round-trip too.
+    StaticAssertTypeEq<NormalizeRep<int8_t>, int8_t>();
+    StaticAssertTypeEq<NormalizeRep<uint16_t>, uint16_t>();
+    StaticAssertTypeEq<NormalizeRep<int32_t>, int32_t>();
+    StaticAssertTypeEq<NormalizeRep<uint64_t>, uint64_t>();
+}
+
+// Identity on non-integral reps: floating point and custom/user rep types are untouched.
+TEST(NormalizeRep, IsIdentityOnNonIntegralTypes) {
+    StaticAssertTypeEq<NormalizeRep<float>, float>();
+    StaticAssertTypeEq<NormalizeRep<double>, double>();
+    StaticAssertTypeEq<NormalizeRep<long double>, long double>();
+    StaticAssertTypeEq<NormalizeRep<std::complex<double>>, std::complex<double>>();
+    StaticAssertTypeEq<NormalizeRep<IntWithNoOps>, IntWithNoOps>();
+}
+
+// The mechanism that fires on GHS: the size+signedness remap that `NormalizeRep` uses for a
+// non-standard integral type (the portable stand-in for the non-portable attributed
+// `__packed uint16_t` that motivates the trait).  We exercise `FirstMatchingIntegerOr` directly,
+// since there is no portable way to spell an attributed integral type.
+TEST(NormalizeRep, RemapPicksStandardIntegerBySizeAndSignedness) {
+    StaticAssertTypeEq<FirstMatchingIntegerOr<sizeof(int16_t),
+                                              true,
+                                              /*Fallback=*/void,
+                                              std::int8_t,
+                                              std::uint8_t,
+                                              std::int16_t,
+                                              std::uint16_t,
+                                              std::int32_t,
+                                              std::uint32_t,
+                                              std::int64_t,
+                                              std::uint64_t>::type,
+                       int16_t>();
+    StaticAssertTypeEq<FirstMatchingIntegerOr<sizeof(uint16_t),
+                                              false,
+                                              /*Fallback=*/void,
+                                              std::int8_t,
+                                              std::uint8_t,
+                                              std::int16_t,
+                                              std::uint16_t,
+                                              std::int32_t,
+                                              std::uint32_t,
+                                              std::int64_t,
+                                              std::uint64_t>::type,
+                       uint16_t>();
+}
+
+// When no fixed-width standard integer matches (e.g. a hypothetical oversized integral), the remap
+// leaves the type untouched via its fallback, so exotic reps like `__int128` never become a hard
+// error.
+TEST(NormalizeRep, RemapFallsBackWhenNoStandardIntegerMatches) {
+    struct Tag {};  // stand-in for "some type"; only used as the fallback here
+    StaticAssertTypeEq<FirstMatchingIntegerOr<sizeof(std::int64_t) * 2,
+                                              true,
+                                              Tag,
+                                              std::int8_t,
+                                              std::int16_t,
+                                              std::int32_t,
+                                              std::int64_t>::type,
+                       Tag>();
+}
+
+// The chosen normalized type always preserves size and signedness (the correctness contract for the
+// remap path, checked across all integer sizes).
+TEST(NormalizeRep, PreservesSizeAndSignednessForAllStandardIntegers) {
+    auto check = [](auto tag) {
+        using T = decltype(tag);
+        using N = NormalizeRep<T>;
+        EXPECT_THAT(sizeof(N), Eq(sizeof(T)));
+        EXPECT_THAT(std::is_signed<N>::value, Eq(std::is_signed<T>::value));
+    };
+    check(int8_t{});
+    check(uint8_t{});
+    check(int16_t{});
+    check(uint16_t{});
+    check(int32_t{});
+    check(uint32_t{});
+    check(int64_t{});
+    check(uint64_t{});
 }
 
 }  // namespace detail

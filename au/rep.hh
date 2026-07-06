@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <type_traits>
 
 #include "au/fwd.hh"
@@ -58,6 +60,75 @@ struct IsAuType<::au::Quantity<U, R>> : std::true_type {};
 
 template <typename U, typename R>
 struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
+
+//
+// `NormalizeRep<T>`: strip vendor attributes (e.g. Green Hills' `__packed`) from an integral rep by
+// naming a clean standard type, rather than relying on `std::decay` to drop the attribute (which
+// GHS does not do).
+//
+// This is the IDENTITY on every genuine standard type --- integral or not --- so it is a provable
+// no-op for any rep a user would normally write.  It only rewrites a type that is integral yet
+// names *none* of the standard integer types (which is exactly what an attributed type such as
+// `__packed uint16_t` is), mapping it to the standard integer with the same `sizeof` and
+// signedness.
+//
+
+// Is `T` *exactly* one of the standard integer types?  An attributed integral type is `is_integral`
+// but compares unequal to all of these, so it is not "standard" by this definition.
+template <typename T>
+struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
+                                             std::is_same<T, char>,
+                                             std::is_same<T, signed char>,
+                                             std::is_same<T, unsigned char>,
+                                             std::is_same<T, char16_t>,
+                                             std::is_same<T, char32_t>,
+                                             std::is_same<T, wchar_t>,
+                                             std::is_same<T, short>,
+                                             std::is_same<T, unsigned short>,
+                                             std::is_same<T, int>,
+                                             std::is_same<T, unsigned int>,
+                                             std::is_same<T, long>,
+                                             std::is_same<T, unsigned long>,
+                                             std::is_same<T, long long>,
+                                             std::is_same<T, unsigned long long>> {};
+
+// Pick the fixed-width standard integer type (`int8_t` ... `int64_t` and unsigned counterparts)
+// with the given `sizeof` and signedness; if none matches, fall back to `Fallback` (so an exotic
+// integral such as `__int128`, whose width no fixed-width type covers, is left untouched rather
+// than becoming a hard error).  We use the fixed-width candidates deliberately: there is exactly
+// one per (size, signedness), so the selection is unambiguous --- no reliance on integer-rank
+// tie-breaking.  Since the fixed-width types are themselves typedefs to the fundamental types, the
+// resulting concrete type is exactly the platform's natural integer of that width.
+template <std::size_t Size, bool Signed, typename Fallback, typename... Candidates>
+struct FirstMatchingIntegerOr : stdx::type_identity<Fallback> {};
+
+template <std::size_t Size, bool Signed, typename Fallback, typename C, typename... Rest>
+struct FirstMatchingIntegerOr<Size, Signed, Fallback, C, Rest...>
+    : std::conditional_t<sizeof(C) == Size && (std::is_signed<C>::value == Signed),
+                         stdx::type_identity<C>,
+                         FirstMatchingIntegerOr<Size, Signed, Fallback, Rest...>> {};
+
+template <typename T, typename Enable = void>
+struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integral or already-standard: identity
+
+template <typename T>
+struct NormalizeRepImpl<
+    T,
+    std::enable_if_t<std::is_integral<T>::value && !IsStandardInteger<T>::value>>
+    : FirstMatchingIntegerOr<sizeof(T),
+                             std::is_signed<T>::value,
+                             T,
+                             std::int8_t,
+                             std::uint8_t,
+                             std::int16_t,
+                             std::uint16_t,
+                             std::int32_t,
+                             std::uint32_t,
+                             std::int64_t,
+                             std::uint64_t> {};
+
+template <typename T>
+using NormalizeRep = typename NormalizeRepImpl<T>::type;
 
 template <typename T>
 using CorrespondingUnit = typename CorrespondingQuantity<T>::Unit;
