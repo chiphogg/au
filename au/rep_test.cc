@@ -60,6 +60,17 @@ struct DivideTenByFloat {
     friend float operator/(const DivideTenByFloat &, float x) { return 10.0f / x; }
 };
 
+// A class rep with an implicit conversion to a standard integer.  This is the blast-radius trap:
+// under a naive conversion-based normalization it would be silently rewritten to `int`.  The
+// `!is_class` guard must keep it untouched.
+struct ConvertsToInt {
+    operator int() const { return 0; }  // NOLINT(google-explicit-constructor)
+};
+
+// An unscoped enum promotes to its underlying integer under unary `+`, so integer detection alone
+// would catch it.  The `!is_enum` guard must keep it untouched.
+enum UnscopedEnum : int { kUnscopedEnumValue = 0 };
+
 }  // namespace
 
 // Set up the correspondence between `MyMeters` and `QuantityI<Meters>`.
@@ -202,6 +213,42 @@ TEST(NormalizeRep, IsIdentityOnNonIntegralTypes) {
     StaticAssertTypeEq<NormalizeRep<long double>, long double>();
     StaticAssertTypeEq<NormalizeRep<std::complex<double>>, std::complex<double>>();
     StaticAssertTypeEq<NormalizeRep<IntWithNoOps>, IntWithNoOps>();
+}
+
+// Blast-radius guards: types that are integer-*adjacent* (they promote to, or convert to, an
+// integer) but are NOT themselves plain integers must be left completely untouched.  These are the
+// cases a naive `is_integral`-free normalization would silently rewrite.
+TEST(NormalizeRep, IsIdentityOnIntegerAdjacentClassEnumAndPointer) {
+    // Class with an implicit conversion to `int`: guarded by `!is_class`.
+    StaticAssertTypeEq<NormalizeRep<ConvertsToInt>, ConvertsToInt>();
+    // Unscoped enum (promotes to `int` under `+`): guarded by `!is_enum`.
+    StaticAssertTypeEq<NormalizeRep<UnscopedEnum>, UnscopedEnum>();
+    // Pointer (converts to `bool`; also `+ptr` is a pointer, not integral): left alone.
+    StaticAssertTypeEq<NormalizeRep<int *>, int *>();
+}
+
+// `rep_is_signed` recovers signedness by value (attribute-immune), not via `std::is_signed`.
+TEST(NormalizeRep, RepIsSignedMatchesStdIsSignedForStandardIntegers) {
+    EXPECT_THAT(rep_is_signed<signed char>(), IsTrue());
+    EXPECT_THAT(rep_is_signed<short>(), IsTrue());
+    EXPECT_THAT(rep_is_signed<int>(), IsTrue());
+    EXPECT_THAT(rep_is_signed<long long>(), IsTrue());
+    EXPECT_THAT(rep_is_signed<unsigned char>(), IsFalse());
+    EXPECT_THAT(rep_is_signed<unsigned short>(), IsFalse());
+    EXPECT_THAT(rep_is_signed<unsigned int>(), IsFalse());
+    EXPECT_THAT(rep_is_signed<unsigned long long>(), IsFalse());
+}
+
+// `ShouldNormalizeRep` is false for everything we can spell portably (standard integers are already
+// standard; floats/classes/enums are excluded).  It goes true only for an integer-behaving type
+// that names no standard integer --- i.e. an attributed type, which we cannot spell portably.
+TEST(NormalizeRep, ShouldNormalizeRepIsFalseForAllPortablyExpressibleTypes) {
+    EXPECT_THAT(ShouldNormalizeRep<int>::value, IsFalse());
+    EXPECT_THAT(ShouldNormalizeRep<uint16_t>::value, IsFalse());
+    EXPECT_THAT(ShouldNormalizeRep<double>::value, IsFalse());
+    EXPECT_THAT(ShouldNormalizeRep<ConvertsToInt>::value, IsFalse());
+    EXPECT_THAT(ShouldNormalizeRep<UnscopedEnum>::value, IsFalse());
+    EXPECT_THAT(ShouldNormalizeRep<IntWithNoOps>::value, IsFalse());
 }
 
 // The mechanism that fires on GHS: the size+signedness remap that `NormalizeRep` uses for a

@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <utility>
 
 #include "au/fwd.hh"
 #include "au/stdx/experimental/is_detected.hh"
@@ -67,14 +68,31 @@ struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
 // GHS does not do).
 //
 // This is the IDENTITY on every genuine standard type --- integral or not --- so it is a provable
-// no-op for any rep a user would normally write.  It only rewrites a type that is integral yet
-// names *none* of the standard integer types (which is exactly what an attributed type such as
-// `__packed uint16_t` is), mapping it to the standard integer with the same `sizeof` and
-// signedness.
+// no-op for any rep a user would normally write.  It only rewrites a type that behaves like an
+// integer yet names *none* of the standard integer types (which is exactly what an attributed type
+// such as `__packed uint16_t` is), mapping it to the fixed-width standard integer with the same
+// `sizeof` and signedness.
+//
+// CRITICAL: we must NOT gate this on `std::is_integral<T>`.  The whole reason `std::decay` fails to
+// help on GHS is that GHS keeps vendor attributes on the type --- and it *also* mis-answers
+// `std::is_integral` for such a type (it reports `false`).  So a normalization gated on
+// `is_integral` silently no-ops on exactly the types it exists to fix.  Instead we detect
+// integer-ness through mechanisms the attribute does not defeat:
+//
+//   * Integer-ness: `is_integral<decltype(+declval<T>())>`.  Unary `+` triggers integral promotion,
+//     which yields a fresh prvalue of a *standard* type --- this reliably strips the vendor
+//     attribute (au already depends on exactly this behavior in `io.hh`).  We then ask
+//     `is_integral` about that clean, promoted type, which GHS answers correctly.
+//   * Width: `sizeof(T)` --- a core operator, unaffected by the attribute.
+//   * Signedness: the value test `T(-1) < T(0)` --- core arithmetic, not `std::is_signed`.
+//
+// We additionally leave every standard type untouched, and never normalize class, union, or enum
+// types (those are excluded up front; `is_class`/`is_union`/`is_enum` correctly answer `false` for
+// an attributed *integer*, so this exclusion does not interfere with the case we care about).
 //
 
-// Is `T` *exactly* one of the standard integer types?  An attributed integral type is `is_integral`
-// but compares unequal to all of these, so it is not "standard" by this definition.
+// Is `T` *exactly* one of the standard integer types?  An attributed integral type compares unequal
+// to all of these, so it is not "standard" by this definition.
 template <typename T>
 struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
                                              std::is_same<T, char>,
@@ -91,6 +109,31 @@ struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
                                              std::is_same<T, unsigned long>,
                                              std::is_same<T, long long>,
                                              std::is_same<T, unsigned long long>> {};
+
+// The type `T` promotes to under unary `+`.  Integral promotion produces a fresh standard prvalue,
+// which launders any vendor attribute off of `T`.  (Ill-formed --- hence a SFINAE removal below ---
+// for types with no unary `+`, which is exactly what we want: they are not integers to normalize.)
+template <typename T>
+using PromotedRep = decltype(+std::declval<T>());
+
+// Attribute-immune signedness: for an unsigned type `T(-1)` wraps to the maximum value (not `< 0`);
+// for a signed type it is `-1`.  Uses arithmetic, not `std::is_signed` (which the attribute may
+// defeat on GHS).
+template <typename T>
+constexpr bool rep_is_signed() {
+    return static_cast<T>(-1) < static_cast<T>(0);
+}
+
+// Should we normalize `T`?  True exactly for an integer-behaving type that is not already a
+// standard integer and is not a class/union/enum.  See the mechanism notes above for why none of
+// these predicates route through `is_integral<T>` / `is_signed<T>` on the attributed type itself.
+template <typename T, typename Enable = void>
+struct ShouldNormalizeRep : std::false_type {};  // no unary `+` (e.g. most class reps): leave alone
+template <typename T>
+struct ShouldNormalizeRep<T, stdx::void_t<PromotedRep<T>>>
+    : stdx::bool_constant<std::is_integral<PromotedRep<T>>::value && !IsStandardInteger<T>::value &&
+                          !std::is_class<T>::value && !std::is_union<T>::value &&
+                          !std::is_enum<T>::value> {};
 
 // Pick the fixed-width standard integer type (`int8_t` ... `int64_t` and unsigned counterparts)
 // with the given `sizeof` and signedness; if none matches, fall back to `Fallback` (so an exotic
@@ -109,14 +152,12 @@ struct FirstMatchingIntegerOr<Size, Signed, Fallback, C, Rest...>
                          FirstMatchingIntegerOr<Size, Signed, Fallback, Rest...>> {};
 
 template <typename T, typename Enable = void>
-struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integral or already-standard: identity
+struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integer or already-standard: identity
 
 template <typename T>
-struct NormalizeRepImpl<
-    T,
-    std::enable_if_t<std::is_integral<T>::value && !IsStandardInteger<T>::value>>
+struct NormalizeRepImpl<T, std::enable_if_t<ShouldNormalizeRep<T>::value>>
     : FirstMatchingIntegerOr<sizeof(T),
-                             std::is_signed<T>::value,
+                             rep_is_signed<T>(),
                              T,
                              std::int8_t,
                              std::uint8_t,
