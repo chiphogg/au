@@ -381,18 +381,25 @@ class Quantity {
     }
 
     // Multiplication for dimensioned quantities.
+    //
+    // We take `q` by reference and read its value via `data_in` (a reference), rather than by value
+    // via `in` (a copy).  For lazy-expression reps (e.g. Eigen), the product node binds its operand
+    // by reference; a by-value operand would be a temporary that dies when this function returns,
+    // leaving the result's rep dangling.  `data_in` instead references the caller's live object.
     template <typename OtherUnit, typename OtherRep>
-    AU_DEVICE_FUNC constexpr auto operator*(Quantity<OtherUnit, OtherRep> q) const {
+    AU_DEVICE_FUNC constexpr auto operator*(const Quantity<OtherUnit, OtherRep> &q) const {
         return make_quantity_unless_unitless<UnitProduct<Unit, OtherUnit>>(value_ *
-                                                                           q.in(OtherUnit{}));
+                                                                           q.data_in(OtherUnit{}));
     }
 
     // Division for dimensioned quantities.
+    //
+    // See `operator*` above for why `q` is taken by reference and read via `data_in`.
     template <typename OtherUnit, typename OtherRep>
-    AU_DEVICE_FUNC constexpr auto operator/(Quantity<OtherUnit, OtherRep> q) const {
+    AU_DEVICE_FUNC constexpr auto operator/(const Quantity<OtherUnit, OtherRep> &q) const {
         warn_if_integer_division<OtherUnit, OtherRep>();
         return make_quantity_unless_unitless<UnitQuotient<Unit, OtherUnit>>(value_ /
-                                                                            q.in(OtherUnit{}));
+                                                                            q.data_in(OtherUnit{}));
     }
 
     // Copy and move assignment: lvalue-only.
@@ -903,13 +910,14 @@ AU_DEVICE_FUNC constexpr decltype(auto) ref_or_scaled_copy(TargetUnit, const Qua
 // preserving its own signedness so that mixed signed/unsigned comparisons stay correct.
 //
 // For *non-arithmetic* reps we take the same stance as `operator+`'s `ExplicitRepFor`: we have no
-// meaningful common rep, so we never relocate.  Instead we bring each operand to the common unit via
-// `ref_or_scaled_copy` (which keeps references / expression-template laziness) and let the rep's own
-// comparison operator do the work.  This is what lets us compare Eigen-backed quantities: it lights
-// up `==` and `!=` (which Eigen defines for heterogeneous expressions, including two *distinct*
-// expression templates, which have no `std::common_type` at all), while order comparisons stay a
-// compile error, as they should for vector reps.  It also avoids ever choosing an Eigen *expression*
-// type as an explicit host rep, which is not constructible from the scaled value.
+// meaningful common rep, so we never relocate.  Instead we bring each operand to the common unit
+// via `ref_or_scaled_copy` (which keeps references / expression-template laziness) and let the
+// rep's own comparison operator do the work.  This is what lets us compare Eigen-backed quantities:
+// it lights up `==` and `!=` (which Eigen defines for heterogeneous expressions, including two
+// *distinct* expression templates, which have no `std::common_type` at all), while order
+// comparisons stay a compile error, as they should for vector reps.  It also avoids ever choosing
+// an Eigen *expression* type as an explicit host rep, which is not constructible from the scaled
+// value.
 template <typename Op,
           typename U1,
           typename U2,
