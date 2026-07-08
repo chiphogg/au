@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cmath>
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <limits>
@@ -27,7 +28,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 50b97bf
+// Version identifier: c994ac3
 // <iostream> support: INCLUDED
 // <format> support: INCLUDED
 // List of included units:
@@ -645,11 +646,18 @@ constexpr uint64_t sub_mod(uint64_t a, uint64_t b, uint64_t n) {
     }
 }
 
-// (a * b) % n
+// (a * b) % n, computed without ever overflowing `uint64_t`.
+//
+// This is a portable fallback for `mul_mod` (below), used when no wider integer type is available.
+// It reduces the product in "negative space", splitting `b` into chunks small enough that every
+// intermediate product fits in a `uint64_t` and recursing on a strictly smaller problem.  The
+// recursion is bounded to `O(log b)` depth (after the first step, each level at least halves `b`),
+// which is what makes it cheap enough to use during compile-time prime factorization (see
+// https://github.com/aurora-opensource/au/issues/328).
 //
 // Precondition: (a < n).
 // Precondition: (b < n).
-constexpr uint64_t mul_mod(uint64_t a, uint64_t b, uint64_t n) {
+constexpr uint64_t mul_mod_via_chunking(uint64_t a, uint64_t b, uint64_t n) {
     // Start by trying the simplest case, where everything "fits".
     if (b == 0u || a < std::numeric_limits<uint64_t>::max() / b) {
         return (a * b) % n;
@@ -661,13 +669,30 @@ constexpr uint64_t mul_mod(uint64_t a, uint64_t b, uint64_t n) {
     uint64_t chunk_size = n / a;
     uint64_t num_chunks = b / chunk_size;
     uint64_t negative_chunk = n - (a * chunk_size);  // == n % a  (but this should be cheaper)
-    uint64_t chunk_result = n - mul_mod(negative_chunk, num_chunks, n);
+    uint64_t chunk_result = n - mul_mod_via_chunking(negative_chunk, num_chunks, n);
 
     // Compute the leftover.  (We don't need to recurse, because we know it will fit.)
     uint64_t leftover = b - num_chunks * chunk_size;
     uint64_t leftover_result = (a * leftover) % n;
 
     return add_mod(chunk_result, leftover_result, n);
+}
+
+// (a * b) % n
+//
+// Precondition: (a < n).
+// Precondition: (b < n).
+constexpr uint64_t mul_mod(uint64_t a, uint64_t b, uint64_t n) {
+#if defined(__SIZEOF_INT128__)
+    // If the compiler provides a 128-bit integer type, we can form the full-width product and
+    // reduce it in a single step.  This is dramatically cheaper at compile time than the portable
+    // fallback, which matters because `mul_mod` dominates the cost of compile-time prime
+    // factorization (see https://github.com/aurora-opensource/au/issues/328).
+    return static_cast<uint64_t>((static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b)) % n);
+#else
+    // No wider integer type is available (e.g. MSVC), so fall back to the portable algorithm.
+    return mul_mod_via_chunking(a, b, n);
+#endif
 }
 
 // (a / 2) % n
@@ -976,6 +1001,119 @@ struct IsAuType<::au::Quantity<U, R>> : std::true_type {};
 
 template <typename U, typename R>
 struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
+
+//
+// `NormalizeRep<T>`: strip vendor attributes (e.g. Green Hills' `__packed`) from an integral rep by
+// naming a clean standard type, rather than relying on `std::decay` to drop the attribute (which
+// GHS does not do).
+//
+// This is the _identity_ on every genuine standard type (integral or not), so it is a provable
+// no-op for any rep a user would normally write.  It only rewrites a type that behaves like an
+// integer, yet names *none* of the standard integer types.  This is the telltale sign of attributed
+// types, such as `__packed uint16_t`.  In these cases, we map it to the fixed-width standard
+// integer with the same `sizeof` and signedness.
+//
+// Critically, gating this on `std::is_integral<T>` won't work.  The whole reason `std::decay` fails
+// to help on GHS is that GHS keeps vendor attributes on the type --- and it *also* mis-answers
+// `std::is_integral` for such a type (it reports `false`).  So a normalization gated on
+// `is_integral` not only won't be reliable, but also fails on the motivating example.  Instead we
+// detect integer-ness through mechanisms the attribute does not defeat:
+//
+//   * Integer-ness: `is_integral<decltype(+declval<T>())>`.  Unary `+` triggers integral promotion,
+//     which yields a fresh prvalue of a *standard* type --- this reliably strips the vendor
+//     attribute.  (Note that Au already depends on exactly this behavior in `io.hh`).  We then ask
+//     `is_integral` about that clean, promoted type, which GHS answers correctly.
+//   * Width: `sizeof(T)` --- a core operator, unaffected by the attribute.
+//   * Signedness: the value test `T(-1) < T(0)` --- core arithmetic, not `std::is_signed`.
+//
+// We additionally leave every standard type untouched, and never normalize class, union, or enum
+// types, to keep this fix as targeted as possible.
+//
+
+// Is `T` *exactly* one of the standard integer types?  An attributed integral type compares unequal
+// to all of these, so it is not "standard" by this definition.
+template <typename T>
+struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
+                                             std::is_same<T, char>,
+                                             std::is_same<T, signed char>,
+                                             std::is_same<T, unsigned char>,
+#if defined(__cpp_char8_t)
+                                             std::is_same<T, char8_t>,
+#endif
+                                             std::is_same<T, char16_t>,
+                                             std::is_same<T, char32_t>,
+                                             std::is_same<T, wchar_t>,
+                                             std::is_same<T, short>,
+                                             std::is_same<T, unsigned short>,
+                                             std::is_same<T, int>,
+                                             std::is_same<T, unsigned int>,
+                                             std::is_same<T, long>,
+                                             std::is_same<T, unsigned long>,
+                                             std::is_same<T, long long>,
+                                             std::is_same<T, unsigned long long>> {
+};
+
+// The type `T` promotes to under unary `+`.  Integral promotion produces a fresh standard prvalue,
+// which launders any vendor attribute off of `T`.  (Ill-formed --- hence a SFINAE removal below ---
+// for types with no unary `+`, which is exactly what we want: they are not integers to normalize.)
+template <typename T>
+using PromotedRep = decltype(+std::declval<T>());
+
+// Attribute-immune signedness: for an unsigned type `T(-1)` wraps to the maximum value (not `< 0`);
+// for a signed type it is `-1`.  Uses arithmetic, not `std::is_signed` (which the attribute may
+// defeat on GHS).
+template <typename T>
+constexpr bool rep_is_signed() {
+    return static_cast<T>(-1) < static_cast<T>(0);
+}
+
+// Should we normalize `T`?  True exactly for an integer-behaving type that is not already a
+// standard integer and is not a class/union/enum.  See the mechanism notes above for why none of
+// these predicates route through `is_integral<T>` / `is_signed<T>` on the attributed type itself.
+template <typename T, typename Enable = void>
+struct ShouldNormalizeRep : std::false_type {};  // no unary `+` (e.g. most class reps): leave alone
+template <typename T>
+struct ShouldNormalizeRep<T, stdx::void_t<PromotedRep<T>>>
+    : stdx::conjunction<std::is_integral<PromotedRep<T>>,
+                        stdx::negation<IsStandardInteger<T>>,
+                        stdx::negation<std::is_class<T>>,
+                        stdx::negation<std::is_union<T>>,
+                        stdx::negation<std::is_enum<T>>> {};
+
+// Pick the fixed-width standard integer type (`int8_t` ... `int64_t` and unsigned counterparts)
+// with the given `sizeof` and signedness; if none matches, fall back to `Fallback` (so an exotic
+// integral such as `__int128`, whose width no fixed-width type covers, is left untouched rather
+// than becoming a hard error).  We use the fixed-width candidates deliberately: there is exactly
+// one per (size, signedness), so the selection is unambiguous --- no reliance on integer-rank
+// tie-breaking.
+template <typename Fallback, std::size_t Size, bool Signed, typename... Candidates>
+struct FirstMatchingIntegerOr : stdx::type_identity<Fallback> {};
+
+template <typename Fallback, std::size_t Size, bool Signed, typename C, typename... Rest>
+struct FirstMatchingIntegerOr<Fallback, Size, Signed, C, Rest...>
+    : std::conditional_t<sizeof(C) == Size && (std::is_signed<C>::value == Signed),
+                         stdx::type_identity<C>,
+                         FirstMatchingIntegerOr<Fallback, Size, Signed, Rest...>> {};
+
+template <typename T, typename Enable = void>
+struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integer or already-standard: identity
+
+template <typename T>
+struct NormalizeRepImpl<T, std::enable_if_t<ShouldNormalizeRep<T>::value>>
+    : FirstMatchingIntegerOr<T,
+                             sizeof(T),
+                             rep_is_signed<T>(),
+                             std::int8_t,
+                             std::uint8_t,
+                             std::int16_t,
+                             std::uint16_t,
+                             std::int32_t,
+                             std::uint32_t,
+                             std::int64_t,
+                             std::uint64_t> {};
+
+template <typename T>
+using NormalizeRep = typename NormalizeRepImpl<T>::type;
 
 template <typename T>
 using CorrespondingUnit = typename CorrespondingQuantity<T>::Unit;
@@ -2717,6 +2855,63 @@ constexpr std::uintmax_t absolute_diff(std::uintmax_t a, std::uintmax_t b) {
     return a > b ? a - b : b - a;
 }
 
+// A single attempt at Pollard's rho, using Brent's cycle detection method, with the polynomial
+// `x^2 + t`.  Returns a nontrivial factor of `n` on success, or `n` itself if this particular
+// parameterization fails to find one (in which case the caller should retry with a different `t`).
+//
+// To keep the number of (relatively expensive) `gcd` calls small, we accumulate the product of the
+// position differences modulo `n` across a batch of steps, and take only a single `gcd` per batch.
+// This is the standard batched form of Brent's algorithm; it trades many `gcd` calls for many
+// (much cheaper) `mul_mod` calls, which is what makes it tractable at compile time.  See
+// <https://github.com/aurora-opensource/au/issues/328>.
+//
+// Precondition: `n` is known to be composite.
+constexpr std::uintmax_t pollard_rho_attempt(std::uintmax_t n, std::uintmax_t t) {
+    constexpr std::uintmax_t batch_size = 128u;
+
+    std::uintmax_t anchor = 2u;
+    std::uintmax_t cursor = 2u;
+    std::uintmax_t batch_start = 2u;
+    std::uintmax_t diff_product = 1u;
+    std::uintmax_t factor = 1u;
+    std::uintmax_t segment_length = 1u;
+
+    do {
+        anchor = cursor;
+        for (std::uintmax_t i = 0u; i < segment_length; ++i) {
+            cursor = x_squared_plus_t_mod_n(cursor, t, n);
+        }
+
+        std::uintmax_t offset_in_segment = 0u;
+        while (offset_in_segment < segment_length && factor == 1u) {
+            batch_start = cursor;
+            const std::uintmax_t remaining = segment_length - offset_in_segment;
+            const std::uintmax_t steps = (batch_size < remaining) ? batch_size : remaining;
+            for (std::uintmax_t i = 0u; i < steps; ++i) {
+                cursor = x_squared_plus_t_mod_n(cursor, t, n);
+                diff_product = mul_mod(diff_product, absolute_diff(anchor, cursor), n);
+            }
+            factor = gcd(diff_product, n);
+            offset_in_segment += batch_size;
+        }
+
+        segment_length *= 2u;
+    } while (factor == 1u);
+
+    // If the batched product happened to accumulate _all_ of `n`'s factors at once (`factor == n`),
+    // the batch hid the real factor.  Recover it by walking the same steps one at a time, taking a
+    // `gcd` after each, until we isolate a single nontrivial factor.
+    if (factor == n) {
+        factor = 1u;
+        do {
+            batch_start = x_squared_plus_t_mod_n(batch_start, t, n);
+            factor = gcd(absolute_diff(anchor, batch_start), n);
+        } while (factor == 1u);
+    }
+
+    return factor;
+}
+
 // Pollard's rho algorithm, using Brent's cycle detection method.
 //
 // Precondition: `n` is known to be composite.
@@ -2726,23 +2921,8 @@ constexpr std::uintmax_t find_pollard_rho_factor(std::uintmax_t n) {
     // will succeed on the first iteration, and we don't expect that any will _ever_ come anywhere
     // _near_ to hitting this limit.
     for (std::uintmax_t t = 1u; t < n / 2u; ++t) {
-        std::size_t max_cycle_length = 1u;
-        std::size_t cycle_length = 1u;
-        std::uintmax_t tortoise = 2u;
-        std::uintmax_t hare = x_squared_plus_t_mod_n(tortoise, t, n);
-
-        std::uintmax_t factor = gcd(n, absolute_diff(tortoise, hare));
-        while (factor == 1u) {
-            if (max_cycle_length == cycle_length) {
-                tortoise = hare;
-                max_cycle_length *= 2u;
-                cycle_length = 0u;
-            }
-            hare = x_squared_plus_t_mod_n(hare, t, n);
-            ++cycle_length;
-            factor = gcd(n, absolute_diff(tortoise, hare));
-        }
-        if (factor < n) {
+        const std::uintmax_t factor = pollard_rho_attempt(n, t);
+        if (factor != n) {
             return factor;
         }
     }
@@ -5678,6 +5858,7 @@ struct IsUnitRatioRepresentableIn : IsUnitRatioRepresentableInImpl<T, U1, U2> {}
 }  // namespace au
 
 
+
 namespace au {
 namespace detail {
 
@@ -5745,9 +5926,18 @@ template <typename T, typename U>
 struct OpOutputImpl<StaticCast<T, U>> : stdx::type_identity<U> {};
 
 // `StaticCast<T, U>` operation:
+//
+// This is an eager (materializing) operation: it produces a fresh `U`.  We take the input by
+// forwarding reference and forward it into the cast, so that when the chain hands us an rvalue
+// (e.g. the materialized result of a previous step), we *move* rather than copy a heap-backed rep.
 template <typename T, typename U>
 struct StaticCast {
-    static AU_DEVICE_FUNC constexpr U apply_to(const T &value) { return static_cast<U>(value); }
+    template <typename V>
+    static AU_DEVICE_FUNC constexpr U apply_to(V &&value) {
+        static_assert(std::is_same<std::decay_t<V>, std::decay_t<T>>::value,
+                      "Internal library error: input type does not match operation input");
+        return static_cast<U>(std::forward<V>(value));
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5760,9 +5950,16 @@ template <typename T, typename U>
 struct OpOutputImpl<ImplicitConversion<T, U>> : stdx::type_identity<U> {};
 
 // `ImplicitConversion<T, U>` operation:
+//
+// Like `StaticCast`, this is eager: forward the input so an rvalue is moved into the produced `U`.
 template <typename T, typename U>
 struct ImplicitConversion {
-    static AU_DEVICE_FUNC constexpr U apply_to(const T &value) { return value; }
+    template <typename V>
+    static AU_DEVICE_FUNC constexpr U apply_to(V &&value) {
+        static_assert(std::is_same<std::decay_t<V>, std::decay_t<T>>::value,
+                      "Internal library error: input type does not match operation input");
+        return std::forward<V>(value);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5788,9 +5985,19 @@ struct MultiplyTypeBy {
 };
 
 // Specialization for identity magnitude: just return the value unchanged.
+//
+// This is eager (it produces a `T` by value), so forward the input: an rvalue coming from a prior
+// step in the chain is moved through rather than deep-copied.  (The non-identity `MultiplyTypeBy`
+// above stays a `const T &` overload on purpose: it returns a *lazy* expression that refers to its
+// input, so it must not take ownership of --- or dangle past --- that input.)
 template <typename T>
 struct MultiplyTypeBy<T, Magnitude<>> {
-    static AU_DEVICE_FUNC constexpr T apply_to(const T &value) { return value; }
+    template <typename V>
+    static AU_DEVICE_FUNC constexpr T apply_to(V &&value) {
+        static_assert(std::is_same<std::decay_t<V>, std::decay_t<T>>::value,
+                      "Internal library error: input type does not match operation input");
+        return std::forward<V>(value);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5841,17 +6048,24 @@ struct OpOutputImpl<OpSequenceImpl<Op, Ops...>>
 template <typename OnlyOp>
 struct OpOutputImpl<OpSequenceImpl<OnlyOp>> : stdx::type_identity<OpOutput<OnlyOp>> {};
 
+// We thread the value through the chain by forwarding reference.  Each step's result is a prvalue
+// (for eager steps) or a lazy expression referring to a still-live operand; forwarding lets the
+// next step *move* an eager result rather than copy it.  The very first step still receives the
+// caller's lvalue (e.g. a `Quantity`'s stored member), so it copies/converts exactly once --- that
+// inherent conversion pass is unavoidable --- while every subsequent step moves.
 template <typename Op>
 struct OpSequenceImpl<Op> {
-    static AU_DEVICE_FUNC constexpr auto apply_to(const OpInput<OpSequenceImpl> &value) {
-        return Op::apply_to(value);
+    template <typename V>
+    static AU_DEVICE_FUNC constexpr auto apply_to(V &&value) {
+        return Op::apply_to(std::forward<V>(value));
     }
 };
 
 template <typename Op, typename... Ops>
 struct OpSequenceImpl<Op, Ops...> {
-    static AU_DEVICE_FUNC constexpr auto apply_to(const OpInput<OpSequenceImpl> &value) {
-        return OpSequenceImpl<Ops...>::apply_to(Op::apply_to(value));
+    template <typename V>
+    static AU_DEVICE_FUNC constexpr auto apply_to(V &&value) {
+        return OpSequenceImpl<Ops...>::apply_to(Op::apply_to(std::forward<V>(value)));
     }
 };
 
@@ -7535,15 +7749,35 @@ namespace au {
 //
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
 //
+// lvalue: copy.  (Never move something the caller still owns; also the only thing that works for a
+// packed field, which can't bind to a non-const reference.)
 template <typename UnitT, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity(T value) {
+AU_DEVICE_FUNC constexpr auto make_quantity(const T &value) {
     return QuantityMaker<UnitT>{}(value);
 }
 
+// rvalue: move.
+template <typename UnitT,
+          typename T,
+          typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
+AU_DEVICE_FUNC constexpr auto make_quantity(T &&value) {
+    return QuantityMaker<UnitT>{}(std::move(value));
+}
+
+// lvalue: copy.  (See `make_quantity` above.)
 template <typename Unit, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(T value) {
+AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(const T &value) {
     return std::conditional_t<IsUnitlessUnit<Unit>::value, stdx::identity, QuantityMaker<Unit>>{}(
         value);
+}
+
+// rvalue: move.
+template <typename Unit,
+          typename T,
+          typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
+AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(T &&value) {
+    return std::conditional_t<IsUnitlessUnit<Unit>::value, stdx::identity, QuantityMaker<Unit>>{}(
+        std::move(value));
 }
 
 // Trait to check whether two Quantity types are exactly equivalent.
@@ -7658,7 +7892,7 @@ class Quantity {
               typename OtherRep,
               typename Enable = EnableIfImplicitOkIs<true, OtherUnit, OtherRep>>
     AU_DEVICE_FUNC constexpr Quantity(
-        Quantity<OtherUnit, OtherRep> other)  // NOLINT(runtime/explicit)
+        const Quantity<OtherUnit, OtherRep> &other)  // NOLINT(runtime/explicit)
         : value_{other.template in_impl<detail::UseImplicitConversion, Rep>(
               UnitT{}, check_for(ALL_RISKS))} {}
 
@@ -7668,14 +7902,15 @@ class Quantity {
               typename Enable = EnableIfImplicitOkIs<false, OtherUnit, OtherRep>,
               typename ThisUnusedTemplateParameterDistinguishesUsFromTheAboveConstructor = void>
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
-    explicit constexpr Quantity(Quantity<OtherUnit, OtherRep> other) = delete;
+    explicit constexpr Quantity(const Quantity<OtherUnit, OtherRep> &other) = delete;
 
     // Constructor for another Quantity with an explicit conversion risk policy.
     template <typename OtherUnit,
               typename OtherRep,
               typename RiskPolicyT,
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
-    AU_DEVICE_FUNC constexpr Quantity(Quantity<OtherUnit, OtherRep> other, RiskPolicyT policy)
+    AU_DEVICE_FUNC constexpr Quantity(const Quantity<OtherUnit, OtherRep> &other,
+                                      RiskPolicyT policy)
         : value_{other.template in<Rep>(UnitT{}, policy)} {}
 
     // Construct this Quantity with a value of exactly Zero.
@@ -8115,7 +8350,7 @@ class Quantity {
         return Op::apply_to(value_);
     }
 
-    AU_DEVICE_FUNC constexpr Quantity(Rep value) : value_{value} {}
+    AU_DEVICE_FUNC constexpr Quantity(Rep value) : value_{std::move(value)} {}
 
     Rep value_{};
 };
@@ -8235,9 +8470,18 @@ struct QuantityMaker {
     using Unit = UnitT;
     static constexpr auto unit = Unit{};
 
-    template <typename T>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, T> operator()(T value) const {
-        return {value};
+    // lvalue: copy. (See `make_quantity` above.)
+    template <typename T, typename Rep = detail::NormalizeRep<std::decay_t<T>>>
+    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(const T &value) const {
+        return Quantity<Unit, Rep>{value};
+    }
+
+    // rvalue: move.
+    template <typename T,
+              typename Rep = detail::NormalizeRep<std::decay_t<T>>,
+              typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
+    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(T &&value) const {
+        return Quantity<Unit, Rep>{std::move(value)};
     }
 
     template <typename U, typename R>
@@ -9471,6 +9715,7 @@ AU_DEVICE_FUNC constexpr auto operator-(Zero, Constant<U>) {
 
 }  // namespace au
 
+
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 #endif
 
@@ -9492,9 +9737,19 @@ namespace au {
 // `std::chrono::duration`.
 
 // Make a Quantity of the given Unit, which has this value as measured in the Unit.
+// lvalue: copy.  (Never move something the caller still owns; also the only thing that works for a
+// packed field, which can't bind to a non-const reference.)
 template <typename UnitT, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity_point(T value) {
+AU_DEVICE_FUNC constexpr auto make_quantity_point(const T &value) {
     return QuantityPointMaker<UnitT>{}(value);
+}
+
+// rvalue: move.
+template <typename UnitT,
+          typename T,
+          typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
+AU_DEVICE_FUNC constexpr auto make_quantity_point(T &&value) {
+    return QuantityPointMaker<UnitT>{}(std::move(value));
 }
 
 // Trait to check whether two QuantityPoint types are exactly equivalent.
@@ -9564,7 +9819,7 @@ class QuantityPoint {
               typename OtherRep,
               typename Enable = EnableIfImplicitOkIs<true, OtherUnit, OtherRep>>
     AU_DEVICE_FUNC constexpr QuantityPoint(
-        QuantityPoint<OtherUnit, OtherRep> other)  // NOLINT(runtime/explicit)
+        const QuantityPoint<OtherUnit, OtherRep> &other)  // NOLINT(runtime/explicit)
         : QuantityPoint{other.template as<Rep>(unit)} {}
 
     template <typename OtherUnit,
@@ -9572,14 +9827,14 @@ class QuantityPoint {
               typename Enable = EnableIfImplicitOkIs<false, OtherUnit, OtherRep>,
               typename ThisUnusedTemplateParameterDistinguishesUsFromTheAboveConstructor = void>
     // Deleted: use `.as<NewRep>(new_unit)` to force a cast.
-    constexpr explicit QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other) = delete;
+    constexpr explicit QuantityPoint(const QuantityPoint<OtherUnit, OtherRep> &other) = delete;
 
     // Construct from another QuantityPoint with an explicit conversion risk policy.
     template <typename OtherUnit,
               typename OtherRep,
               typename RiskPolicyT,
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
-    AU_DEVICE_FUNC constexpr QuantityPoint(QuantityPoint<OtherUnit, OtherRep> other,
+    AU_DEVICE_FUNC constexpr QuantityPoint(const QuantityPoint<OtherUnit, OtherRep> &other,
                                            RiskPolicyT policy)
         : QuantityPoint{other.template as<Rep>(Unit{}, policy)} {}
 
@@ -9734,7 +9989,7 @@ class QuantityPoint {
         return intermediate_result.template in<OtherRep>(OtherUnit{}, policy);
     }
 
-    AU_DEVICE_FUNC constexpr explicit QuantityPoint(Diff x) : x_{x} {}
+    AU_DEVICE_FUNC constexpr explicit QuantityPoint(Diff x) : x_{std::move(x)} {}
 
     Diff x_;
 };
@@ -9743,9 +9998,19 @@ template <typename Unit>
 struct QuantityPointMaker {
     static constexpr auto unit = Unit{};
 
-    template <typename T>
-    AU_DEVICE_FUNC constexpr auto operator()(T value) const {
-        return QuantityPoint<Unit, T>{make_quantity<Unit>(value)};
+    // lvalue: copy.  (Never move something the caller still owns; also the only thing that works
+    // for a packed field, which can't bind to a non-const reference.)
+    template <typename T, typename Rep = detail::NormalizeRep<std::decay_t<T>>>
+    AU_DEVICE_FUNC constexpr auto operator()(const T &value) const {
+        return QuantityPoint<Unit, Rep>{make_quantity<Unit>(value)};
+    }
+
+    // rvalue: move.
+    template <typename T,
+              typename Rep = detail::NormalizeRep<std::decay_t<T>>,
+              typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
+    AU_DEVICE_FUNC constexpr auto operator()(T &&value) const {
+        return QuantityPoint<Unit, Rep>{make_quantity<Unit>(std::move(value))};
     }
 
     template <typename U, typename R>
