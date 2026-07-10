@@ -26,7 +26,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: c994ac3
+// Version identifier: 464a707
 // <iostream> support: EXCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -3682,36 +3682,101 @@ AU_DEVICE_FUNC constexpr auto mag() {
 namespace detail {
 constexpr bool is_valid_magnitude_digit(char c) { return (c >= '0' && c <= '9') || c == '\''; }
 
+constexpr bool is_exponent_marker(char c) { return c == 'e' || c == 'E'; }
+
 template <char... Cs>
-constexpr bool all_valid_magnitude_digits() {
-    constexpr char digits[] = {Cs...};
+constexpr bool all_valid_magnitude_chars() {
+    constexpr char chars[] = {Cs...};
+    std::size_t num_decimal_points = 0u;
+    std::size_t num_exponent_markers = 0u;
     for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
-        if (!is_valid_magnitude_digit(digits[i])) {
+        const char c = chars[i];
+        if (c == '.') {
+            ++num_decimal_points;
+        } else if (is_exponent_marker(c)) {
+            ++num_exponent_markers;
+        } else if (c == '+' || c == '-') {
+            // A sign is only meaningful as part of an exponent; the compiler guarantees it appears
+            // there, so we accept it here without further checking.
+        } else if (!is_valid_magnitude_digit(c)) {
             return false;
         }
     }
-    return true;
+    return num_decimal_points <= 1u && num_exponent_markers <= 1u;
 }
 
+// Parse the significant digits (the mantissa) of a `_mag` literal, ignoring any decimal point and
+// stopping at the exponent.  For example, `1234_mag`, `12.34_mag`, and `1.234e3_mag` all produce
+// `1234`.
 template <char... Cs>
 constexpr std::uintmax_t parse_magnitude_integer() {
-    static_assert(all_valid_magnitude_digits<Cs...>(),
-                  "_mag literals must contain only decimal digits (and optional ' separators)");
+    static_assert(all_valid_magnitude_chars<Cs...>(),
+                  "_mag literals must contain only decimal digits, an optional decimal point, an "
+                  "optional exponent, and optional ' separators");
     constexpr char digits[] = {Cs...};
     std::uintmax_t result = 0u;
     for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
+        if (is_exponent_marker(digits[i])) {
+            break;
+        }
         if (digits[i] >= '0' && digits[i] <= '9') {
             result = result * 10u + static_cast<std::uintmax_t>(digits[i] - '0');
         }
     }
     return result;
 }
+
+// Count the number of mantissa digits after the decimal point in a `_mag` literal.  For example,
+// `12.34_mag` has two decimal places, while `1234_mag` has 0, and `1.234e3_mag` has three.
+template <char... Cs>
+constexpr int count_decimal_places() {
+    constexpr char chars[] = {Cs...};
+    int num_decimal_places = 0;
+    bool after_decimal_point = false;
+    for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
+        if (is_exponent_marker(chars[i])) {
+            break;
+        }
+        if (chars[i] == '.') {
+            after_decimal_point = true;
+        } else if (after_decimal_point && chars[i] >= '0' && chars[i] <= '9') {
+            ++num_decimal_places;
+        }
+    }
+    return num_decimal_places;
+}
+
+// Parse the (signed) exponent of a `_mag` literal: the integer following the `e`/`E` marker.  For
+// example, `6.022e23_mag` produces `23`, and `1e-3_mag` produces `-3`.  A literal with no exponent
+// produces `0`.
+template <char... Cs>
+constexpr std::int64_t parse_scientific_exponent() {
+    constexpr char chars[] = {Cs...};
+    std::uint64_t exponent = 0u;
+    std::int64_t sign = 1;
+    bool in_exponent = false;
+    for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
+        const char c = chars[i];
+        if (is_exponent_marker(c)) {
+            in_exponent = true;
+        } else if (in_exponent) {
+            if (c == '-') {
+                sign = -1;
+            } else if (c >= '0' && c <= '9') {
+                exponent = exponent * 10u + static_cast<std::uint64_t>(c - '0');
+            }
+        }
+    }
+    return sign * static_cast<std::int64_t>(exponent);
+}
 }  // namespace detail
 
 namespace au_literals {
 template <char... Cs>
 constexpr auto operator""_mag() {
-    return mag<detail::parse_magnitude_integer<Cs...>()>();
+    return mag<detail::parse_magnitude_integer<Cs...>()>() *
+           pow<detail::parse_scientific_exponent<Cs...>() - detail::count_decimal_places<Cs...>()>(
+               mag<10>());
 }
 }  // namespace au_literals
 
@@ -6164,6 +6229,27 @@ struct ConversionRepImpl
                        PromotedType<std::common_type_t<OldRep, NewRep>>> {};
 
 //
+// `HasConversionRep<OldRep, NewRep>` tells us (SFINAE-friendly) whether `ConversionRep<OldRep,
+// NewRep>` is well-formed.
+//
+// The conversion arithmetic is hosted in `std::common_type` of the two reps, but some reps have no
+// common type at all --- most notably, two *distinct* Eigen expression templates.  Asking
+// `std::common_type` for such a pair is a hard error rather than a soft one, which would otherwise
+// blow up any conversion *policy* check (e.g. the implicit-constructor's SFINAE guard) that merely
+// needs to answer "is this conversion permitted?" with `false`.  This trait lets those callers
+// short-circuit to `false` instead.
+//
+template <typename A, typename B>
+using CommonTypeMemberT = typename std::common_type<A, B>::type;
+template <typename A, typename B>
+struct HasCommonType : stdx::experimental::is_detected<CommonTypeMemberT, A, B> {};
+
+template <typename OldRep, typename NewRep>
+struct HasConversionRep : std::conditional_t<IsRealToComplex<OldRep, NewRep>::value,
+                                             HasCommonType<RealPart<OldRep>, RealPart<NewRep>>,
+                                             HasCommonType<OldRep, NewRep>> {};
+
+//
 // `CastStep<CastType, T, U>` is a single step of casting from type `T` to type `U`, using the
 // appropriate operation based on `CastType`.
 //
@@ -7675,12 +7761,23 @@ struct PermitAsCarveOutForIntegerPromotion
 template <typename ScaleFactor, typename SourceRep>
 struct PermitAsCarveOutForIntegerPromotion<void, ScaleFactor, SourceRep> : std::false_type {};
 
-template <typename CastStrategy, typename Rep, typename ScaleFactor, typename SourceRep>
+template <typename CastStrategy,
+          typename Rep,
+          typename ScaleFactor,
+          typename SourceRep,
+          bool = HasConversionRep<SourceRep, Rep>::value>
 struct PassesConversionRiskCheck
     : stdx::disjunction<
           PermitAsCarveOutForIntegerPromotion<Rep, ScaleFactor, SourceRep>,
           ConversionRiskAcceptablyLow<
               ConversionForRepsAndFactor<CastStrategy, SourceRep, Rep, ScaleFactor>>> {};
+
+// If the reps have no common type, the conversion arithmetic can't even be formed, so the
+// conversion is simply not permitted.  (This keeps the check SFINAE-friendly for reps like distinct
+// Eigen expression templates, rather than hard-erroring deep inside `std::common_type`.)
+template <typename CastStrategy, typename Rep, typename ScaleFactor, typename SourceRep>
+struct PassesConversionRiskCheck<CastStrategy, Rep, ScaleFactor, SourceRep, false>
+    : std::false_type {};
 
 template <typename CastStrategy, typename Rep, typename ScaleFactor, typename SourceRep>
 using ImplicitConversionPolicy =
@@ -8089,18 +8186,25 @@ class Quantity {
     }
 
     // Multiplication for dimensioned quantities.
+    //
+    // We take `q` by reference and read its value via `data_in` (a reference), rather than by value
+    // via `in` (a copy).  For lazy-expression reps (e.g. Eigen), the product node binds its operand
+    // by reference; a by-value operand would be a temporary that dies when this function returns,
+    // leaving the result's rep dangling.  `data_in` instead references the caller's live object.
     template <typename OtherUnit, typename OtherRep>
-    AU_DEVICE_FUNC constexpr auto operator*(Quantity<OtherUnit, OtherRep> q) const {
+    AU_DEVICE_FUNC constexpr auto operator*(const Quantity<OtherUnit, OtherRep> &q) const {
         return make_quantity_unless_unitless<UnitProduct<Unit, OtherUnit>>(value_ *
-                                                                           q.in(OtherUnit{}));
+                                                                           q.data_in(OtherUnit{}));
     }
 
     // Division for dimensioned quantities.
+    //
+    // See `operator*` above for why `q` is taken by reference and read via `data_in`.
     template <typename OtherUnit, typename OtherRep>
-    AU_DEVICE_FUNC constexpr auto operator/(Quantity<OtherUnit, OtherRep> q) const {
+    AU_DEVICE_FUNC constexpr auto operator/(const Quantity<OtherUnit, OtherRep> &q) const {
         warn_if_integer_division<OtherUnit, OtherRep>();
         return make_quantity_unless_unitless<UnitQuotient<Unit, OtherUnit>>(value_ /
-                                                                            q.in(OtherUnit{}));
+                                                                            q.data_in(OtherUnit{}));
     }
 
     // Copy and move assignment: lvalue-only.
@@ -8602,15 +8706,50 @@ AU_DEVICE_FUNC constexpr bool is_conversion_lossy(Quantity<U, R> q, TargetUnitSl
 // Comparing and/or combining Quantities of different types.
 
 namespace detail {
+// Forward declaration; defined below, alongside the addition/subtraction helpers.
+template <typename OtherR, typename TargetUnit, typename U, typename R>
+AU_DEVICE_FUNC constexpr decltype(auto) ref_or_scaled_copy(TargetUnit, const Quantity<U, R> &q);
+
+// For *arithmetic* reps, we host comparisons in a rep shared by both operands
+// (`CommonTypeButPreserveIntSignedness`), which widens each operand to the common width while
+// preserving its own signedness so that mixed signed/unsigned comparisons stay correct.
+//
+// For *non-arithmetic* reps we take the same stance as `operator+`'s `ExplicitRepFor`: we have no
+// meaningful common rep, so we never relocate.  Instead we bring each operand to the common unit
+// via `ref_or_scaled_copy` (which keeps references / expression-template laziness) and let the
+// rep's own comparison operator do the work.
+template <typename Op,
+          typename U1,
+          typename U2,
+          typename R1,
+          typename R2,
+          bool BothArithmetic =
+              stdx::conjunction<std::is_arithmetic<R1>, std::is_arithmetic<R2>>::value>
+struct ConvertAndCompare {
+    AU_DEVICE_FUNC static constexpr auto compare(const Quantity<U1, R1> &q1,
+                                                 const Quantity<U2, R2> &q2) {
+        using U = CommonUnit<U1, U2>;
+        using ComRep1 = CommonTypeButPreserveIntSignedness<R1, R2>;
+        using ComRep2 = CommonTypeButPreserveIntSignedness<R2, R1>;
+        return SignAwareComparison<UnitSign<U>, Op>{}(
+            q1.template in<ComRep1>(U{}, check_for(ALL_RISKS)),
+            q2.template in<ComRep2>(U{}, check_for(ALL_RISKS)));
+    }
+};
+template <typename Op, typename U1, typename U2, typename R1, typename R2>
+struct ConvertAndCompare<Op, U1, U2, R1, R2, false> {
+    AU_DEVICE_FUNC static constexpr auto compare(const Quantity<U1, R1> &q1,
+                                                 const Quantity<U2, R2> &q2) {
+        using U = CommonUnit<U1, U2>;
+        return SignAwareComparison<UnitSign<U>, Op>{}(ref_or_scaled_copy<R2>(U{}, q1),
+                                                      ref_or_scaled_copy<R1>(U{}, q2));
+    }
+};
+
 template <typename Op, typename U1, typename U2, typename R1, typename R2>
 AU_DEVICE_FUNC constexpr auto convert_and_compare(const Quantity<U1, R1> &q1,
                                                   const Quantity<U2, R2> &q2) {
-    using U = CommonUnit<U1, U2>;
-    using ComRep1 = detail::CommonTypeButPreserveIntSignedness<R1, R2>;
-    using ComRep2 = detail::CommonTypeButPreserveIntSignedness<R2, R1>;
-    return detail::SignAwareComparison<UnitSign<U>, Op>{}(
-        q1.template in<ComRep1>(U{}, check_for(ALL_RISKS)),
-        q2.template in<ComRep2>(U{}, check_for(ALL_RISKS)));
+    return ConvertAndCompare<Op, U1, U2, R1, R2>::compare(q1, q2);
 }
 }  // namespace detail
 
