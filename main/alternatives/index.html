@@ -1953,6 +1953,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../reference/version/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Version macros
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../reference/zero/" class="md-nav__link">
         
   
@@ -1989,10 +2017,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_14" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_15" >
         
           
-          <label class="md-nav__link" for="__nav_9_14" id="__nav_9_14_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_9_15" id="__nav_9_15_label" tabindex="0">
             
   
   
@@ -2010,8 +2038,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_14_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9_14">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9_15">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2661,14 +2689,20 @@ experience.</p>
                 </ul>
             </details>
         </td>
-        <td class="na"></td>
-        <td class="poor">Very slow, but can be <i>greatly</i> improved by removing I/O support and most units</td>
-        <td class="na"></td>
-        <td class="na"></td>
+        <td class="good">Comparable to Au; sometimes less, sometimes more</td>
+        <td class="poor">Very slow (adds multiple seconds), but can be <i>greatly</i> improved by removing I/O support and most units</td>
+        <td class="good">Overall speed champ: roughly 2/3 the penalty of Au and Boost</td>
+        <td class="poor">
+            <ul>
+                <li class="x">Default config 2 to 3 times as expensive as nholthaus</li>
+                <li class="x"><a href="https://mpusz.github.io/mp-units/latest/users_guide/systems/si/#lean-umbrella-mp-unitssystemssicoreh">Lean includes</a> brings it on par with nholthaus, though lack of symbols hurts code quality</li>
+                <li>C++20 modules should mitigate all concerns</li>
+            </ul>
+        </td>
         <td class="good">
             <ul>
-                <li class="check">Includes `fwd.hh` headers</li>
-                <li>Possibly "best" overall, but will need to assess all libraries on the same code</li>
+                <li class="check">Baseline performance is great (only bernedom/SI is faster)</li>
+                <li class="check">Includes `fwd.hh` headers for even more flexibility</li>
             </ul>
         </td>
     </tr>

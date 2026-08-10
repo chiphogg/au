@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: d8e4a86
+// Version identifier: f7a60a2
 // <iostream> support: INCLUDED
 // <format> support: INCLUDED
 // List of included units:
@@ -343,31 +343,56 @@ struct Kibi;
 }  // namespace au
 
 //
-// Device/GPU support (CUDA, HIP)
+// Version macros for the Au library.
 //
-// AU_DEVICE_FUNC: marks functions as callable from both host and device.
-// AU_DEVICE_VAR: marks constexpr variables as accessible from device code.
+// These serve two purposes.  First, they let downstream code detect that Au has been included at
+// all (for example, to `#error` if it has _not_ been): any Au header transitively includes this
+// one, so `#if defined(AU_VERSION)` will be true whenever any part of Au is in scope.  Second, they
+// let downstream code detect _which version_ of Au is present, which is useful for writing code
+// that must support multiple Au versions during a migration.
 //
-// Note: AU_DEVICE_FUNC uses __CUDACC__ / __HIPCC__ (compiler detection) because functions need
-// the annotation during both host and device compilation passes.
+// The individual components are available as `AU_VERSION_MAJOR`, `AU_VERSION_MINOR`, and
+// `AU_VERSION_PATCH`.  For convenience, `AU_VERSION` combines them into a single integer that
+// increases monotonically with the version, so that ordinary integer comparisons work:
 //
-// AU_DEVICE_VAR uses __CUDA_ARCH__ / __HIP_DEVICE_COMPILE__ (device pass detection) because
-// __device__ on a variable makes it device-only, which would break host code. By only applying
-// __device__ during the device compilation pass, the same variable is visible to both host and
-// device code.
+//     #if AU_VERSION < AU_VERSION_NUMBER(0, 5, 1)
+//         // ... code for Au older than 0.5.1 ...
+//     #endif
+//
+// IMPORTANT (release model): these numbers are a contract for _tagged releases_ only.  On a tagged
+// release, `AU_VERSION` names exactly the feature set of that release, so version comparisons are
+// sound _release to release_ --- both "is the feature added in `X.Y.Z` present?" (`>=`) and "does
+// this predate the breaking change in `X.Y.Z`?" (`<`).  On `main`, these macros name the _most
+// recent release_ (mirroring the version in the root `CMakeLists.txt`, which is derived from this
+// file), and `main` is re-bumped to match _every_ release it contains (patches included; see
+// `RELEASE.md`).
+//
+// Do NOT use these macros to select behavior against a `main` checkout.  Because `main`'s number
+// lags the changes that have actually landed on it since the last release, such a check is
+// unreliable --- and the two directions fail differently: an additive `>=` check merely
+// under-reports (a safe false negative), but a breaking-change `<` check can silently report the
+// _old_ behavior on a `main` commit that already has the _new_ one (an unsafe false positive).
+// Version-gate behavior only against tagged releases.
+//
+// For detecting a _specific_ change robustly --- including on `main`, or to distinguish two changes
+// that ship in the same release --- introduce a dedicated per-feature macro in the same commit that
+// makes the change, rather than reaching for `AU_VERSION`.
+//
+// To keep the two build systems in sync, `CMakeLists.txt` parses the three component macros below
+// to populate its `project(... VERSION ...)`.  This file is therefore the single source of truth
+// for the library version, and it is the _only_ place that needs to be edited when bumping the
+// version for a release.
 //
 
-#if defined(__CUDACC__) || defined(__HIPCC__)
-#define AU_DEVICE_FUNC __host__ __device__
-#else
-#define AU_DEVICE_FUNC
-#endif
+#define AU_VERSION_MAJOR 0
+#define AU_VERSION_MINOR 5
+#define AU_VERSION_PATCH 0
 
-#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
-#define AU_DEVICE_VAR __device__
-#else
-#define AU_DEVICE_VAR
-#endif
+// Combine major/minor/patch components into a single monotonically increasing integer.  Each
+// component gets three decimal digits, so components must be strictly less than 1000.
+#define AU_VERSION_NUMBER(major, minor, patch) ((major) * 1000000 + (minor) * 1000 + (patch))
+
+#define AU_VERSION AU_VERSION_NUMBER(AU_VERSION_MAJOR, AU_VERSION_MINOR, AU_VERSION_PATCH)
 
 
 
@@ -787,107 +812,6 @@ constexpr uint64_t pow_mod(uint64_t base, uint64_t exp, uint64_t n) {
 }  // namespace au
 
 
-
-namespace au {
-namespace stdx {
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-//
-// For C++14 compatibility, we needed to change `if constexpr` to SFINAE.
-template <typename T, typename U, typename Enable = void>
-struct CmpEqualImpl;
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_equal(T t, U u) noexcept {
-    return CmpEqualImpl<T, U>{}(t, u);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_not_equal(T t, U u) noexcept {
-    return !cmp_equal(t, u);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-//
-// For C++14 compatibility, we needed to change `if constexpr` to SFINAE.
-template <typename T, typename U, typename Enable = void>
-struct CmpLessImpl;
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_less(T t, U u) noexcept {
-    return CmpLessImpl<T, U>{}(t, u);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_greater(T t, U u) noexcept {
-    return cmp_less(u, t);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_less_equal(T t, U u) noexcept {
-    return !cmp_greater(t, u);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
-template <class T, class U>
-AU_DEVICE_FUNC constexpr bool cmp_greater_equal(T t, U u) noexcept {
-    return !cmp_less(t, u);
-}
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/in_range).
-template <class R, class T>
-AU_DEVICE_FUNC constexpr bool in_range(T t) noexcept {
-    return cmp_greater_equal(t, std::numeric_limits<R>::min()) &&
-           cmp_less_equal(t, std::numeric_limits<R>::max());
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation details below.
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-template <typename T, typename U>
-struct CmpEqualImpl<T, U, std::enable_if_t<std::is_signed<T>::value == std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) { return t == u; }
-};
-
-template <typename T, typename U>
-struct CmpEqualImpl<T, U, std::enable_if_t<std::is_signed<T>::value && !std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
-        return t < 0 ? false : std::make_unsigned_t<T>(t) == u;
-    }
-};
-
-template <typename T, typename U>
-struct CmpEqualImpl<T, U, std::enable_if_t<!std::is_signed<T>::value && std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
-        return u < 0 ? false : t == std::make_unsigned_t<U>(u);
-    }
-};
-
-template <typename T, typename U>
-struct CmpLessImpl<T, U, std::enable_if_t<std::is_signed<T>::value == std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) { return t < u; }
-};
-
-template <typename T, typename U>
-struct CmpLessImpl<T, U, std::enable_if_t<std::is_signed<T>::value && !std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
-        return t < 0 ? true : std::make_unsigned_t<T>(t) < u;
-    }
-};
-
-template <typename T, typename U>
-struct CmpLessImpl<T, U, std::enable_if_t<!std::is_signed<T>::value && std::is_signed<U>::value>> {
-    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
-        return u < 0 ? false : t < std::make_unsigned_t<U>(u);
-    }
-};
-
-}  // namespace stdx
-}  // namespace au
-
-
 namespace au {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1004,442 +928,16 @@ using detected_or_t = typename detected_or<Default, Op, Args...>::type;
 }  // namespace stdx
 }  // namespace au
 
-
-
-namespace au {
-namespace stdx {
-
-// Source: adapted from (https://en.cppreference.com/w/cpp/utility/functional/identity)
-struct identity {
-    template <class T>
-    AU_DEVICE_FUNC constexpr T &&operator()(T &&t) const noexcept {
-        return std::forward<T>(t);
-    }
-};
-
-}  // namespace stdx
-}  // namespace au
-
-
-
 namespace au {
 
-//
-// A type trait that determines if a type is a valid representation type for `Quantity` or
-// `QuantityPoint`.
-//
-template <typename T>
-struct IsValidRep;
-
-//
-// A type trait to indicate whether the product of two types is a valid rep.
-//
-// Will validly return `false` if the product does not exist.
-//
-template <typename T, typename U>
-struct IsProductValidRep;
-
-//
-// A type trait to indicate whether the quotient of two types is a valid rep.
-//
-// Will validly return `false` if the quotient does not exist.
-//
-template <typename T, typename U>
-struct IsQuotientValidRep;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation details below.
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace detail {
-template <typename T>
-struct IsAuType : std::false_type {};
-
-template <typename U, typename R>
-struct IsAuType<::au::Quantity<U, R>> : std::true_type {};
-
-template <typename U, typename R>
-struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
-
-//
-// `NormalizeRep<T>`: strip vendor attributes (e.g. Green Hills' `__packed`) from an integral rep by
-// naming a clean standard type, rather than relying on `std::decay` to drop the attribute (which
-// GHS does not do).
-//
-// This is the _identity_ on every genuine standard type (integral or not), so it is a provable
-// no-op for any rep a user would normally write.  It only rewrites a type that behaves like an
-// integer, yet names *none* of the standard integer types.  This is the telltale sign of attributed
-// types, such as `__packed uint16_t`.  In these cases, we map it to the fixed-width standard
-// integer with the same `sizeof` and signedness.
-//
-// Critically, gating this on `std::is_integral<T>` won't work.  The whole reason `std::decay` fails
-// to help on GHS is that GHS keeps vendor attributes on the type --- and it *also* mis-answers
-// `std::is_integral` for such a type (it reports `false`).  So a normalization gated on
-// `is_integral` not only won't be reliable, but also fails on the motivating example.  Instead we
-// detect integer-ness through mechanisms the attribute does not defeat:
-//
-//   * Integer-ness: `is_integral<decltype(+declval<T>())>`.  Unary `+` triggers integral promotion,
-//     which yields a fresh prvalue of a *standard* type --- this reliably strips the vendor
-//     attribute.  (Note that Au already depends on exactly this behavior in `io.hh`).  We then ask
-//     `is_integral` about that clean, promoted type, which GHS answers correctly.
-//   * Width: `sizeof(T)` --- a core operator, unaffected by the attribute.
-//   * Signedness: the value test `T(-1) < T(0)` --- core arithmetic, not `std::is_signed`.
-//
-// We additionally leave every standard type untouched, and never normalize class, union, or enum
-// types, to keep this fix as targeted as possible.
-//
-
-// Is `T` *exactly* one of the standard integer types?  An attributed integral type compares unequal
-// to all of these, so it is not "standard" by this definition.
-template <typename T>
-struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
-                                             std::is_same<T, char>,
-                                             std::is_same<T, signed char>,
-                                             std::is_same<T, unsigned char>,
-#if defined(__cpp_char8_t)
-                                             std::is_same<T, char8_t>,
-#endif
-                                             std::is_same<T, char16_t>,
-                                             std::is_same<T, char32_t>,
-                                             std::is_same<T, wchar_t>,
-                                             std::is_same<T, short>,
-                                             std::is_same<T, unsigned short>,
-                                             std::is_same<T, int>,
-                                             std::is_same<T, unsigned int>,
-                                             std::is_same<T, long>,
-                                             std::is_same<T, unsigned long>,
-                                             std::is_same<T, long long>,
-                                             std::is_same<T, unsigned long long>> {
-};
-
-// The type `T` promotes to under unary `+`.  Integral promotion produces a fresh standard prvalue,
-// which launders any vendor attribute off of `T`.  (Ill-formed --- hence a SFINAE removal below ---
-// for types with no unary `+`, which is exactly what we want: they are not integers to normalize.)
-template <typename T>
-using PromotedRep = decltype(+std::declval<T>());
-
-// Attribute-immune signedness: for an unsigned type `T(-1)` wraps to the maximum value (not `< 0`);
-// for a signed type it is `-1`.  Uses arithmetic, not `std::is_signed` (which the attribute may
-// defeat on GHS).
-template <typename T>
-constexpr bool rep_is_signed() {
-    return static_cast<T>(-1) < static_cast<T>(0);
-}
-
-// Should we normalize `T`?  True exactly for an integer-behaving type that is not already a
-// standard integer and is not a class/union/enum.  See the mechanism notes above for why none of
-// these predicates route through `is_integral<T>` / `is_signed<T>` on the attributed type itself.
-template <typename T, typename Enable = void>
-struct ShouldNormalizeRep : std::false_type {};  // no unary `+` (e.g. most class reps): leave alone
-template <typename T>
-struct ShouldNormalizeRep<T, stdx::void_t<PromotedRep<T>>>
-    : stdx::conjunction<std::is_integral<PromotedRep<T>>,
-                        stdx::negation<IsStandardInteger<T>>,
-                        stdx::negation<std::is_class<T>>,
-                        stdx::negation<std::is_union<T>>,
-                        stdx::negation<std::is_enum<T>>> {};
-
-// Pick the fixed-width standard integer type (`int8_t` ... `int64_t` and unsigned counterparts)
-// with the given `sizeof` and signedness; if none matches, fall back to `Fallback` (so an exotic
-// integral such as `__int128`, whose width no fixed-width type covers, is left untouched rather
-// than becoming a hard error).  We use the fixed-width candidates deliberately: there is exactly
-// one per (size, signedness), so the selection is unambiguous --- no reliance on integer-rank
-// tie-breaking.
-template <typename Fallback, std::size_t Size, bool Signed, typename... Candidates>
-struct FirstMatchingIntegerOr : stdx::type_identity<Fallback> {};
-
-template <typename Fallback, std::size_t Size, bool Signed, typename C, typename... Rest>
-struct FirstMatchingIntegerOr<Fallback, Size, Signed, C, Rest...>
-    : std::conditional_t<sizeof(C) == Size && (std::is_signed<C>::value == Signed),
-                         stdx::type_identity<C>,
-                         FirstMatchingIntegerOr<Fallback, Size, Signed, Rest...>> {};
-
-template <typename T, typename Enable = void>
-struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integer or already-standard: identity
-
-template <typename T>
-struct NormalizeRepImpl<T, std::enable_if_t<ShouldNormalizeRep<T>::value>>
-    : FirstMatchingIntegerOr<T,
-                             sizeof(T),
-                             rep_is_signed<T>(),
-                             std::int8_t,
-                             std::uint8_t,
-                             std::int16_t,
-                             std::uint16_t,
-                             std::int32_t,
-                             std::uint32_t,
-                             std::int64_t,
-                             std::uint64_t> {};
-
-template <typename T>
-using NormalizeRep = typename NormalizeRepImpl<T>::type;
-
-template <typename T>
-using CorrespondingUnit = typename CorrespondingQuantity<T>::Unit;
-
-template <typename T>
-using CorrespondingRep = typename CorrespondingQuantity<T>::Rep;
-
-template <typename T>
-struct HasCorrespondingQuantity
-    : stdx::conjunction<stdx::experimental::is_detected<CorrespondingUnit, T>,
-                        stdx::experimental::is_detected<CorrespondingRep, T>> {};
-
-template <typename T>
-using LooksLikeAuOrOtherQuantity = stdx::disjunction<IsAuType<T>, HasCorrespondingQuantity<T>>;
-
-// We need a way to form an "operation on non-quantity types only".  That is: it's some operation,
-// but _if either input is a quantity_, then we _don't even form the type_.
-//
-// The reason this very specific machinery lives in `rep.hh` is because when we're dealing with
-// operations on "types that might be a rep", we know we can exclude quantity types right away.
-// (Note that we're using the term "quantity" in an expansive sense, which includes not just
-// `au::Quantity`, but also `au::QuantityPoint`, and "quantity-like" types from other libraries
-// (which we consider as "anything that has a `CorrespondingQuantity`".
-template <template <class...> class Op, typename... Ts>
-struct ResultIfNoneAreQuantityImpl;
-template <template <class...> class Op, typename... Ts>
-using ResultIfNoneAreQuantity = typename ResultIfNoneAreQuantityImpl<Op, Ts...>::type;
-
-// Default implementation where we know that none are quantities.
-template <bool AreAnyQuantity, template <class...> class Op, typename... Ts>
-struct ResultIfNoneAreQuantityHelper : stdx::type_identity<Op<Ts...>> {};
-
-// Implementation if any of the types are quantities.
-template <template <class...> class Op, typename... Ts>
-struct ResultIfNoneAreQuantityHelper<true, Op, Ts...> : stdx::type_identity<void> {};
-
-// The main implementation.
-template <template <class...> class Op, typename... Ts>
-struct ResultIfNoneAreQuantityImpl
-    : ResultIfNoneAreQuantityHelper<stdx::disjunction<LooksLikeAuOrOtherQuantity<Ts>...>::value,
-                                    Op,
-                                    Ts...> {};
-
-// The `std::is_empty` is a good way to catch all of the various unit and other monovalue types in
-// our library, which have little else in common.  It's also just intrinsically true that it
-// wouldn't make much sense to use an empty type as a rep.
-template <typename T>
-struct IsKnownInvalidRep
-    : stdx::disjunction<std::is_empty<T>, LooksLikeAuOrOtherQuantity<T>, std::is_same<void, T>> {};
-
-// The type of the product of two types.
-template <typename T, typename U>
-using ProductType = decltype(std::declval<T>() * std::declval<U>());
-
-template <typename T, typename U>
-using ProductTypeOrVoid = stdx::experimental::detected_or_t<void, ProductType, T, U>;
-
-// The type of the quotient of two types.
-template <typename T, typename U>
-using QuotientType = decltype(std::declval<T>() / std::declval<U>());
-
-template <typename T, typename U>
-using QuotientTypeOrVoid = stdx::experimental::detected_or_t<void, QuotientType, T, U>;
-}  // namespace detail
-
-// Implementation for `IsValidRep`.
-//
-// For now, we'll accept anything that isn't explicitly known to be invalid.  We may tighten this up
-// later, but this seems like a reasonable starting point.
-template <typename T>
-struct IsValidRep : stdx::negation<detail::IsKnownInvalidRep<T>> {};
-
-template <typename T, typename U>
-struct IsProductValidRep
-    : IsValidRep<detail::ResultIfNoneAreQuantity<detail::ProductTypeOrVoid, T, U>> {};
-
-template <typename T, typename U>
-struct IsQuotientValidRep
-    : IsValidRep<detail::ResultIfNoneAreQuantity<detail::QuotientTypeOrVoid, T, U>> {};
+struct Watts;
 
 }  // namespace au
 
-#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
-#endif
-
-
-// This file provides alternatives to certain standard library function objects for comparison and
-// arithmetic: `std::less<void>`, `std::plus<void>`, etc.
-//
-// These are _not_ intended as _fully general_ replacements.  They are _only_ intended for certain
-// specific use cases in this library.  External user code should not use these utilities: their
-// contract is subject to change at any time to suit the needs of Au.
-//
-// The biggest change is that these function objects produce mathematically correct results when
-// comparing built-in integral types with mixed signedness.  As a concrete example: in the C++
-// language, `-1 < 1u` is `false`, because the common type of the input types is `unsigned int`, and
-// the `int` input `-1` gets converted to a (very large) `unsigned int` value.  However, using these
-// types, `Lt{}(-1, 1u)` will correctly return `true`!
-//
-// There were two initial motivations to roll our own versions instead of just using the ones from
-// the standard library (as we had done earlier).  First, the `<functional>` header is moderately
-// expensive to include---using these alternatives could save 100 ms or more on every file.  Second,
-// certain compilers (such as the Green Hills compiler) struggle with the trailing return types in,
-// say, `std::less<void>::operator()`, but work correctly with our alternatives.
-
 namespace au {
-namespace detail {
 
-// These tag types act as a kind of "compile time enum".
-struct CompareBuiltInIntegers {};
-struct DefaultComparison {};
+struct Lumens;
 
-// `ComparisonCategory<T, U>` acts like a function which takes two _types_, and returns the correct
-// instance of the above "compile time enum".
-template <typename T, typename U>
-using ComparisonCategory =
-    std::conditional_t<stdx::conjunction<std::is_integral<T>, std::is_integral<U>>::value,
-                       CompareBuiltInIntegers,
-                       DefaultComparison>;
-
-//
-// Comparison operators.
-//
-
-struct Equal {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a == b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_equal(a, b);
-    }
-};
-constexpr auto equal = Equal{};
-
-struct NotEqual {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a != b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_not_equal(a, b);
-    }
-};
-constexpr auto not_equal = NotEqual{};
-
-struct Greater {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a > b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_greater(a, b);
-    }
-};
-constexpr auto greater = Greater{};
-
-struct Less {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a < b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_less(a, b);
-    }
-};
-constexpr auto less = Less{};
-
-struct GreaterEqual {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a >= b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_greater_equal(a, b);
-    }
-};
-constexpr auto greater_equal = GreaterEqual{};
-
-struct LessEqual {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
-        return op_impl(ComparisonCategory<T, U>{}, a, b);
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
-        return a <= b;
-    }
-
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
-        return stdx::cmp_less_equal(a, b);
-    }
-};
-constexpr auto less_equal = LessEqual{};
-
-#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
-struct ThreeWayCompare {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
-        // Note that we do not need special treatment for the case where `T` and `U` are both
-        // integral types, because the C++ language already prohibits narrowing conversions (such as
-        // `int` to `uint`) for `operator<=>`.  We can rely on this implicit warning to induce users
-        // to fix their code.
-        return a <=> b;
-    }
-};
-constexpr auto three_way_compare = ThreeWayCompare{};
-#endif
-
-//
-// Arithmetic operators.
-//
-
-struct Plus {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
-        return a + b;
-    }
-};
-constexpr auto plus = Plus{};
-
-struct Minus {
-    template <typename T, typename U>
-    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
-        return a - b;
-    }
-};
-constexpr auto minus = Minus{};
-
-}  // namespace detail
 }  // namespace au
 
 namespace au {
@@ -1456,37 +954,7 @@ struct Joules;
 
 namespace au {
 
-struct Meters;
-
-}  // namespace au
-
-namespace au {
-
-struct Kelvins;
-
-}  // namespace au
-
-namespace au {
-
 struct Moles;
-
-}  // namespace au
-
-namespace au {
-
-struct Coulombs;
-
-}  // namespace au
-
-namespace au {
-
-struct Watts;
-
-}  // namespace au
-
-namespace au {
-
-struct Lumens;
 
 }  // namespace au
 
@@ -1504,79 +972,19 @@ struct StandardGravity;
 
 namespace au {
 
-struct Farads;
+struct Meters;
 
 }  // namespace au
 
 namespace au {
 
-struct FootballFields;
+struct Kelvins;
 
 }  // namespace au
 
 namespace au {
 
-struct Feet;
-
-}  // namespace au
-
-namespace au {
-
-struct Days;
-
-}  // namespace au
-
-namespace au {
-
-struct Furlongs;
-
-}  // namespace au
-
-namespace au {
-
-struct Henries;
-
-}  // namespace au
-
-namespace au {
-
-struct Grays;
-
-}  // namespace au
-
-namespace au {
-
-struct Rankine;
-
-}  // namespace au
-
-namespace au {
-
-struct Siemens;
-
-}  // namespace au
-
-namespace au {
-
-struct Steradians;
-
-}  // namespace au
-
-namespace au {
-
-struct Percent;
-
-}  // namespace au
-
-namespace au {
-
-struct Miles;
-
-}  // namespace au
-
-namespace au {
-
-struct Inches;
+struct Coulombs;
 
 }  // namespace au
 
@@ -1588,127 +996,19 @@ struct Liters;
 
 namespace au {
 
-struct USQuarts;
-
-}  // namespace au
-
-namespace au {
-
-struct Bars;
-
-}  // namespace au
-
-namespace au {
-
-struct Volts;
-
-}  // namespace au
-
-namespace au {
-
-struct Tesla;
-
-}  // namespace au
-
-namespace au {
-
-struct Fathoms;
-
-}  // namespace au
-
-namespace au {
-
-struct Yards;
-
-}  // namespace au
-
-namespace au {
-
-struct PoundsMass;
-
-}  // namespace au
-
-namespace au {
-
-struct Pascals;
-
-}  // namespace au
-
-namespace au {
-
-struct Lux;
-
-}  // namespace au
-
-namespace au {
-
-struct Arcseconds;
-
-}  // namespace au
-
-namespace au {
-
-struct Knots;
-
-}  // namespace au
-
-namespace au {
-
-struct Webers;
-
-}  // namespace au
-
-namespace au {
-
-struct Fahrenheit;
-
-}  // namespace au
-
-namespace au {
-
 struct Katals;
 
 }  // namespace au
 
 namespace au {
 
-struct Hours;
+struct USPints;
 
 }  // namespace au
 
 namespace au {
 
-struct Bytes;
-
-}  // namespace au
-
-namespace au {
-
-struct Minutes;
-
-}  // namespace au
-
-namespace au {
-
-struct Degrees;
-
-}  // namespace au
-
-namespace au {
-
-struct Ohms;
-
-}  // namespace au
-
-namespace au {
-
-struct Slugs;
-
-}  // namespace au
-
-namespace au {
-
-struct Becquerel;
+struct Arcseconds;
 
 }  // namespace au
 
@@ -1732,19 +1032,25 @@ struct Revolutions;
 
 namespace au {
 
-struct Arcminutes;
+struct FootballFields;
 
 }  // namespace au
 
 namespace au {
 
-struct USGallons;
+struct Ohms;
 
 }  // namespace au
 
 namespace au {
 
-struct Amperes;
+struct Miles;
+
+}  // namespace au
+
+namespace au {
+
+struct Days;
 
 }  // namespace au
 
@@ -1756,13 +1062,79 @@ struct Bits;
 
 namespace au {
 
-struct USPints;
+struct Henries;
 
 }  // namespace au
 
 namespace au {
 
-struct AstronomicalUnits;
+struct Arcminutes;
+
+}  // namespace au
+
+namespace au {
+
+struct Becquerel;
+
+}  // namespace au
+
+namespace au {
+
+struct Hours;
+
+}  // namespace au
+
+namespace au {
+
+struct Unos;
+
+}  // namespace au
+
+namespace au {
+
+struct Farads;
+
+}  // namespace au
+
+namespace au {
+
+struct Rankine;
+
+}  // namespace au
+
+namespace au {
+
+struct Fathoms;
+
+}  // namespace au
+
+namespace au {
+
+struct Knots;
+
+}  // namespace au
+
+namespace au {
+
+struct Furlongs;
+
+}  // namespace au
+
+namespace au {
+
+struct Siemens;
+
+}  // namespace au
+
+namespace au {
+
+struct Yards;
+
+}  // namespace au
+
+namespace au {
+
+struct Pascals;
 
 }  // namespace au
 
@@ -1774,7 +1146,61 @@ struct Radians;
 
 namespace au {
 
+struct Percent;
+
+}  // namespace au
+
+namespace au {
+
+struct Webers;
+
+}  // namespace au
+
+namespace au {
+
+struct Inches;
+
+}  // namespace au
+
+namespace au {
+
+struct USQuarts;
+
+}  // namespace au
+
+namespace au {
+
+struct Amperes;
+
+}  // namespace au
+
+namespace au {
+
+struct PoundsMass;
+
+}  // namespace au
+
+namespace au {
+
 struct NauticalMiles;
+
+}  // namespace au
+
+namespace au {
+
+struct Degrees;
+
+}  // namespace au
+
+namespace au {
+
+struct Bars;
+
+}  // namespace au
+
+namespace au {
+
+struct Feet;
 
 }  // namespace au
 
@@ -1786,7 +1212,19 @@ struct Celsius;
 
 namespace au {
 
-struct Grams;
+struct Volts;
+
+}  // namespace au
+
+namespace au {
+
+struct USGallons;
+
+}  // namespace au
+
+namespace au {
+
+struct AstronomicalUnits;
 
 }  // namespace au
 
@@ -1798,7 +1236,55 @@ struct Newtons;
 
 namespace au {
 
-struct Unos;
+struct Tesla;
+
+}  // namespace au
+
+namespace au {
+
+struct Steradians;
+
+}  // namespace au
+
+namespace au {
+
+struct Slugs;
+
+}  // namespace au
+
+namespace au {
+
+struct Lux;
+
+}  // namespace au
+
+namespace au {
+
+struct Minutes;
+
+}  // namespace au
+
+namespace au {
+
+struct Grays;
+
+}  // namespace au
+
+namespace au {
+
+struct Bytes;
+
+}  // namespace au
+
+namespace au {
+
+struct Fahrenheit;
+
+}  // namespace au
+
+namespace au {
+
+struct Grams;
 
 }  // namespace au
 
@@ -1998,66 +1484,35 @@ struct PromotedTypeImpl : std::conditional_t<std::is_arithmetic<T>::value,
 }  // namespace detail
 }  // namespace au
 
+// Make the version macros (`AU_VERSION`, etc.) available anywhere `config.hh` reaches --- which is
+// effectively the entire library, since the core machinery includes this header.
 
-#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+//
+// Device/GPU support (CUDA, HIP)
+//
+// AU_DEVICE_FUNC: marks functions as callable from both host and device.
+// AU_DEVICE_VAR: marks constexpr variables as accessible from device code.
+//
+// Note: AU_DEVICE_FUNC uses __CUDACC__ / __HIPCC__ (compiler detection) because functions need
+// the annotation during both host and device compilation passes.
+//
+// AU_DEVICE_VAR uses __CUDA_ARCH__ / __HIP_DEVICE_COMPILE__ (device pass detection) because
+// __device__ on a variable makes it device-only, which would break host code. By only applying
+// __device__ during the device compilation pass, the same variable is visible to both host and
+// device code.
+//
+
+#if defined(__CUDACC__) || defined(__HIPCC__)
+#define AU_DEVICE_FUNC __host__ __device__
+#else
+#define AU_DEVICE_FUNC
 #endif
 
-
-namespace au {
-
-// A type representing a quantity of "zero" in any units.
-//
-// Zero is special: it's the only number that we can meaningfully compare or assign to a Quantity of
-// _any_ dimension.  Giving it a special type (and a predefined constant of that type, `ZERO`,
-// defined below) lets our code be both concise and readable.
-//
-// For example, we can zero-initialize any arbitrary Quantity, even if it doesn't have a
-// user-defined literal, and even if it's in a header file so we couldn't use the literals anyway:
-//
-//   struct PathPoint {
-//       QuantityD<RadiansPerMeter> curvature = ZERO;
-//   };
-struct Zero {
-    // Implicit conversion to arithmetic types.
-    template <typename T, typename Enable = std::enable_if_t<std::is_arithmetic<T>::value>>
-    AU_DEVICE_FUNC constexpr operator T() const {
-        return 0;
-    }
-
-    // Implicit conversion to chrono durations.
-    template <typename Rep, typename Period>
-    AU_DEVICE_FUNC constexpr operator std::chrono::duration<Rep, Period>() const {
-        return std::chrono::duration<Rep, Period>{0};
-    }
-};
-
-// A value of Zero.
-//
-// This exists purely for convenience, so people don't have to call the initializer.  i.e., it lets
-// us write `ZERO` instead of `Zero{}`.
-AU_DEVICE_VAR constexpr auto ZERO = Zero{};
-
-// Addition, subtraction, and comparison of Zero are well defined.
-inline AU_DEVICE_FUNC constexpr Zero operator+(Zero, Zero) { return ZERO; }
-inline AU_DEVICE_FUNC constexpr Zero operator-(Zero, Zero) { return ZERO; }
-inline AU_DEVICE_FUNC constexpr bool operator==(Zero, Zero) { return true; }
-inline AU_DEVICE_FUNC constexpr bool operator>=(Zero, Zero) { return true; }
-inline AU_DEVICE_FUNC constexpr bool operator<=(Zero, Zero) { return true; }
-inline AU_DEVICE_FUNC constexpr bool operator!=(Zero, Zero) { return false; }
-inline AU_DEVICE_FUNC constexpr bool operator>(Zero, Zero) { return false; }
-inline AU_DEVICE_FUNC constexpr bool operator<(Zero, Zero) { return false; }
-
-#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
-inline AU_DEVICE_FUNC constexpr auto operator<=>(Zero, Zero) { return 0 <=> 0; }
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+#define AU_DEVICE_VAR __device__
+#else
+#define AU_DEVICE_VAR
 #endif
-
-// Implementation helper for "a type where value() returns 0".
-template <typename T>
-struct ValueOfZero {
-    static AU_DEVICE_FUNC constexpr T value() { return ZERO; }
-};
-
-}  // namespace au
 
 
 
@@ -2391,6 +1846,107 @@ constexpr PrimeResult baillie_psw(uint64_t n) {
 }
 
 }  // namespace detail
+}  // namespace au
+
+
+
+namespace au {
+namespace stdx {
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+//
+// For C++14 compatibility, we needed to change `if constexpr` to SFINAE.
+template <typename T, typename U, typename Enable = void>
+struct CmpEqualImpl;
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_equal(T t, U u) noexcept {
+    return CmpEqualImpl<T, U>{}(t, u);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_not_equal(T t, U u) noexcept {
+    return !cmp_equal(t, u);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+//
+// For C++14 compatibility, we needed to change `if constexpr` to SFINAE.
+template <typename T, typename U, typename Enable = void>
+struct CmpLessImpl;
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_less(T t, U u) noexcept {
+    return CmpLessImpl<T, U>{}(t, u);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_greater(T t, U u) noexcept {
+    return cmp_less(u, t);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_less_equal(T t, U u) noexcept {
+    return !cmp_greater(t, u);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/intcmp).
+template <class T, class U>
+AU_DEVICE_FUNC constexpr bool cmp_greater_equal(T t, U u) noexcept {
+    return !cmp_less(t, u);
+}
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/in_range).
+template <class R, class T>
+AU_DEVICE_FUNC constexpr bool in_range(T t) noexcept {
+    return cmp_greater_equal(t, std::numeric_limits<R>::min()) &&
+           cmp_less_equal(t, std::numeric_limits<R>::max());
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details below.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <typename T, typename U>
+struct CmpEqualImpl<T, U, std::enable_if_t<std::is_signed<T>::value == std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) { return t == u; }
+};
+
+template <typename T, typename U>
+struct CmpEqualImpl<T, U, std::enable_if_t<std::is_signed<T>::value && !std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
+        return t < 0 ? false : std::make_unsigned_t<T>(t) == u;
+    }
+};
+
+template <typename T, typename U>
+struct CmpEqualImpl<T, U, std::enable_if_t<!std::is_signed<T>::value && std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
+        return u < 0 ? false : t == std::make_unsigned_t<U>(u);
+    }
+};
+
+template <typename T, typename U>
+struct CmpLessImpl<T, U, std::enable_if_t<std::is_signed<T>::value == std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) { return t < u; }
+};
+
+template <typename T, typename U>
+struct CmpLessImpl<T, U, std::enable_if_t<std::is_signed<T>::value && !std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
+        return t < 0 ? true : std::make_unsigned_t<T>(t) < u;
+    }
+};
+
+template <typename T, typename U>
+struct CmpLessImpl<T, U, std::enable_if_t<!std::is_signed<T>::value && std::is_signed<U>::value>> {
+    AU_DEVICE_FUNC constexpr bool operator()(T t, U u) {
+        return u < 0 ? false : t < std::make_unsigned_t<U>(u);
+    }
+};
+
+}  // namespace stdx
 }  // namespace au
 
 
@@ -3175,6 +2731,270 @@ using Angle = Dimension<base_dim::Angle>;
 using Information = Dimension<base_dim::Information>;
 using AmountOfSubstance = Dimension<base_dim::AmountOfSubstance>;
 using LuminousIntensity = Dimension<base_dim::LuminousIntensity>;
+
+}  // namespace au
+
+
+
+namespace au {
+namespace stdx {
+
+// Source: adapted from (https://en.cppreference.com/w/cpp/utility/functional/identity)
+struct identity {
+    template <class T>
+    AU_DEVICE_FUNC constexpr T &&operator()(T &&t) const noexcept {
+        return std::forward<T>(t);
+    }
+};
+
+}  // namespace stdx
+}  // namespace au
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
+
+
+// This file provides alternatives to certain standard library function objects for comparison and
+// arithmetic: `std::less<void>`, `std::plus<void>`, etc.
+//
+// These are _not_ intended as _fully general_ replacements.  They are _only_ intended for certain
+// specific use cases in this library.  External user code should not use these utilities: their
+// contract is subject to change at any time to suit the needs of Au.
+//
+// The biggest change is that these function objects produce mathematically correct results when
+// comparing built-in integral types with mixed signedness.  As a concrete example: in the C++
+// language, `-1 < 1u` is `false`, because the common type of the input types is `unsigned int`, and
+// the `int` input `-1` gets converted to a (very large) `unsigned int` value.  However, using these
+// types, `Lt{}(-1, 1u)` will correctly return `true`!
+//
+// There were two initial motivations to roll our own versions instead of just using the ones from
+// the standard library (as we had done earlier).  First, the `<functional>` header is moderately
+// expensive to include---using these alternatives could save 100 ms or more on every file.  Second,
+// certain compilers (such as the Green Hills compiler) struggle with the trailing return types in,
+// say, `std::less<void>::operator()`, but work correctly with our alternatives.
+
+namespace au {
+namespace detail {
+
+// These tag types act as a kind of "compile time enum".
+struct CompareBuiltInIntegers {};
+struct DefaultComparison {};
+
+// `ComparisonCategory<T, U>` acts like a function which takes two _types_, and returns the correct
+// instance of the above "compile time enum".
+template <typename T, typename U>
+using ComparisonCategory =
+    std::conditional_t<stdx::conjunction<std::is_integral<T>, std::is_integral<U>>::value,
+                       CompareBuiltInIntegers,
+                       DefaultComparison>;
+
+//
+// Comparison operators.
+//
+
+struct Equal {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a == b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_equal(a, b);
+    }
+};
+constexpr auto equal = Equal{};
+
+struct NotEqual {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a != b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_not_equal(a, b);
+    }
+};
+constexpr auto not_equal = NotEqual{};
+
+struct Greater {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a > b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_greater(a, b);
+    }
+};
+constexpr auto greater = Greater{};
+
+struct Less {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a < b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_less(a, b);
+    }
+};
+constexpr auto less = Less{};
+
+struct GreaterEqual {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a >= b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_greater_equal(a, b);
+    }
+};
+constexpr auto greater_equal = GreaterEqual{};
+
+struct LessEqual {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool operator()(const T &a, const U &b) const {
+        return op_impl(ComparisonCategory<T, U>{}, a, b);
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(DefaultComparison, const T &a, const U &b) const {
+        return a <= b;
+    }
+
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr bool op_impl(CompareBuiltInIntegers, const T &a, const U &b) const {
+        return stdx::cmp_less_equal(a, b);
+    }
+};
+constexpr auto less_equal = LessEqual{};
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+struct ThreeWayCompare {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
+        // Note that we do not need special treatment for the case where `T` and `U` are both
+        // integral types, because the C++ language already prohibits narrowing conversions (such as
+        // `int` to `uint`) for `operator<=>`.  We can rely on this implicit warning to induce users
+        // to fix their code.
+        return a <=> b;
+    }
+};
+constexpr auto three_way_compare = ThreeWayCompare{};
+#endif
+
+//
+// Arithmetic operators.
+//
+
+struct Plus {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
+        return a + b;
+    }
+};
+constexpr auto plus = Plus{};
+
+struct Minus {
+    template <typename T, typename U>
+    AU_DEVICE_FUNC constexpr auto operator()(const T &a, const U &b) const {
+        return a - b;
+    }
+};
+constexpr auto minus = Minus{};
+
+}  // namespace detail
+}  // namespace au
+
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#endif
+
+
+namespace au {
+
+// A type representing a quantity of "zero" in any units.
+//
+// Zero is special: it's the only number that we can meaningfully compare or assign to a Quantity of
+// _any_ dimension.  Giving it a special type (and a predefined constant of that type, `ZERO`,
+// defined below) lets our code be both concise and readable.
+//
+// For example, we can zero-initialize any arbitrary Quantity, even if it doesn't have a
+// user-defined literal, and even if it's in a header file so we couldn't use the literals anyway:
+//
+//   struct PathPoint {
+//       QuantityD<RadiansPerMeter> curvature = ZERO;
+//   };
+struct Zero {
+    // Implicit conversion to arithmetic types.
+    template <typename T, typename Enable = std::enable_if_t<std::is_arithmetic<T>::value>>
+    AU_DEVICE_FUNC constexpr operator T() const {
+        return 0;
+    }
+
+    // Implicit conversion to chrono durations.
+    template <typename Rep, typename Period>
+    AU_DEVICE_FUNC constexpr operator std::chrono::duration<Rep, Period>() const {
+        return std::chrono::duration<Rep, Period>{0};
+    }
+};
+
+// A value of Zero.
+//
+// This exists purely for convenience, so people don't have to call the initializer.  i.e., it lets
+// us write `ZERO` instead of `Zero{}`.
+AU_DEVICE_VAR constexpr auto ZERO = Zero{};
+
+// Addition, subtraction, and comparison of Zero are well defined.
+inline AU_DEVICE_FUNC constexpr Zero operator+(Zero, Zero) { return ZERO; }
+inline AU_DEVICE_FUNC constexpr Zero operator-(Zero, Zero) { return ZERO; }
+inline AU_DEVICE_FUNC constexpr bool operator==(Zero, Zero) { return true; }
+inline AU_DEVICE_FUNC constexpr bool operator>=(Zero, Zero) { return true; }
+inline AU_DEVICE_FUNC constexpr bool operator<=(Zero, Zero) { return true; }
+inline AU_DEVICE_FUNC constexpr bool operator!=(Zero, Zero) { return false; }
+inline AU_DEVICE_FUNC constexpr bool operator>(Zero, Zero) { return false; }
+inline AU_DEVICE_FUNC constexpr bool operator<(Zero, Zero) { return false; }
+
+#if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+inline AU_DEVICE_FUNC constexpr auto operator<=>(Zero, Zero) { return 0 <=> 0; }
+#endif
+
+// Implementation helper for "a type where value() returns 0".
+template <typename T>
+struct ValueOfZero {
+    static AU_DEVICE_FUNC constexpr T value() { return ZERO; }
+};
 
 }  // namespace au
 
@@ -6547,6 +6367,251 @@ struct OpSequenceImpl<Op, Ops...> {
 }  // namespace au
 
 
+
+namespace au {
+
+//
+// A type trait that determines if a type is a valid representation type for `Quantity` or
+// `QuantityPoint`.
+//
+template <typename T>
+struct IsValidRep;
+
+//
+// A type trait to indicate whether the product of two types is a valid rep.
+//
+// Will validly return `false` if the product does not exist.
+//
+template <typename T, typename U>
+struct IsProductValidRep;
+
+//
+// A type trait to indicate whether the quotient of two types is a valid rep.
+//
+// Will validly return `false` if the quotient does not exist.
+//
+template <typename T, typename U>
+struct IsQuotientValidRep;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Implementation details below.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+template <typename T>
+struct IsAuType : std::false_type {};
+
+template <typename U, typename R>
+struct IsAuType<::au::Quantity<U, R>> : std::true_type {};
+
+template <typename U, typename R>
+struct IsAuType<::au::QuantityPoint<U, R>> : std::true_type {};
+
+//
+// `NormalizeRep<T>`: strip vendor attributes (e.g. Green Hills' `__packed`) from an integral rep by
+// naming a clean standard type, rather than relying on `std::decay` to drop the attribute (which
+// GHS does not do).
+//
+// This is the _identity_ on every genuine standard type (integral or not), so it is a provable
+// no-op for any rep a user would normally write.  It only rewrites a type that behaves like an
+// integer, yet names *none* of the standard integer types.  This is the telltale sign of attributed
+// types, such as `__packed uint16_t`.  In these cases, we map it to the fixed-width standard
+// integer with the same `sizeof` and signedness.
+//
+// Critically, gating this on `std::is_integral<T>` won't work.  The whole reason `std::decay` fails
+// to help on GHS is that GHS keeps vendor attributes on the type --- and it *also* mis-answers
+// `std::is_integral` for such a type (it reports `false`).  So a normalization gated on
+// `is_integral` not only won't be reliable, but also fails on the motivating example.  Instead we
+// detect integer-ness through mechanisms the attribute does not defeat:
+//
+//   * Integer-ness: `is_integral<decltype(+declval<T>())>`.  Unary `+` triggers integral promotion,
+//     which yields a fresh prvalue of a *standard* type --- this reliably strips the vendor
+//     attribute.  (Note that Au already depends on exactly this behavior in `io.hh`).  We then ask
+//     `is_integral` about that clean, promoted type, which GHS answers correctly.
+//   * Width: `sizeof(T)` --- a core operator, unaffected by the attribute.
+//   * Signedness: the value test `T(-1) < T(0)` --- core arithmetic, not `std::is_signed`.
+//
+// We additionally leave every standard type untouched, and never normalize class, union, or enum
+// types, to keep this fix as targeted as possible.
+//
+
+// Is `T` *exactly* one of the standard integer types?  An attributed integral type compares unequal
+// to all of these, so it is not "standard" by this definition.
+template <typename T>
+struct IsStandardInteger : stdx::disjunction<std::is_same<T, bool>,
+                                             std::is_same<T, char>,
+                                             std::is_same<T, signed char>,
+                                             std::is_same<T, unsigned char>,
+#if defined(__cpp_char8_t)
+                                             std::is_same<T, char8_t>,
+#endif
+                                             std::is_same<T, char16_t>,
+                                             std::is_same<T, char32_t>,
+                                             std::is_same<T, wchar_t>,
+                                             std::is_same<T, short>,
+                                             std::is_same<T, unsigned short>,
+                                             std::is_same<T, int>,
+                                             std::is_same<T, unsigned int>,
+                                             std::is_same<T, long>,
+                                             std::is_same<T, unsigned long>,
+                                             std::is_same<T, long long>,
+                                             std::is_same<T, unsigned long long>> {
+};
+
+// The type `T` promotes to under unary `+`.  Integral promotion produces a fresh standard prvalue,
+// which launders any vendor attribute off of `T`.  (Ill-formed --- hence a SFINAE removal below ---
+// for types with no unary `+`, which is exactly what we want: they are not integers to normalize.)
+template <typename T>
+using PromotedRep = decltype(+std::declval<T>());
+
+// Attribute-immune signedness: for an unsigned type `T(-1)` wraps to the maximum value (not `< 0`);
+// for a signed type it is `-1`.  Uses arithmetic, not `std::is_signed` (which the attribute may
+// defeat on GHS).
+template <typename T>
+constexpr bool rep_is_signed() {
+    return static_cast<T>(-1) < static_cast<T>(0);
+}
+
+// Should we normalize `T`?  True exactly for an integer-behaving type that is not already a
+// standard integer and is not a class/union/enum.  See the mechanism notes above for why none of
+// these predicates route through `is_integral<T>` / `is_signed<T>` on the attributed type itself.
+template <typename T, typename Enable = void>
+struct ShouldNormalizeRep : std::false_type {};  // no unary `+` (e.g. most class reps): leave alone
+template <typename T>
+struct ShouldNormalizeRep<T, stdx::void_t<PromotedRep<T>>>
+    : stdx::conjunction<std::is_integral<PromotedRep<T>>,
+                        stdx::negation<IsStandardInteger<T>>,
+                        stdx::negation<std::is_class<T>>,
+                        stdx::negation<std::is_union<T>>,
+                        stdx::negation<std::is_enum<T>>> {};
+
+// Pick the fixed-width standard integer type (`int8_t` ... `int64_t` and unsigned counterparts)
+// with the given `sizeof` and signedness; if none matches, fall back to `Fallback` (so an exotic
+// integral such as `__int128`, whose width no fixed-width type covers, is left untouched rather
+// than becoming a hard error).  We use the fixed-width candidates deliberately: there is exactly
+// one per (size, signedness), so the selection is unambiguous --- no reliance on integer-rank
+// tie-breaking.
+template <typename Fallback, std::size_t Size, bool Signed, typename... Candidates>
+struct FirstMatchingIntegerOr : stdx::type_identity<Fallback> {};
+
+template <typename Fallback, std::size_t Size, bool Signed, typename C, typename... Rest>
+struct FirstMatchingIntegerOr<Fallback, Size, Signed, C, Rest...>
+    : std::conditional_t<sizeof(C) == Size && (std::is_signed<C>::value == Signed),
+                         stdx::type_identity<C>,
+                         FirstMatchingIntegerOr<Fallback, Size, Signed, Rest...>> {};
+
+template <typename T, typename Enable = void>
+struct NormalizeRepImpl : stdx::type_identity<T> {};  // non-integer or already-standard: identity
+
+template <typename T>
+struct NormalizeRepImpl<T, std::enable_if_t<ShouldNormalizeRep<T>::value>>
+    : FirstMatchingIntegerOr<T,
+                             sizeof(T),
+                             rep_is_signed<T>(),
+                             std::int8_t,
+                             std::uint8_t,
+                             std::int16_t,
+                             std::uint16_t,
+                             std::int32_t,
+                             std::uint32_t,
+                             std::int64_t,
+                             std::uint64_t> {};
+
+template <typename T>
+using NormalizeRep = typename NormalizeRepImpl<T>::type;
+
+template <typename T>
+using CorrespondingUnit = typename CorrespondingQuantity<T>::Unit;
+
+template <typename T>
+using CorrespondingRep = typename CorrespondingQuantity<T>::Rep;
+
+template <typename T>
+struct HasCorrespondingQuantity
+    : stdx::conjunction<stdx::experimental::is_detected<CorrespondingUnit, T>,
+                        stdx::experimental::is_detected<CorrespondingRep, T>> {};
+
+template <typename T>
+using LooksLikeAuOrOtherQuantity = stdx::disjunction<IsAuType<T>, HasCorrespondingQuantity<T>>;
+
+// We need a way to form an "operation on non-quantity types only".  That is: it's some operation,
+// but _if either input is a quantity_, then we _don't even form the type_.
+//
+// The reason this very specific machinery lives in `rep.hh` is because when we're dealing with
+// operations on "types that might be a rep", we know we can exclude quantity types right away.
+// (Note that we're using the term "quantity" in an expansive sense, which includes not just
+// `au::Quantity`, but also `au::QuantityPoint`, and "quantity-like" types from other libraries
+// (which we consider as "anything that has a `CorrespondingQuantity`".
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityImpl;
+template <template <class...> class Op, typename... Ts>
+using ResultIfNoneAreQuantity = typename ResultIfNoneAreQuantityImpl<Op, Ts...>::type;
+
+// Default implementation where we know that none are quantities.
+template <bool AreAnyQuantity, template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityHelper : stdx::type_identity<Op<Ts...>> {};
+
+// Implementation if any of the types are quantities.
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityHelper<true, Op, Ts...> : stdx::type_identity<void> {};
+
+// The main implementation.
+template <template <class...> class Op, typename... Ts>
+struct ResultIfNoneAreQuantityImpl
+    : ResultIfNoneAreQuantityHelper<stdx::disjunction<LooksLikeAuOrOtherQuantity<Ts>...>::value,
+                                    Op,
+                                    Ts...> {};
+
+// A type whose _scalar_ is itself quantity-like --- say, a vector whose elements are `Quantity`
+// --- can never be a valid rep, because using it as one would produce nested units.
+template <typename T>
+using ScalarOfOrVoid = stdx::experimental::detected_or_t<void, ::au::ScalarOf, T>;
+
+template <typename T>
+struct HasQuantityLikeScalar : LooksLikeAuOrOtherQuantity<ScalarOfOrVoid<T>> {};
+
+// The `std::is_empty` is a good way to catch all of the various unit and other monovalue types in
+// our library, which have little else in common.  It's also just intrinsically true that it
+// wouldn't make much sense to use an empty type as a rep.
+template <typename T>
+struct IsKnownInvalidRep : stdx::disjunction<std::is_empty<T>,
+                                             LooksLikeAuOrOtherQuantity<T>,
+                                             std::is_same<void, T>,
+                                             HasQuantityLikeScalar<T>> {};
+
+// The type of the product of two types.
+template <typename T, typename U>
+using ProductType = decltype(std::declval<T>() * std::declval<U>());
+
+template <typename T, typename U>
+using ProductTypeOrVoid = stdx::experimental::detected_or_t<void, ProductType, T, U>;
+
+// The type of the quotient of two types.
+template <typename T, typename U>
+using QuotientType = decltype(std::declval<T>() / std::declval<U>());
+
+template <typename T, typename U>
+using QuotientTypeOrVoid = stdx::experimental::detected_or_t<void, QuotientType, T, U>;
+}  // namespace detail
+
+// Implementation for `IsValidRep`.
+//
+// For now, we'll accept anything that isn't explicitly known to be invalid.  We may tighten this up
+// later, but this seems like a reasonable starting point.
+template <typename T>
+struct IsValidRep : stdx::negation<detail::IsKnownInvalidRep<T>> {};
+
+template <typename T, typename U>
+struct IsProductValidRep
+    : IsValidRep<detail::ResultIfNoneAreQuantity<detail::ProductTypeOrVoid, T, U>> {};
+
+template <typename T, typename U>
+struct IsQuotientValidRep
+    : IsValidRep<detail::ResultIfNoneAreQuantity<detail::QuotientTypeOrVoid, T, U>> {};
+
+}  // namespace au
+
+
 namespace au {
 namespace detail {
 
@@ -7801,10 +7866,17 @@ struct TruncationRiskForMultiplyByRational
                          stdx::type_identity<CannotAssessTruncationRiskFor<T>>> {};
 
 template <typename T, typename M>
-struct TruncationRiskForMultiplyByAssumingScalar
+struct TruncationRiskForMultiplyByRationalOrIrrational
     : std::conditional_t<IsRational<M>::value,
                          TruncationRiskForMultiplyByRational<T, M>,
                          TruncationRiskForMultiplyByIrrational<T, M>> {};
+
+// We assume that multiplying by an integer magnitude can never truncate, for any rep.
+template <typename T, typename M>
+struct TruncationRiskForMultiplyByAssumingScalar
+    : std::conditional_t<IsInteger<M>::value,
+                         stdx::type_identity<NoTruncationRisk<T>>,
+                         TruncationRiskForMultiplyByRationalOrIrrational<T, M>> {};
 
 template <typename T, typename M>
 struct TruncationRiskForImpl<MultiplyTypeBy<T, M>>
@@ -8270,22 +8342,6 @@ AU_DEVICE_FUNC constexpr auto make_quantity(T &&value) {
     return QuantityMaker<UnitT>{}(std::move(value));
 }
 
-// lvalue: copy.  (See `make_quantity` above.)
-template <typename Unit, typename T>
-AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(const T &value) {
-    return std::conditional_t<IsUnitlessUnit<Unit>::value, stdx::identity, QuantityMaker<Unit>>{}(
-        value);
-}
-
-// rvalue: move.
-template <typename Unit,
-          typename T,
-          typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
-AU_DEVICE_FUNC constexpr auto make_quantity_unless_unitless(T &&value) {
-    return std::conditional_t<IsUnitlessUnit<Unit>::value, stdx::identity, QuantityMaker<Unit>>{}(
-        std::move(value));
-}
-
 // Trait to check whether two Quantity types are exactly equivalent.
 //
 // For purposes of our library, "equivalent" means that they have the same Dimension and Magnitude.
@@ -8399,8 +8455,9 @@ class Quantity {
               typename Enable = EnableIfImplicitOkIs<true, OtherUnit, OtherRep>>
     AU_DEVICE_FUNC constexpr Quantity(
         const Quantity<OtherUnit, OtherRep> &other)  // NOLINT(runtime/explicit)
-        : value_{other.template in_impl<detail::UseImplicitConversion, Rep>(
-              UnitT{}, check_for(ALL_RISKS))} {}
+        // `ignore(ALL_RISKS)` because we already determined that this implicit conversion is OK.
+        : value_{other.template in_impl<detail::UseImplicitConversion, Rep>(UnitT{},
+                                                                            ignore(ALL_RISKS))} {}
 
     // EXPLICIT constructor for another Quantity of the same Dimension.
     template <typename OtherUnit,
@@ -8444,7 +8501,7 @@ class Quantity {
     // `q.as<Rep>(new_unit)`, or `q.as<Rep>(new_unit, risk_policy)`
     template <typename NewRep,
               typename NewUnitSlot,
-              typename RiskPolicyT = decltype(ignore(ALL_RISKS)),
+              typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<!IsConversionRiskPolicy<NewUnitSlot>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
         return make_quantity<AssociatedUnit<NewUnitSlot>>(
@@ -8461,7 +8518,7 @@ class Quantity {
     // `q.in<Rep>(new_unit)`, or `q.in<Rep>(new_unit, risk_policy)`
     template <typename NewRep,
               typename NewUnitSlot,
-              typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+              typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
     AU_DEVICE_FUNC constexpr auto in(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
         return in_impl<detail::UseStaticCast, NewRep>(u, policy);
     }
@@ -8476,22 +8533,22 @@ class Quantity {
     template <typename NewUnit>
     constexpr auto coerce_as(NewUnit) const {
         // Usage example: `q.coerce_as(new_units)`.
-        return as<Rep>(NewUnit{});
+        return as(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
     constexpr auto coerce_as(NewUnit) const {
         // Usage example: `q.coerce_as<T>(new_units)`.
-        return as<NewRep>(NewUnit{});
+        return as<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewUnit>
     constexpr auto coerce_in(NewUnit) const {
         // Usage example: `q.coerce_in(new_units)`.
-        return in<Rep>(NewUnit{});
+        return in(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
     constexpr auto coerce_in(NewUnit) const {
         // Usage example: `q.coerce_in<T>(new_units)`.
-        return in<NewRep>(NewUnit{});
+        return in<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
 
     // Direct access to the underlying value member, with any Quantity-equivalent Unit.
@@ -8626,8 +8683,7 @@ class Quantity {
     // leaving the result's rep dangling.  `data_in` instead references the caller's live object.
     template <typename OtherUnit, typename OtherRep>
     AU_DEVICE_FUNC constexpr auto operator*(const Quantity<OtherUnit, OtherRep> &q) const {
-        return make_quantity_unless_unitless<UnitProduct<Unit, OtherUnit>>(value_ *
-                                                                           q.data_in(OtherUnit{}));
+        return make_quantity<UnitProduct<Unit, OtherUnit>>(value_ * q.data_in(OtherUnit{}));
     }
 
     // Division for dimensioned quantities.
@@ -8636,8 +8692,7 @@ class Quantity {
     template <typename OtherUnit, typename OtherRep>
     AU_DEVICE_FUNC constexpr auto operator/(const Quantity<OtherUnit, OtherRep> &q) const {
         warn_if_integer_division<OtherUnit, OtherRep>();
-        return make_quantity_unless_unitless<UnitQuotient<Unit, OtherUnit>>(value_ /
-                                                                            q.data_in(OtherUnit{}));
+        return make_quantity<UnitQuotient<Unit, OtherUnit>>(value_ / q.data_in(OtherUnit{}));
     }
 
     // Copy and move assignment: lvalue-only.
@@ -8989,7 +9044,7 @@ struct AreQuantityTypesEquivalent<Quantity<U1, R1>, Quantity<U2, R2>>
 // Cast Quantity to a different underlying type.
 template <typename NewRep, typename Unit, typename Rep>
 AU_DEVICE_FUNC constexpr auto rep_cast(Quantity<Unit, Rep> q) {
-    return q.template as<NewRep>(Unit{});
+    return q.template as<NewRep>(Unit{}, ignore(ALL_RISKS));
 }
 
 // Help Zero act more faithfully like a Quantity.
@@ -9870,6 +9925,65 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
+struct WattsLabel {
+    static constexpr const char label[] = "W";
+};
+template <typename T>
+constexpr const char WattsLabel<T>::label[];
+struct Watts
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>, base_dim::Mass, Pow<base_dim::Time, -3>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      WattsLabel<void> {
+    using WattsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto watt = SingularNameFor<Watts>{};
+AU_DEVICE_VAR constexpr auto watts = QuantityMaker<Watts>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto W = SymbolFor<Watts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LumensLabel {
+    static constexpr const char label[] = "lm";
+};
+template <typename T>
+constexpr const char LumensLabel<T>::label[];
+struct Lumens
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>, base_dim::LuminousIntensity>>,
+      LumensLabel<void> {
+    using LumensLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto lumen = SingularNameFor<Lumens>{};
+AU_DEVICE_VAR constexpr auto lumens = QuantityMaker<Lumens>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto lm = SymbolFor<Lumens>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
 struct SecondsLabel {
     static constexpr const char label[] = "s";
 };
@@ -9946,94 +10060,6 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct CoulombsLabel {
-    static constexpr const char label[] = "C";
-};
-template <typename T>
-constexpr const char CoulombsLabel<T>::label[];
-struct Coulombs
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<base_dim::Time, base_dim::Current>>,
-      CoulombsLabel<void> {
-    using CoulombsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto coulomb = SingularNameFor<Coulombs>{};
-AU_DEVICE_VAR constexpr auto coulombs = QuantityMaker<Coulombs>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto C = SymbolFor<Coulombs>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct WattsLabel {
-    static constexpr const char label[] = "W";
-};
-template <typename T>
-constexpr const char WattsLabel<T>::label[];
-struct Watts
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>, base_dim::Mass, Pow<base_dim::Time, -3>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      WattsLabel<void> {
-    using WattsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto watt = SingularNameFor<Watts>{};
-AU_DEVICE_VAR constexpr auto watts = QuantityMaker<Watts>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto W = SymbolFor<Watts>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LumensLabel {
-    static constexpr const char label[] = "lm";
-};
-template <typename T>
-constexpr const char LumensLabel<T>::label[];
-struct Lumens
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>, base_dim::LuminousIntensity>>,
-      LumensLabel<void> {
-    using LumensLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto lumen = SingularNameFor<Lumens>{};
-AU_DEVICE_VAR constexpr auto lumens = QuantityMaker<Lumens>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto lm = SymbolFor<Lumens>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
 struct HertzLabel {
     static constexpr const char label[] = "Hz";
 };
@@ -10091,358 +10117,25 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct FaradsLabel {
-    static constexpr const char label[] = "F";
+struct CoulombsLabel {
+    static constexpr const char label[] = "C";
 };
 template <typename T>
-constexpr const char FaradsLabel<T>::label[];
-struct Farads
+constexpr const char CoulombsLabel<T>::label[];
+struct Coulombs
     // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
     // ordering of the arguments is very particular, and could change out from under you in future
     // versions, making the program ill-formed.  Only units defined within the Au library itself can
     // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
-                         Pow<base_dim::Mass, -1>,
-                         Pow<base_dim::Time, 4>,
-                         Pow<base_dim::Current, 2>>,
-               Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -3>>>,
-      FaradsLabel<void> {
-    using FaradsLabel<void>::label;
+    : UnitImpl<Dimension<base_dim::Time, base_dim::Current>>,
+      CoulombsLabel<void> {
+    using CoulombsLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto farad = SingularNameFor<Farads>{};
-AU_DEVICE_VAR constexpr auto farads = QuantityMaker<Farads>{};
+AU_DEVICE_VAR constexpr auto coulomb = SingularNameFor<Coulombs>{};
+AU_DEVICE_VAR constexpr auto coulombs = QuantityMaker<Coulombs>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto F = SymbolFor<Farads>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FootballFieldsLabel {
-    static constexpr const char label[] = "ftbl_fld";
-};
-template <typename T>
-constexpr const char FootballFieldsLabel<T>::label[];
-struct FootballFields
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length, Magnitude<Prime<2>, Pow<Prime<3>, 2>, Pow<Prime<5>, -2>, Prime<127>>>,
-      FootballFieldsLabel<void> {
-    using FootballFieldsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto football_field = SingularNameFor<FootballFields>{};
-AU_DEVICE_VAR constexpr auto football_fields = QuantityMaker<FootballFields>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto ftbl_fld = SymbolFor<FootballFields>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FeetLabel {
-    static constexpr const char label[] = "ft";
-};
-template <typename T>
-constexpr const char FeetLabel<T>::label[];
-struct Feet
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length, Magnitude<Pow<Prime<2>, -1>, Prime<3>, Pow<Prime<5>, -4>, Prime<127>>>,
-      FeetLabel<void> {
-    using FeetLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto foot = SingularNameFor<Feet>{};
-AU_DEVICE_VAR constexpr auto feet = QuantityMaker<Feet>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto ft = SymbolFor<Feet>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct DaysLabel {
-    static constexpr const char label[] = "d";
-};
-template <typename T>
-constexpr const char DaysLabel<T>::label[];
-struct Days
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 7>, Pow<Prime<3>, 3>, Pow<Prime<5>, 2>>>,
-      DaysLabel<void> {
-    using DaysLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto day = SingularNameFor<Days>{};
-AU_DEVICE_VAR constexpr auto days = QuantityMaker<Days>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto d = SymbolFor<Days>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FurlongsLabel {
-    static constexpr const char label[] = "fur";
-};
-template <typename T>
-constexpr const char FurlongsLabel<T>::label[];
-struct Furlongs
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length,
-               Magnitude<Prime<2>, Pow<Prime<3>, 2>, Pow<Prime<5>, -3>, Prime<11>, Prime<127>>>,
-      FurlongsLabel<void> {
-    using FurlongsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto furlong = SingularNameFor<Furlongs>{};
-AU_DEVICE_VAR constexpr auto furlongs = QuantityMaker<Furlongs>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto fur = SymbolFor<Furlongs>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HenriesLabel {
-    static constexpr const char label[] = "H";
-};
-template <typename T>
-constexpr const char HenriesLabel<T>::label[];
-struct Henries
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
-                         base_dim::Mass,
-                         Pow<base_dim::Time, -2>,
-                         Pow<base_dim::Current, -2>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      HenriesLabel<void> {
-    using HenriesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto henry = SingularNameFor<Henries>{};
-AU_DEVICE_VAR constexpr auto henries = QuantityMaker<Henries>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto H = SymbolFor<Henries>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct GraysLabel {
-    static constexpr const char label[] = "Gy";
-};
-template <typename T>
-constexpr const char GraysLabel<T>::label[];
-struct Grays
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>, Pow<base_dim::Time, -2>>>,
-      GraysLabel<void> {
-    using GraysLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto gray = SingularNameFor<Grays>{};
-AU_DEVICE_VAR constexpr auto grays = QuantityMaker<Grays>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto Gy = SymbolFor<Grays>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SiemensLabel {
-    static constexpr const char label[] = "S";
-};
-template <typename T>
-constexpr const char SiemensLabel<T>::label[];
-struct Siemens
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
-                         Pow<base_dim::Mass, -1>,
-                         Pow<base_dim::Time, 3>,
-                         Pow<base_dim::Current, 2>>,
-               Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -3>>>,
-      SiemensLabel<void> {
-    using SiemensLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto siemen = SingularNameFor<Siemens>{};
-AU_DEVICE_VAR constexpr auto siemens = QuantityMaker<Siemens>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto S = SymbolFor<Siemens>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SteradiansLabel {
-    static constexpr const char label[] = "sr";
-};
-template <typename T>
-constexpr const char SteradiansLabel<T>::label[];
-struct Steradians
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>>>,
-      SteradiansLabel<void> {
-    using SteradiansLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto steradian = SingularNameFor<Steradians>{};
-AU_DEVICE_VAR constexpr auto steradians = QuantityMaker<Steradians>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto sr = SymbolFor<Steradians>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PercentLabel {
-    static constexpr const char label[] = "%";
-};
-template <typename T>
-constexpr const char PercentLabel<T>::label[];
-struct Percent
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<>, Magnitude<Pow<Prime<2>, -2>, Pow<Prime<5>, -2>>>,
-      PercentLabel<void> {
-    using PercentLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto percent = QuantityMaker<Percent>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto pct = SymbolFor<Percent>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct MilesLabel {
-    static constexpr const char label[] = "mi";
-};
-template <typename T>
-constexpr const char MilesLabel<T>::label[];
-struct Miles
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<
-          Length,
-          Magnitude<Pow<Prime<2>, 4>, Pow<Prime<3>, 2>, Pow<Prime<5>, -3>, Prime<11>, Prime<127>>>,
-      MilesLabel<void> {
-    using MilesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto mile = SingularNameFor<Miles>{};
-AU_DEVICE_VAR constexpr auto miles = QuantityMaker<Miles>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto mi = SymbolFor<Miles>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct InchesLabel {
-    static constexpr const char label[] = "in";
-};
-template <typename T>
-constexpr const char InchesLabel<T>::label[];
-struct Inches
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length, Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -4>, Prime<127>>>,
-      InchesLabel<void> {
-    using InchesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto inch = SingularNameFor<Inches>{};
-AU_DEVICE_VAR constexpr auto inches = QuantityMaker<Inches>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto in = SymbolFor<Inches>{};
+AU_DEVICE_VAR constexpr auto C = SymbolFor<Coulombs>{};
 }
 }  // namespace au
 
@@ -10483,249 +10176,62 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct USQuartsLabel {
-    static constexpr const char label[] = "US_qt";
+struct KatalsLabel {
+    static constexpr const char label[] = "kat";
 };
 template <typename T>
-constexpr const char USQuartsLabel<T>::label[];
-struct USQuarts
+constexpr const char KatalsLabel<T>::label[];
+struct Katals
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Time, -1>, base_dim::AmountOfSubstance>>,
+      KatalsLabel<void> {
+    using KatalsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto katal = SingularNameFor<Katals>{};
+AU_DEVICE_VAR constexpr auto katals = QuantityMaker<Katals>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto kat = SymbolFor<Katals>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct USPintsLabel {
+    static constexpr const char label[] = "US_pt";
+};
+template <typename T>
+constexpr const char USPintsLabel<T>::label[];
+struct USPints
     // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
     // ordering of the arguments is very particular, and could change out from under you in future
     // versions, making the program ill-formed.  Only units defined within the Au library itself can
     // safely use this pattern.
     : UnitImpl<Dimension<Pow<base_dim::Length, 3>>,
-               Magnitude<Pow<Prime<2>, -11>,
+               Magnitude<Pow<Prime<2>, -12>,
                          Prime<3>,
                          Pow<Prime<5>, -12>,
                          Prime<7>,
                          Prime<11>,
                          Pow<Prime<127>, 3>>>,
-      USQuartsLabel<void> {
-    using USQuartsLabel<void>::label;
+      USPintsLabel<void> {
+    using USPintsLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto us_quart = SingularNameFor<USQuarts>{};
-AU_DEVICE_VAR constexpr auto us_quarts = QuantityMaker<USQuarts>{};
+AU_DEVICE_VAR constexpr auto us_pint = SingularNameFor<USPints>{};
+AU_DEVICE_VAR constexpr auto us_pints = QuantityMaker<USPints>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto US_qt = SymbolFor<USQuarts>{};
+AU_DEVICE_VAR constexpr auto US_pt = SymbolFor<USPints>{};
 }
 
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BarsLabel {
-    static constexpr const char label[] = "bar";
-};
-template <typename T>
-constexpr const char BarsLabel<T>::label[];
-struct Bars
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, -1>, base_dim::Mass, Pow<base_dim::Time, -2>>,
-               Magnitude<Pow<Prime<2>, 8>, Pow<Prime<5>, 8>>>,
-      BarsLabel<void> {
-    using BarsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto bar = SingularNameFor<Bars>{};
-AU_DEVICE_VAR constexpr auto bars = QuantityMaker<Bars>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto bar = SymbolFor<Bars>{};
-}  // namespace symbols
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct VoltsLabel {
-    static constexpr const char label[] = "V";
-};
-template <typename T>
-constexpr const char VoltsLabel<T>::label[];
-struct Volts
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
-                         base_dim::Mass,
-                         Pow<base_dim::Time, -3>,
-                         Pow<base_dim::Current, -1>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      VoltsLabel<void> {
-    using VoltsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto volt = SingularNameFor<Volts>{};
-AU_DEVICE_VAR constexpr auto volts = QuantityMaker<Volts>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto V = SymbolFor<Volts>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct TeslaLabel {
-    static constexpr const char label[] = "T";
-};
-template <typename T>
-constexpr const char TeslaLabel<T>::label[];
-struct Tesla
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<base_dim::Mass, Pow<base_dim::Time, -2>, Pow<base_dim::Current, -1>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      TeslaLabel<void> {
-    using TeslaLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto tesla = QuantityMaker<Tesla>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto T = SymbolFor<Tesla>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct FathomsLabel {
-    static constexpr const char label[] = "ftm";
-};
-template <typename T>
-constexpr const char FathomsLabel<T>::label[];
-struct Fathoms
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length, Magnitude<Pow<Prime<3>, 2>, Pow<Prime<5>, -4>, Prime<127>>>,
-      FathomsLabel<void> {
-    using FathomsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto fathom = SingularNameFor<Fathoms>{};
-AU_DEVICE_VAR constexpr auto fathoms = QuantityMaker<Fathoms>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto ftm = SymbolFor<Fathoms>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct YardsLabel {
-    static constexpr const char label[] = "yd";
-};
-template <typename T>
-constexpr const char YardsLabel<T>::label[];
-struct Yards
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length,
-               Magnitude<Pow<Prime<2>, -1>, Pow<Prime<3>, 2>, Pow<Prime<5>, -4>, Prime<127>>>,
-      YardsLabel<void> {
-    using YardsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto yard = SingularNameFor<Yards>{};
-AU_DEVICE_VAR constexpr auto yards = QuantityMaker<Yards>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto yd = SymbolFor<Yards>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct PoundsMassLabel {
-    static constexpr const char label[] = "lb";
-};
-template <typename T>
-constexpr const char PoundsMassLabel<T>::label[];
-struct PoundsMass
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Mass,
-               Magnitude<Pow<Prime<2>, -5>,
-                         Pow<Prime<5>, -5>,
-                         Prime<7>,
-                         Prime<11>,
-                         Prime<97>,
-                         Prime<6073>>>,
-      PoundsMassLabel<void> {
-    using PoundsMassLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
-AU_DEVICE_VAR constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto lb = SymbolFor<PoundsMass>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LuxLabel {
-    static constexpr const char label[] = "lx";
-};
-template <typename T>
-constexpr const char LuxLabel<T>::label[];
-struct Lux
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
-                         Pow<base_dim::Angle, 2>,
-                         base_dim::LuminousIntensity>>,
-      LuxLabel<void> {
-    using LuxLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto lux = QuantityMaker<Lux>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto lx = SymbolFor<Lux>{};
-}
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -10756,313 +10262,6 @@ namespace symbols {
 AU_DEVICE_VAR constexpr auto as = SymbolFor<Arcseconds>{};
 }
 
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct KnotsLabel {
-    static constexpr const char label[] = "kn";
-};
-template <typename T>
-constexpr const char KnotsLabel<T>::label[];
-struct Knots
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<base_dim::Length, Pow<base_dim::Time, -1>>,
-               Magnitude<Pow<Prime<2>, -2>, Pow<Prime<3>, -2>, Pow<Prime<5>, -2>, Prime<463>>>,
-      KnotsLabel<void> {
-    using KnotsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto knot = SingularNameFor<Knots>{};
-AU_DEVICE_VAR constexpr auto knots = QuantityMaker<Knots>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto kn = SymbolFor<Knots>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct WebersLabel {
-    static constexpr const char label[] = "Wb";
-};
-template <typename T>
-constexpr const char WebersLabel<T>::label[];
-struct Webers
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
-                         base_dim::Mass,
-                         Pow<base_dim::Time, -2>,
-                         Pow<base_dim::Current, -1>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      WebersLabel<void> {
-    using WebersLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto weber = SingularNameFor<Webers>{};
-AU_DEVICE_VAR constexpr auto webers = QuantityMaker<Webers>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto Wb = SymbolFor<Webers>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct KatalsLabel {
-    static constexpr const char label[] = "kat";
-};
-template <typename T>
-constexpr const char KatalsLabel<T>::label[];
-struct Katals
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Time, -1>, base_dim::AmountOfSubstance>>,
-      KatalsLabel<void> {
-    using KatalsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto katal = SingularNameFor<Katals>{};
-AU_DEVICE_VAR constexpr auto katals = QuantityMaker<Katals>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto kat = SymbolFor<Katals>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct HoursLabel {
-    static constexpr const char label[] = "h";
-};
-template <typename T>
-constexpr const char HoursLabel<T>::label[];
-struct Hours
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 4>, Pow<Prime<3>, 2>, Pow<Prime<5>, 2>>>,
-      HoursLabel<void> {
-    using HoursLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto hour = SingularNameFor<Hours>{};
-AU_DEVICE_VAR constexpr auto hours = QuantityMaker<Hours>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto h = SymbolFor<Hours>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BytesLabel {
-    static constexpr const char label[] = "B";
-};
-template <typename T>
-constexpr const char BytesLabel<T>::label[];
-struct Bytes
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Information, Magnitude<Pow<Prime<2>, 3>>>,
-      BytesLabel<void> {
-    using BytesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto byte = SingularNameFor<Bytes>{};
-AU_DEVICE_VAR constexpr auto bytes = QuantityMaker<Bytes>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto B = SymbolFor<Bytes>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct MinutesLabel {
-    static constexpr const char label[] = "min";
-};
-template <typename T>
-constexpr const char MinutesLabel<T>::label[];
-struct Minutes
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 2>, Prime<3>, Prime<5>>>,
-      MinutesLabel<void> {
-    using MinutesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto minute = SingularNameFor<Minutes>{};
-AU_DEVICE_VAR constexpr auto minutes = QuantityMaker<Minutes>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto min = SymbolFor<Minutes>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct DegreesLabel {
-    static constexpr const char label[] = "deg";
-};
-template <typename T>
-constexpr const char DegreesLabel<T>::label[];
-struct Degrees
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Angle, Magnitude<Pow<Prime<2>, -2>, Pow<Prime<3>, -2>, Pi, Pow<Prime<5>, -1>>>,
-      DegreesLabel<void> {
-    using DegreesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto degree = SingularNameFor<Degrees>{};
-AU_DEVICE_VAR constexpr auto degrees = QuantityMaker<Degrees>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto deg = SymbolFor<Degrees>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct OhmsLabel {
-    static constexpr const char label[] = "ohm";
-};
-template <typename T>
-constexpr const char OhmsLabel<T>::label[];
-struct Ohms
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
-                         base_dim::Mass,
-                         Pow<base_dim::Time, -3>,
-                         Pow<base_dim::Current, -2>>,
-               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
-      OhmsLabel<void> {
-    using OhmsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto ohm = SingularNameFor<Ohms>{};
-AU_DEVICE_VAR constexpr auto ohms = QuantityMaker<Ohms>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto ohm = SymbolFor<Ohms>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct SlugsLabel {
-    static constexpr const char label[] = "slug";
-};
-template <typename T>
-constexpr const char SlugsLabel<T>::label[];
-struct Slugs
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Mass,
-               Magnitude<Pow<Prime<2>, -9>,
-                         Pow<Prime<3>, -1>,
-                         Pow<Prime<5>, -5>,
-                         Pow<Prime<7>, 2>,
-                         Prime<11>,
-                         Prime<97>,
-                         Pow<Prime<127>, -1>,
-                         Prime<6073>,
-                         Prime<28019>>>,
-      SlugsLabel<void> {
-    using SlugsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto slug = SingularNameFor<Slugs>{};
-AU_DEVICE_VAR constexpr auto slugs = QuantityMaker<Slugs>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto slug = SymbolFor<Slugs>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct BecquerelLabel {
-    static constexpr const char label[] = "Bq";
-};
-template <typename T>
-constexpr const char BecquerelLabel<T>::label[];
-struct Becquerel
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Time, -1>>>,
-      BecquerelLabel<void> {
-    using BecquerelLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto becquerel = QuantityMaker<Becquerel>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto Bq = SymbolFor<Becquerel>{};
-}
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -11160,6 +10359,184 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
+struct FootballFieldsLabel {
+    static constexpr const char label[] = "ftbl_fld";
+};
+template <typename T>
+constexpr const char FootballFieldsLabel<T>::label[];
+struct FootballFields
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length, Magnitude<Prime<2>, Pow<Prime<3>, 2>, Pow<Prime<5>, -2>, Prime<127>>>,
+      FootballFieldsLabel<void> {
+    using FootballFieldsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto football_field = SingularNameFor<FootballFields>{};
+AU_DEVICE_VAR constexpr auto football_fields = QuantityMaker<FootballFields>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto ftbl_fld = SymbolFor<FootballFields>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct OhmsLabel {
+    static constexpr const char label[] = "ohm";
+};
+template <typename T>
+constexpr const char OhmsLabel<T>::label[];
+struct Ohms
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
+                         base_dim::Mass,
+                         Pow<base_dim::Time, -3>,
+                         Pow<base_dim::Current, -2>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      OhmsLabel<void> {
+    using OhmsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto ohm = SingularNameFor<Ohms>{};
+AU_DEVICE_VAR constexpr auto ohms = QuantityMaker<Ohms>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto ohm = SymbolFor<Ohms>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MilesLabel {
+    static constexpr const char label[] = "mi";
+};
+template <typename T>
+constexpr const char MilesLabel<T>::label[];
+struct Miles
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<
+          Length,
+          Magnitude<Pow<Prime<2>, 4>, Pow<Prime<3>, 2>, Pow<Prime<5>, -3>, Prime<11>, Prime<127>>>,
+      MilesLabel<void> {
+    using MilesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto mile = SingularNameFor<Miles>{};
+AU_DEVICE_VAR constexpr auto miles = QuantityMaker<Miles>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto mi = SymbolFor<Miles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct DaysLabel {
+    static constexpr const char label[] = "d";
+};
+template <typename T>
+constexpr const char DaysLabel<T>::label[];
+struct Days
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 7>, Pow<Prime<3>, 3>, Pow<Prime<5>, 2>>>,
+      DaysLabel<void> {
+    using DaysLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto day = SingularNameFor<Days>{};
+AU_DEVICE_VAR constexpr auto days = QuantityMaker<Days>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto d = SymbolFor<Days>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BitsLabel {
+    static constexpr const char label[] = "b";
+};
+template <typename T>
+constexpr const char BitsLabel<T>::label[];
+struct Bits : UnitImpl<Information>, BitsLabel<void> {
+    using BitsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto bit = SingularNameFor<Bits>{};
+AU_DEVICE_VAR constexpr auto bits = QuantityMaker<Bits>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto b = SymbolFor<Bits>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct HenriesLabel {
+    static constexpr const char label[] = "H";
+};
+template <typename T>
+constexpr const char HenriesLabel<T>::label[];
+struct Henries
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
+                         base_dim::Mass,
+                         Pow<base_dim::Time, -2>,
+                         Pow<base_dim::Current, -2>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      HenriesLabel<void> {
+    using HenriesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto henry = SingularNameFor<Henries>{};
+AU_DEVICE_VAR constexpr auto henries = QuantityMaker<Henries>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto H = SymbolFor<Henries>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
 struct ArcminutesLabel {
     static constexpr const char label[] = "'";
 };
@@ -11190,31 +10567,405 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct USGallonsLabel {
-    static constexpr const char label[] = "US_gal";
+struct BecquerelLabel {
+    static constexpr const char label[] = "Bq";
 };
 template <typename T>
-constexpr const char USGallonsLabel<T>::label[];
-struct USGallons
+constexpr const char BecquerelLabel<T>::label[];
+struct Becquerel
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Time, -1>>>,
+      BecquerelLabel<void> {
+    using BecquerelLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto becquerel = QuantityMaker<Becquerel>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto Bq = SymbolFor<Becquerel>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct HoursLabel {
+    static constexpr const char label[] = "h";
+};
+template <typename T>
+constexpr const char HoursLabel<T>::label[];
+struct Hours
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 4>, Pow<Prime<3>, 2>, Pow<Prime<5>, 2>>>,
+      HoursLabel<void> {
+    using HoursLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto hour = SingularNameFor<Hours>{};
+AU_DEVICE_VAR constexpr auto hours = QuantityMaker<Hours>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto h = SymbolFor<Hours>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct UnosLabel {
+    static constexpr const char label[] = "U";
+};
+template <typename T>
+constexpr const char UnosLabel<T>::label[];
+struct Unos : UnitProduct<>, UnosLabel<void> {
+    using UnosLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto unos = QuantityMaker<Unos>{};
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FaradsLabel {
+    static constexpr const char label[] = "F";
+};
+template <typename T>
+constexpr const char FaradsLabel<T>::label[];
+struct Farads
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
+                         Pow<base_dim::Mass, -1>,
+                         Pow<base_dim::Time, 4>,
+                         Pow<base_dim::Current, 2>>,
+               Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -3>>>,
+      FaradsLabel<void> {
+    using FaradsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto farad = SingularNameFor<Farads>{};
+AU_DEVICE_VAR constexpr auto farads = QuantityMaker<Farads>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto F = SymbolFor<Farads>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FathomsLabel {
+    static constexpr const char label[] = "ftm";
+};
+template <typename T>
+constexpr const char FathomsLabel<T>::label[];
+struct Fathoms
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length, Magnitude<Pow<Prime<3>, 2>, Pow<Prime<5>, -4>, Prime<127>>>,
+      FathomsLabel<void> {
+    using FathomsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto fathom = SingularNameFor<Fathoms>{};
+AU_DEVICE_VAR constexpr auto fathoms = QuantityMaker<Fathoms>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto ftm = SymbolFor<Fathoms>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct KnotsLabel {
+    static constexpr const char label[] = "kn";
+};
+template <typename T>
+constexpr const char KnotsLabel<T>::label[];
+struct Knots
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<base_dim::Length, Pow<base_dim::Time, -1>>,
+               Magnitude<Pow<Prime<2>, -2>, Pow<Prime<3>, -2>, Pow<Prime<5>, -2>, Prime<463>>>,
+      KnotsLabel<void> {
+    using KnotsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto knot = SingularNameFor<Knots>{};
+AU_DEVICE_VAR constexpr auto knots = QuantityMaker<Knots>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto kn = SymbolFor<Knots>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FurlongsLabel {
+    static constexpr const char label[] = "fur";
+};
+template <typename T>
+constexpr const char FurlongsLabel<T>::label[];
+struct Furlongs
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length,
+               Magnitude<Prime<2>, Pow<Prime<3>, 2>, Pow<Prime<5>, -3>, Prime<11>, Prime<127>>>,
+      FurlongsLabel<void> {
+    using FurlongsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto furlong = SingularNameFor<Furlongs>{};
+AU_DEVICE_VAR constexpr auto furlongs = QuantityMaker<Furlongs>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto fur = SymbolFor<Furlongs>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SiemensLabel {
+    static constexpr const char label[] = "S";
+};
+template <typename T>
+constexpr const char SiemensLabel<T>::label[];
+struct Siemens
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
+                         Pow<base_dim::Mass, -1>,
+                         Pow<base_dim::Time, 3>,
+                         Pow<base_dim::Current, 2>>,
+               Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -3>>>,
+      SiemensLabel<void> {
+    using SiemensLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto siemen = SingularNameFor<Siemens>{};
+AU_DEVICE_VAR constexpr auto siemens = QuantityMaker<Siemens>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto S = SymbolFor<Siemens>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct YardsLabel {
+    static constexpr const char label[] = "yd";
+};
+template <typename T>
+constexpr const char YardsLabel<T>::label[];
+struct Yards
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length,
+               Magnitude<Pow<Prime<2>, -1>, Pow<Prime<3>, 2>, Pow<Prime<5>, -4>, Prime<127>>>,
+      YardsLabel<void> {
+    using YardsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto yard = SingularNameFor<Yards>{};
+AU_DEVICE_VAR constexpr auto yards = QuantityMaker<Yards>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto yd = SymbolFor<Yards>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct RadiansLabel {
+    static constexpr const char label[] = "rad";
+};
+template <typename T>
+constexpr const char RadiansLabel<T>::label[];
+struct Radians : UnitImpl<Angle>, RadiansLabel<void> {
+    using RadiansLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto radian = SingularNameFor<Radians>{};
+AU_DEVICE_VAR constexpr auto radians = QuantityMaker<Radians>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto rad = SymbolFor<Radians>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct PercentLabel {
+    static constexpr const char label[] = "%";
+};
+template <typename T>
+constexpr const char PercentLabel<T>::label[];
+struct Percent
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<>, Magnitude<Pow<Prime<2>, -2>, Pow<Prime<5>, -2>>>,
+      PercentLabel<void> {
+    using PercentLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto percent = QuantityMaker<Percent>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto pct = SymbolFor<Percent>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct WebersLabel {
+    static constexpr const char label[] = "Wb";
+};
+template <typename T>
+constexpr const char WebersLabel<T>::label[];
+struct Webers
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
+                         base_dim::Mass,
+                         Pow<base_dim::Time, -2>,
+                         Pow<base_dim::Current, -1>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      WebersLabel<void> {
+    using WebersLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto weber = SingularNameFor<Webers>{};
+AU_DEVICE_VAR constexpr auto webers = QuantityMaker<Webers>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto Wb = SymbolFor<Webers>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct InchesLabel {
+    static constexpr const char label[] = "in";
+};
+template <typename T>
+constexpr const char InchesLabel<T>::label[];
+struct Inches
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length, Magnitude<Pow<Prime<2>, -3>, Pow<Prime<5>, -4>, Prime<127>>>,
+      InchesLabel<void> {
+    using InchesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto inch = SingularNameFor<Inches>{};
+AU_DEVICE_VAR constexpr auto inches = QuantityMaker<Inches>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto in = SymbolFor<Inches>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct USQuartsLabel {
+    static constexpr const char label[] = "US_qt";
+};
+template <typename T>
+constexpr const char USQuartsLabel<T>::label[];
+struct USQuarts
     // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
     // ordering of the arguments is very particular, and could change out from under you in future
     // versions, making the program ill-formed.  Only units defined within the Au library itself can
     // safely use this pattern.
     : UnitImpl<Dimension<Pow<base_dim::Length, 3>>,
-               Magnitude<Pow<Prime<2>, -9>,
+               Magnitude<Pow<Prime<2>, -11>,
                          Prime<3>,
                          Pow<Prime<5>, -12>,
                          Prime<7>,
                          Prime<11>,
                          Pow<Prime<127>, 3>>>,
-      USGallonsLabel<void> {
-    using USGallonsLabel<void>::label;
+      USQuartsLabel<void> {
+    using USQuartsLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto us_gallon = SingularNameFor<USGallons>{};
-AU_DEVICE_VAR constexpr auto us_gallons = QuantityMaker<USGallons>{};
+AU_DEVICE_VAR constexpr auto us_quart = SingularNameFor<USQuarts>{};
+AU_DEVICE_VAR constexpr auto us_quarts = QuantityMaker<USQuarts>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto US_gal = SymbolFor<USGallons>{};
+AU_DEVICE_VAR constexpr auto US_qt = SymbolFor<USQuarts>{};
 }
 
 }  // namespace au
@@ -11250,19 +11001,31 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct BitsLabel {
-    static constexpr const char label[] = "b";
+struct PoundsMassLabel {
+    static constexpr const char label[] = "lb";
 };
 template <typename T>
-constexpr const char BitsLabel<T>::label[];
-struct Bits : UnitImpl<Information>, BitsLabel<void> {
-    using BitsLabel<void>::label;
+constexpr const char PoundsMassLabel<T>::label[];
+struct PoundsMass
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Mass,
+               Magnitude<Pow<Prime<2>, -5>,
+                         Pow<Prime<5>, -5>,
+                         Prime<7>,
+                         Prime<11>,
+                         Prime<97>,
+                         Prime<6073>>>,
+      PoundsMassLabel<void> {
+    using PoundsMassLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto bit = SingularNameFor<Bits>{};
-AU_DEVICE_VAR constexpr auto bits = QuantityMaker<Bits>{};
+AU_DEVICE_VAR constexpr auto pound_mass = SingularNameFor<PoundsMass>{};
+AU_DEVICE_VAR constexpr auto pounds_mass = QuantityMaker<PoundsMass>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto b = SymbolFor<Bits>{};
+AU_DEVICE_VAR constexpr auto lb = SymbolFor<PoundsMass>{};
 }
 }  // namespace au
 
@@ -11273,31 +11036,181 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct USPintsLabel {
-    static constexpr const char label[] = "US_pt";
+struct NauticalMilesLabel {
+    static constexpr const char label[] = "nmi";
 };
 template <typename T>
-constexpr const char USPintsLabel<T>::label[];
-struct USPints
+constexpr const char NauticalMilesLabel<T>::label[];
+struct NauticalMiles
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length, Magnitude<Pow<Prime<2>, 2>, Prime<463>>>,
+      NauticalMilesLabel<void> {
+    using NauticalMilesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
+AU_DEVICE_VAR constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto nmi = SymbolFor<NauticalMiles>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct DegreesLabel {
+    static constexpr const char label[] = "deg";
+};
+template <typename T>
+constexpr const char DegreesLabel<T>::label[];
+struct Degrees
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Angle, Magnitude<Pow<Prime<2>, -2>, Pow<Prime<3>, -2>, Pi, Pow<Prime<5>, -1>>>,
+      DegreesLabel<void> {
+    using DegreesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto degree = SingularNameFor<Degrees>{};
+AU_DEVICE_VAR constexpr auto degrees = QuantityMaker<Degrees>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto deg = SymbolFor<Degrees>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BarsLabel {
+    static constexpr const char label[] = "bar";
+};
+template <typename T>
+constexpr const char BarsLabel<T>::label[];
+struct Bars
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, -1>, base_dim::Mass, Pow<base_dim::Time, -2>>,
+               Magnitude<Pow<Prime<2>, 8>, Pow<Prime<5>, 8>>>,
+      BarsLabel<void> {
+    using BarsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto bar = SingularNameFor<Bars>{};
+AU_DEVICE_VAR constexpr auto bars = QuantityMaker<Bars>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto bar = SymbolFor<Bars>{};
+}  // namespace symbols
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct FeetLabel {
+    static constexpr const char label[] = "ft";
+};
+template <typename T>
+constexpr const char FeetLabel<T>::label[];
+struct Feet
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Length, Magnitude<Pow<Prime<2>, -1>, Prime<3>, Pow<Prime<5>, -4>, Prime<127>>>,
+      FeetLabel<void> {
+    using FeetLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto foot = SingularNameFor<Feet>{};
+AU_DEVICE_VAR constexpr auto feet = QuantityMaker<Feet>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto ft = SymbolFor<Feet>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct VoltsLabel {
+    static constexpr const char label[] = "V";
+};
+template <typename T>
+constexpr const char VoltsLabel<T>::label[];
+struct Volts
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>,
+                         base_dim::Mass,
+                         Pow<base_dim::Time, -3>,
+                         Pow<base_dim::Current, -1>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      VoltsLabel<void> {
+    using VoltsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto volt = SingularNameFor<Volts>{};
+AU_DEVICE_VAR constexpr auto volts = QuantityMaker<Volts>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto V = SymbolFor<Volts>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct USGallonsLabel {
+    static constexpr const char label[] = "US_gal";
+};
+template <typename T>
+constexpr const char USGallonsLabel<T>::label[];
+struct USGallons
     // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
     // ordering of the arguments is very particular, and could change out from under you in future
     // versions, making the program ill-formed.  Only units defined within the Au library itself can
     // safely use this pattern.
     : UnitImpl<Dimension<Pow<base_dim::Length, 3>>,
-               Magnitude<Pow<Prime<2>, -12>,
+               Magnitude<Pow<Prime<2>, -9>,
                          Prime<3>,
                          Pow<Prime<5>, -12>,
                          Prime<7>,
                          Prime<11>,
                          Pow<Prime<127>, 3>>>,
-      USPintsLabel<void> {
-    using USPintsLabel<void>::label;
+      USGallonsLabel<void> {
+    using USGallonsLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto us_pint = SingularNameFor<USPints>{};
-AU_DEVICE_VAR constexpr auto us_pints = QuantityMaker<USPints>{};
+AU_DEVICE_VAR constexpr auto us_gallon = SingularNameFor<USGallons>{};
+AU_DEVICE_VAR constexpr auto us_gallons = QuantityMaker<USGallons>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto US_pt = SymbolFor<USPints>{};
+AU_DEVICE_VAR constexpr auto US_gal = SymbolFor<USGallons>{};
 }
 
 }  // namespace au
@@ -11344,81 +11257,6 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct RadiansLabel {
-    static constexpr const char label[] = "rad";
-};
-template <typename T>
-constexpr const char RadiansLabel<T>::label[];
-struct Radians : UnitImpl<Angle>, RadiansLabel<void> {
-    using RadiansLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto radian = SingularNameFor<Radians>{};
-AU_DEVICE_VAR constexpr auto radians = QuantityMaker<Radians>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto rad = SymbolFor<Radians>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct NauticalMilesLabel {
-    static constexpr const char label[] = "nmi";
-};
-template <typename T>
-constexpr const char NauticalMilesLabel<T>::label[];
-struct NauticalMiles
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Length, Magnitude<Pow<Prime<2>, 2>, Prime<463>>>,
-      NauticalMilesLabel<void> {
-    using NauticalMilesLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto nautical_mile = SingularNameFor<NauticalMiles>{};
-AU_DEVICE_VAR constexpr auto nautical_miles = QuantityMaker<NauticalMiles>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto nmi = SymbolFor<NauticalMiles>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct GramsLabel {
-    static constexpr const char label[] = "g";
-};
-template <typename T>
-constexpr const char GramsLabel<T>::label[];
-struct Grams : UnitImpl<Mass>, GramsLabel<void> {
-    using GramsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto gram = SingularNameFor<Grams>{};
-AU_DEVICE_VAR constexpr auto grams = QuantityMaker<Grams>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto g = SymbolFor<Grams>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
 struct NewtonsLabel {
     static constexpr const char label[] = "N";
 };
@@ -11449,16 +11287,233 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct UnosLabel {
-    static constexpr const char label[] = "U";
+struct TeslaLabel {
+    static constexpr const char label[] = "T";
 };
 template <typename T>
-constexpr const char UnosLabel<T>::label[];
-struct Unos : UnitProduct<>, UnosLabel<void> {
-    using UnosLabel<void>::label;
+constexpr const char TeslaLabel<T>::label[];
+struct Tesla
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<base_dim::Mass, Pow<base_dim::Time, -2>, Pow<base_dim::Current, -1>>,
+               Magnitude<Pow<Prime<2>, 3>, Pow<Prime<5>, 3>>>,
+      TeslaLabel<void> {
+    using TeslaLabel<void>::label;
 };
-AU_DEVICE_VAR constexpr auto unos = QuantityMaker<Unos>{};
+AU_DEVICE_VAR constexpr auto tesla = QuantityMaker<Tesla>{};
 
+namespace symbols {
+AU_DEVICE_VAR constexpr auto T = SymbolFor<Tesla>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SteradiansLabel {
+    static constexpr const char label[] = "sr";
+};
+template <typename T>
+constexpr const char SteradiansLabel<T>::label[];
+struct Steradians
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>>>,
+      SteradiansLabel<void> {
+    using SteradiansLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto steradian = SingularNameFor<Steradians>{};
+AU_DEVICE_VAR constexpr auto steradians = QuantityMaker<Steradians>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto sr = SymbolFor<Steradians>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct SlugsLabel {
+    static constexpr const char label[] = "slug";
+};
+template <typename T>
+constexpr const char SlugsLabel<T>::label[];
+struct Slugs
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Mass,
+               Magnitude<Pow<Prime<2>, -9>,
+                         Pow<Prime<3>, -1>,
+                         Pow<Prime<5>, -5>,
+                         Pow<Prime<7>, 2>,
+                         Prime<11>,
+                         Prime<97>,
+                         Pow<Prime<127>, -1>,
+                         Prime<6073>,
+                         Prime<28019>>>,
+      SlugsLabel<void> {
+    using SlugsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto slug = SingularNameFor<Slugs>{};
+AU_DEVICE_VAR constexpr auto slugs = QuantityMaker<Slugs>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto slug = SymbolFor<Slugs>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LuxLabel {
+    static constexpr const char label[] = "lx";
+};
+template <typename T>
+constexpr const char LuxLabel<T>::label[];
+struct Lux
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, -2>,
+                         Pow<base_dim::Angle, 2>,
+                         base_dim::LuminousIntensity>>,
+      LuxLabel<void> {
+    using LuxLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto lux = QuantityMaker<Lux>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto lx = SymbolFor<Lux>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct MinutesLabel {
+    static constexpr const char label[] = "min";
+};
+template <typename T>
+constexpr const char MinutesLabel<T>::label[];
+struct Minutes
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Time, Magnitude<Pow<Prime<2>, 2>, Prime<3>, Prime<5>>>,
+      MinutesLabel<void> {
+    using MinutesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto minute = SingularNameFor<Minutes>{};
+AU_DEVICE_VAR constexpr auto minutes = QuantityMaker<Minutes>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto min = SymbolFor<Minutes>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct GraysLabel {
+    static constexpr const char label[] = "Gy";
+};
+template <typename T>
+constexpr const char GraysLabel<T>::label[];
+struct Grays
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Length, 2>, Pow<base_dim::Time, -2>>>,
+      GraysLabel<void> {
+    using GraysLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto gray = SingularNameFor<Grays>{};
+AU_DEVICE_VAR constexpr auto grays = QuantityMaker<Grays>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto Gy = SymbolFor<Grays>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BytesLabel {
+    static constexpr const char label[] = "B";
+};
+template <typename T>
+constexpr const char BytesLabel<T>::label[];
+struct Bytes
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Information, Magnitude<Pow<Prime<2>, 3>>>,
+      BytesLabel<void> {
+    using BytesLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto byte = SingularNameFor<Bytes>{};
+AU_DEVICE_VAR constexpr auto bytes = QuantityMaker<Bytes>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto B = SymbolFor<Bytes>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct GramsLabel {
+    static constexpr const char label[] = "g";
+};
+template <typename T>
+constexpr const char GramsLabel<T>::label[];
+struct Grams : UnitImpl<Mass>, GramsLabel<void> {
+    using GramsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto gram = SingularNameFor<Grams>{};
+AU_DEVICE_VAR constexpr auto grams = QuantityMaker<Grams>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto g = SymbolFor<Grams>{};
+}
 }  // namespace au
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
@@ -11714,6 +11769,29 @@ namespace detail {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
+struct LuminousEfficacy540TerahertzLabel {
+    static constexpr const char label[] = "K_cd";
+};
+template <typename T>
+constexpr const char LuminousEfficacy540TerahertzLabel<T>::label[];
+struct LuminousEfficacy540TerahertzUnit : decltype((Lumens{} / Watts{}) * mag<683>()),
+                                          LuminousEfficacy540TerahertzLabel<void> {
+    using LuminousEfficacy540TerahertzLabel<void>::label;
+};
+}  // namespace detail
+
+AU_DEVICE_VAR constexpr auto LUMINOUS_EFFICACY_540_TERAHERTZ =
+    make_constant(detail::LuminousEfficacy540TerahertzUnit{});
+
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
 struct PlanckConstantLabel {
     static constexpr const char label[] = "h";
 };
@@ -11727,6 +11805,58 @@ struct PlanckConstantUnit
 }  // namespace detail
 
 AU_DEVICE_VAR constexpr auto PLANCK_CONSTANT = make_constant(detail::PlanckConstantUnit{});
+
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct AvogadroConstantLabel {
+    static constexpr const char label[] = "N_A";
+};
+template <typename T>
+constexpr const char AvogadroConstantLabel<T>::label[];
+struct AvogadroConstantUnit : decltype(inverse(Moles{}) * mag<602'214'076>() * pow<15>(mag<10>())),
+                              AvogadroConstantLabel<void> {
+    using AvogadroConstantLabel<void>::label;
+};
+}  // namespace detail
+
+AU_DEVICE_VAR constexpr auto AVOGADRO_CONSTANT = make_constant(detail::AvogadroConstantUnit{});
+
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct CesiumHyperfineTransitionFrequencyLabel {
+    static constexpr const char label[] = "Delta_nu_Cs";
+};
+template <typename T>
+constexpr const char CesiumHyperfineTransitionFrequencyLabel<T>::label[];
+struct CesiumHyperfineTransitionFrequencyUnit : decltype(Hertz{} * mag<9'192'631'770>()),
+                                                CesiumHyperfineTransitionFrequencyLabel<void> {
+    using CesiumHyperfineTransitionFrequencyLabel<void>::label;
+};
+}  // namespace detail
+
+AU_DEVICE_VAR constexpr auto CESIUM_HYPERFINE_TRANSITION_FREQUENCY =
+    make_constant(detail::CesiumHyperfineTransitionFrequencyUnit{});
+
+}  // namespace au
+
+
+namespace au {
+
+AU_DEVICE_VAR constexpr auto STANDARD_GRAVITY = make_constant(StandardGravity{});
 
 }  // namespace au
 
@@ -11761,28 +11891,6 @@ namespace detail {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct AvogadroConstantLabel {
-    static constexpr const char label[] = "N_A";
-};
-template <typename T>
-constexpr const char AvogadroConstantLabel<T>::label[];
-struct AvogadroConstantUnit : decltype(inverse(Moles{}) * mag<602'214'076>() * pow<15>(mag<10>())),
-                              AvogadroConstantLabel<void> {
-    using AvogadroConstantLabel<void>::label;
-};
-}  // namespace detail
-
-AU_DEVICE_VAR constexpr auto AVOGADRO_CONSTANT = make_constant(detail::AvogadroConstantUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
 struct ElementaryChargeLabel {
     static constexpr const char label[] = "e";
 };
@@ -11795,59 +11903,6 @@ struct ElementaryChargeUnit : decltype(Coulombs{} * mag<1'602'176'634>() * pow<-
 }  // namespace detail
 
 AU_DEVICE_VAR constexpr auto ELEMENTARY_CHARGE = make_constant(detail::ElementaryChargeUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LuminousEfficacy540TerahertzLabel {
-    static constexpr const char label[] = "K_cd";
-};
-template <typename T>
-constexpr const char LuminousEfficacy540TerahertzLabel<T>::label[];
-struct LuminousEfficacy540TerahertzUnit : decltype((Lumens{} / Watts{}) * mag<683>()),
-                                          LuminousEfficacy540TerahertzLabel<void> {
-    using LuminousEfficacy540TerahertzLabel<void>::label;
-};
-}  // namespace detail
-
-AU_DEVICE_VAR constexpr auto LUMINOUS_EFFICACY_540_TERAHERTZ =
-    make_constant(detail::LuminousEfficacy540TerahertzUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-namespace detail {
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct CesiumHyperfineTransitionFrequencyLabel {
-    static constexpr const char label[] = "Delta_nu_Cs";
-};
-template <typename T>
-constexpr const char CesiumHyperfineTransitionFrequencyLabel<T>::label[];
-struct CesiumHyperfineTransitionFrequencyUnit : decltype(Hertz{} * mag<9'192'631'770>()),
-                                                CesiumHyperfineTransitionFrequencyLabel<void> {
-    using CesiumHyperfineTransitionFrequencyLabel<void>::label;
-};
-}  // namespace detail
-
-AU_DEVICE_VAR constexpr auto CESIUM_HYPERFINE_TRANSITION_FREQUENCY =
-    make_constant(detail::CesiumHyperfineTransitionFrequencyUnit{});
-
-}  // namespace au
-
-
-namespace au {
-
-AU_DEVICE_VAR constexpr auto STANDARD_GRAVITY = make_constant(StandardGravity{});
 
 }  // namespace au
 
@@ -11989,7 +12044,7 @@ class QuantityPoint {
     // `p.as<Rep>(new_unit)`, or `p.as<Rep>(new_unit, risk_policy)`
     template <typename NewRep,
               typename NewUnit,
-              typename RiskPolicyT = decltype(ignore(ALL_RISKS)),
+              typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<!IsConversionRiskPolicy<NewUnit>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
         return make_quantity_point<AssociatedUnitForPoints<NewUnit>>(in_impl<NewRep>(u, policy));
@@ -12001,7 +12056,9 @@ class QuantityPoint {
         return make_quantity_point<AssociatedUnitForPoints<NewUnit>>(in_impl<Rep>(u, policy));
     }
 
-    template <typename NewRep, typename NewUnit, typename RiskPolicyT = decltype(ignore(ALL_RISKS))>
+    template <typename NewRep,
+              typename NewUnit,
+              typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
     AU_DEVICE_FUNC constexpr NewRep in(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
         return in_impl<NewRep>(u, policy);
     }
@@ -12015,22 +12072,22 @@ class QuantityPoint {
     template <typename NewUnit>
     constexpr auto coerce_as(NewUnit) const {
         // Usage example: `p.coerce_as(new_units)`.
-        return as<Rep>(NewUnit{});
+        return as(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
     constexpr auto coerce_as(NewUnit) const {
         // Usage example: `p.coerce_as<T>(new_units)`.
-        return as<NewRep>(NewUnit{});
+        return as<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewUnit>
     constexpr auto coerce_in(NewUnit) const {
         // Usage example: `p.coerce_in(new_units)`.
-        return in<Rep>(NewUnit{});
+        return in(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
     constexpr auto coerce_in(NewUnit) const {
         // Usage example: `p.coerce_in<T>(new_units)`.
-        return in<NewRep>(NewUnit{});
+        return in<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
 
     // Direct access to the underlying value member, with any Point-equivalent Unit.
@@ -12213,7 +12270,7 @@ struct AreQuantityPointTypesEquivalent<QuantityPoint<U1, R1>, QuantityPoint<U2, 
 // Cast QuantityPoint to a different underlying type.
 template <typename NewRep, typename Unit, typename Rep>
 AU_DEVICE_FUNC constexpr auto rep_cast(QuantityPoint<Unit, Rep> q) {
-    return q.template as<NewRep>(Unit{});
+    return q.template as<NewRep>(Unit{}, ignore(ALL_RISKS));
 }
 
 namespace detail {
@@ -12951,27 +13008,34 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct CelsiusLabel {
-    static constexpr const char label[] = "degC";
+struct FahrenheitLabel {
+    static constexpr const char label[] = "degF";
 };
 template <typename T>
-constexpr const char CelsiusLabel<T>::label[];
-struct Celsius : UnitImpl<Temperature>, CelsiusLabel<void> {
-    using CelsiusLabel<void>::label;
+constexpr const char FahrenheitLabel<T>::label[];
+struct Fahrenheit
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Temperature, Magnitude<Pow<Prime<3>, -2>, Prime<5>>>,
+      FahrenheitLabel<void> {
+    using FahrenheitLabel<void>::label;
     static constexpr auto origin() {
-        // 273.15 K = 27315 centi-kelvins
-        return make_quantity<Centi<UnitImpl<Temperature>>>(27315);
+        // 459.67 Rankines = 45967 centi-rankines
+        return make_quantity<Centi<UnitImpl<Temperature, Magnitude<Pow<Prime<3>, -2>, Prime<5>>>>>(
+            45967);
     }
 };
-AU_DEVICE_VAR constexpr auto celsius_qty = QuantityMaker<Celsius>{};
-AU_DEVICE_VAR constexpr auto celsius_pt = QuantityPointMaker<Celsius>{};
+AU_DEVICE_VAR constexpr auto fahrenheit_qty = QuantityMaker<Fahrenheit>{};
+AU_DEVICE_VAR constexpr auto fahrenheit_pt = QuantityPointMaker<Fahrenheit>{};
 
 [[deprecated(
-    "`celsius()` is ambiguous.  Use `celsius_pt()` for _points_, or `celsius_qty()` for "
-    "_quantities_")]] AU_DEVICE_VAR constexpr auto celsius = QuantityMaker<Celsius>{};
+    "`fahrenheit()` is ambiguous.  Use `fahrenheit_pt()` for _points_, or `fahrenheit_qty()` for "
+    "_quantities_")]] AU_DEVICE_VAR constexpr auto fahrenheit = QuantityMaker<Fahrenheit>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto degC_qty = SymbolFor<Celsius>{};
+AU_DEVICE_VAR constexpr auto degF_qty = SymbolFor<Fahrenheit>{};
 }
 }  // namespace au
 
@@ -14259,34 +14323,27 @@ namespace au {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct FahrenheitLabel {
-    static constexpr const char label[] = "degF";
+struct CelsiusLabel {
+    static constexpr const char label[] = "degC";
 };
 template <typename T>
-constexpr const char FahrenheitLabel<T>::label[];
-struct Fahrenheit
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Temperature, Magnitude<Pow<Prime<3>, -2>, Prime<5>>>,
-      FahrenheitLabel<void> {
-    using FahrenheitLabel<void>::label;
+constexpr const char CelsiusLabel<T>::label[];
+struct Celsius : UnitImpl<Temperature>, CelsiusLabel<void> {
+    using CelsiusLabel<void>::label;
     static constexpr auto origin() {
-        // 459.67 Rankines = 45967 centi-rankines
-        return make_quantity<Centi<UnitImpl<Temperature, Magnitude<Pow<Prime<3>, -2>, Prime<5>>>>>(
-            45967);
+        // 273.15 K = 27315 centi-kelvins
+        return make_quantity<Centi<UnitImpl<Temperature>>>(27315);
     }
 };
-AU_DEVICE_VAR constexpr auto fahrenheit_qty = QuantityMaker<Fahrenheit>{};
-AU_DEVICE_VAR constexpr auto fahrenheit_pt = QuantityPointMaker<Fahrenheit>{};
+AU_DEVICE_VAR constexpr auto celsius_qty = QuantityMaker<Celsius>{};
+AU_DEVICE_VAR constexpr auto celsius_pt = QuantityPointMaker<Celsius>{};
 
 [[deprecated(
-    "`fahrenheit()` is ambiguous.  Use `fahrenheit_pt()` for _points_, or `fahrenheit_qty()` for "
-    "_quantities_")]] AU_DEVICE_VAR constexpr auto fahrenheit = QuantityMaker<Fahrenheit>{};
+    "`celsius()` is ambiguous.  Use `celsius_pt()` for _points_, or `celsius_qty()` for "
+    "_quantities_")]] AU_DEVICE_VAR constexpr auto celsius = QuantityMaker<Celsius>{};
 
 namespace symbols {
-AU_DEVICE_VAR constexpr auto degF_qty = SymbolFor<Fahrenheit>{};
+AU_DEVICE_VAR constexpr auto degC_qty = SymbolFor<Celsius>{};
 }
 }  // namespace au
 
