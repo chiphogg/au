@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: f7a60a2
+// Version identifier: c55e679
 // <iostream> support: INCLUDED
 // <format> support: INCLUDED
 // List of included units:
@@ -156,6 +156,8 @@ using void_t = void;
 namespace au {
 
 struct Zero;
+
+struct SameRep;
 
 template <typename B, std::intmax_t N>
 struct Pow;
@@ -6091,13 +6093,34 @@ template <typename A, typename B>
 struct OrderByUnitOrderTiebreaker
     : stdx::bool_constant<(UnitOrderTiebreaker<A>::value < UnitOrderTiebreaker<B>::value)> {};
 
+// DEPRECATED: specialize `au::UnitOrderTiebreaker<U>` instead.
+//
+// We used to instruct users to specialize this template, but it lives in our `detail` namespace, so
+// we shouldn't have.  Specializing it is now a hard error, directing users to the new name.
 template <typename U>
 struct UnitAvoidance : std::integral_constant<int, 0> {};
+
+// The default value for `UnitOrderTiebreaker<U>` is `0`.
+//
+// We dispatch on whether `UnitAvoidance<U>` was specialized so that the error below fires only for
+// users who actually specialized it, rather than for every unit in the library.
+template <typename U, bool IsSpecialized = (UnitAvoidance<U>::value != 0)>
+struct UnitAvoidanceOrZero : std::integral_constant<int, 0> {};
+
+// NOTE: we still inherit the user's value, even though this specialization always fails to compile.
+// If we fell back to `0`, their units would no longer be ordered, and the `static_assert` below
+// would be buried under cascading "Broken strict total ordering" errors.
+template <typename U>
+struct UnitAvoidanceOrZero<U, true> : std::integral_constant<int, UnitAvoidance<U>::value> {
+    static_assert(AlwaysFalse<U>::value,
+                  "Instead of specializing `au::detail::UnitAvoidance<T>`, specialize "
+                  "`au::UnitOrderTiebreaker<T>`");
+};
 
 }  // namespace detail
 
 template <typename U>
-struct UnitOrderTiebreaker : detail::UnitAvoidance<U> {};
+struct UnitOrderTiebreaker : detail::UnitAvoidanceOrZero<U> {};
 
 template <typename A, typename B>
 struct InOrderFor<UnitProductPack, A, B>
@@ -6376,6 +6399,26 @@ namespace au {
 //
 template <typename T>
 struct IsValidRep;
+
+//
+// A tag type to pass to `.as<SameRep>(...)` or `.in<SameRep>(...)`, indicating that the result
+// should keep the same Rep as the input, rather than changing it.
+//
+// As a reminder: the "implicit rep" versions (i.e., no template parameter) _usually_ produce the
+// same rep, but not always.  The most notable counter-examples are integer promotion, and Eigen
+// expression templates.
+//
+struct SameRep;
+
+namespace detail {
+// Resolve `NewRep` to `Rep` when `NewRep` is the `SameRep` tag; otherwise, leave it untouched.
+template <typename Rep, typename NewRep>
+struct ResolveSameRepImpl : stdx::type_identity<NewRep> {};
+template <typename Rep>
+struct ResolveSameRepImpl<Rep, SameRep> : stdx::type_identity<Rep> {};
+template <typename Rep, typename NewRep>
+using ResolveSameRep = typename ResolveSameRepImpl<Rep, NewRep>::type;
+}  // namespace detail
 
 //
 // A type trait to indicate whether the product of two types is a valid rep.
@@ -8495,7 +8538,8 @@ class Quantity {
               typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(RiskPolicyT policy = RiskPolicyT{}) const {
-        return make_quantity<Unit>(in_impl<detail::UseStaticCast, NewRep>(Unit{}, policy));
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
+        return make_quantity<Unit>(in_impl<detail::UseStaticCast, ActualRep>(Unit{}, policy));
     }
 
     // `q.as<Rep>(new_unit)`, or `q.as<Rep>(new_unit, risk_policy)`
@@ -8504,8 +8548,9 @@ class Quantity {
               typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<!IsConversionRiskPolicy<NewUnitSlot>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
         return make_quantity<AssociatedUnit<NewUnitSlot>>(
-            in_impl<detail::UseStaticCast, NewRep>(u, policy));
+            in_impl<detail::UseStaticCast, ActualRep>(u, policy));
     }
 
     // `q.as(new_unit)`, or `q.as(new_unit, risk_policy)`
@@ -8520,7 +8565,8 @@ class Quantity {
               typename NewUnitSlot,
               typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
     AU_DEVICE_FUNC constexpr auto in(NewUnitSlot u, RiskPolicyT policy = RiskPolicyT{}) const {
-        return in_impl<detail::UseStaticCast, NewRep>(u, policy);
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
+        return in_impl<detail::UseStaticCast, ActualRep>(u, policy);
     }
 
     // `q.in(new_unit)`, or `q.in(new_unit, risk_policy)`
@@ -8531,22 +8577,42 @@ class Quantity {
 
     // "Forcing" conversions, which explicitly ignore safety checks for overflow and truncation.
     template <typename NewUnit>
-    constexpr auto coerce_as(NewUnit) const {
+    [[deprecated(
+        "`coerce_as()` is deprecated.  Use `as()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_as(NewUnit) const {
         // Usage example: `q.coerce_as(new_units)`.
         return as(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
-    constexpr auto coerce_as(NewUnit) const {
+    [[deprecated(
+        "`coerce_as()` is deprecated.  Use `as()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_as(NewUnit) const {
         // Usage example: `q.coerce_as<T>(new_units)`.
         return as<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewUnit>
-    constexpr auto coerce_in(NewUnit) const {
+    [[deprecated(
+        "`coerce_in()` is deprecated.  Use `in()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_in(NewUnit) const {
         // Usage example: `q.coerce_in(new_units)`.
         return in(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
-    constexpr auto coerce_in(NewUnit) const {
+    [[deprecated(
+        "`coerce_in()` is deprecated.  Use `in()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_in(NewUnit) const {
         // Usage example: `q.coerce_in<T>(new_units)`.
         return in<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
@@ -11550,7 +11616,12 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
 
     // Convert this constant to a Quantity of the given unit and rep, ignoring safety checks.
     template <typename T, typename OtherUnit>
-    constexpr auto coerce_as(OtherUnit u) const {
+    [[deprecated(
+        "`coerce_as()` is deprecated.  Use `as()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_as(OtherUnit u) const {
         return as<T>().coerce_as(u);
     }
 
@@ -11580,7 +11651,12 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
 
     // Get the value of this constant in the given unit and rep, ignoring safety checks.
     template <typename T, typename OtherUnit>
-    constexpr auto coerce_in(OtherUnit u) const {
+    [[deprecated(
+        "`coerce_in()` is deprecated.  Use `in()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_in(OtherUnit u) const {
         return as<T>().coerce_in(u);
     }
 
@@ -12038,7 +12114,8 @@ class QuantityPoint {
               typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<IsConversionRiskPolicy<RiskPolicyT>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(RiskPolicyT policy = RiskPolicyT{}) const {
-        return make_quantity_point<Unit>(in_impl<NewRep>(Unit{}, policy));
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
+        return make_quantity_point<Unit>(in_impl<ActualRep>(Unit{}, policy));
     }
 
     // `p.as<Rep>(new_unit)`, or `p.as<Rep>(new_unit, risk_policy)`
@@ -12047,7 +12124,8 @@ class QuantityPoint {
               typename RiskPolicyT = decltype(check_for(ALL_RISKS)),
               std::enable_if_t<!IsConversionRiskPolicy<NewUnit>::value, int> = 0>
     AU_DEVICE_FUNC constexpr auto as(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
-        return make_quantity_point<AssociatedUnitForPoints<NewUnit>>(in_impl<NewRep>(u, policy));
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
+        return make_quantity_point<AssociatedUnitForPoints<NewUnit>>(in_impl<ActualRep>(u, policy));
     }
 
     // `p.as(new_unit)`, or `p.as(new_unit, risk_policy)`
@@ -12059,8 +12137,9 @@ class QuantityPoint {
     template <typename NewRep,
               typename NewUnit,
               typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
-    AU_DEVICE_FUNC constexpr NewRep in(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
-        return in_impl<NewRep>(u, policy);
+    AU_DEVICE_FUNC constexpr auto in(NewUnit u, RiskPolicyT policy = RiskPolicyT{}) const {
+        using ActualRep = detail::ResolveSameRep<Rep, NewRep>;
+        return in_impl<ActualRep>(u, policy);
     }
 
     template <typename NewUnit, typename RiskPolicyT = decltype(check_for(ALL_RISKS))>
@@ -12070,22 +12149,42 @@ class QuantityPoint {
 
     // "Forcing" conversions, which explicitly ignore safety checks for overflow and truncation.
     template <typename NewUnit>
-    constexpr auto coerce_as(NewUnit) const {
+    [[deprecated(
+        "`coerce_as()` is deprecated.  Use `as()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_as(NewUnit) const {
         // Usage example: `p.coerce_as(new_units)`.
         return as(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
-    constexpr auto coerce_as(NewUnit) const {
+    [[deprecated(
+        "`coerce_as()` is deprecated.  Use `as()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_as(NewUnit) const {
         // Usage example: `p.coerce_as<T>(new_units)`.
         return as<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewUnit>
-    constexpr auto coerce_in(NewUnit) const {
+    [[deprecated(
+        "`coerce_in()` is deprecated.  Use `in()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_in(NewUnit) const {
         // Usage example: `p.coerce_in(new_units)`.
         return in(NewUnit{}, ignore(ALL_RISKS));
     }
     template <typename NewRep, typename NewUnit>
-    constexpr auto coerce_in(NewUnit) const {
+    [[deprecated(
+        "`coerce_in()` is deprecated.  Use `in()` instead, and pass a risk policy parameter.  "
+        "Upgrade guide: "
+        "<https://aurora-opensource.github.io/au/0.5.1/reference/quantity/"
+        "#coerce>")]] constexpr auto
+    coerce_in(NewUnit) const {
         // Usage example: `p.coerce_in<T>(new_units)`.
         return in<NewRep>(NewUnit{}, ignore(ALL_RISKS));
     }
