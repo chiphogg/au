@@ -73,11 +73,20 @@ point representation is a statement, by the user, that _exact values do not matt
 application.  It would be inappropriate for us to raise warnings about perfectly routine properties
 of the user's chosen type.  Hence: _floating point never truncates_.
 
-### Other types
+### Compound types
 
-Currently, Au has only limited support for non-arithmetic rep types (full support is tracked in
-[#52]). As a stopgap, Au treats any non-arithmetic type conservatively, and assumes that it can
-truncate.  We hope to refine this approach when we strengthen our support for more rep types.
+Not every rep is a plain arithmetic type.  Complex numbers, and Eigen vectors and matrices, are
+common examples of _compound_ reps: types built up out of some underlying _scalar_.  Au characterizes
+each such rep by that scalar --- its [`ScalarOf<T>`](../../reference/rep.md#scalar-of) --- and then
+applies the very same rules from above.  So an `Eigen::Vector3d`, whose scalar is `double`, is
+governed by the [floating point rule](#float) and never truncates; a vector of integers, on the other
+hand, follows the integral rules.
+
+When Au _cannot_ determine a rep's scalar type, it has no basis to reason about truncation, so it
+falls back to the conservative assumption that the conversion can truncate, and forbids it by
+default.  You can teach Au about such a type by specializing
+[`ScalarOfTrait`](../../reference/rep.md#scalar-of), or override an individual conversion with
+`ignore(TRUNCATION_RISK)`.  (Broader support for non-arithmetic reps is tracked in [#52].)
 
 ## Truncation in casting
 
@@ -104,13 +113,14 @@ should consider this to truncate.  But recall the [philosophy above](#float): fl
 are all about _relative_ position.  For this reason, we consider casting from integral to floating
 point as a **non-truncating** operation.
 
-### Non-arithmetic types
+### Compound types
 
-Here, too, our support for non-arithmetic rep types is limited (see [#52]), and we take
-a conservative approach.  Any cast involving a non-arithmetic type, either as source or destination,
-is considered to have truncation risk, and will not be allowed by default: users must pass
-`ignore(TRUNCATION_RISK)` as a second argument to override this.  We hope to have better default
-behavior once we support non-arithmetic types more fully.
+Casts, too, are assessed through the scalar type: a cast between compound reps is judged by casting
+their scalars.  Casting an `Eigen::Vector3f` to an `Eigen::Vector3d`, for instance, is
+a `float`-to-`double` scalar cast, so it never truncates; casting a `double`-based vector to an
+integer-based one carries truncation risk, exactly as `double`-to-`int` does.  As before, only when
+Au cannot determine the scalar type --- on either the source or the destination --- do we fall back
+to assuming truncation risk and requiring `ignore(TRUNCATION_RISK)`.
 
 ## Summary
 
@@ -122,8 +132,9 @@ whether _individual values_ truncate using the `will_conversion_truncate` functi
 
 Truncation risk depends strongly on the types involved.  Integral types are vulnerable to truncation
 for non-integer scale factors.  On the other hand, we treat floating point types as though they
-never "truncate", because they're already inexact.  Finally, since we don't yet fully support
-non-arithmetic types, we treat them conservatively and assume that they carry truncation risk.
+never "truncate", because they're already inexact.  Finally, for compound reps such as complex
+numbers and Eigen vectors, we defer to the truncation rules of their underlying scalar type; only
+when that scalar can't be determined do we fall back to a conservative assumption of truncation risk.
 
 [overflow]: ./overflow.md
 [conversion risks]: ./conversion_risks.md
