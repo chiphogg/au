@@ -860,9 +860,14 @@ struct QuantityMaker {
     using Unit = UnitT;
     static constexpr auto unit = Unit{};
 
+    // The return types below name `UnitT`, not the equivalent `Unit` alias, and must keep doing
+    // so.  clang prints a type in diagnostics as it was spelled at the point of declaration, so
+    // spelling it `Quantity<Unit, Rep>` makes every quantity built by a maker --- that is, nearly
+    // every quantity --- show up as `Quantity<Unit, double>`, with the actual unit erased.
+
     // lvalue: copy. (See `make_quantity` above.)
     template <typename T, typename Rep = detail::NormalizeRep<std::decay_t<T>>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(const T &value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(const T &value) const {
         return Quantity<Unit, Rep>{value};
     }
 
@@ -870,7 +875,7 @@ struct QuantityMaker {
     template <typename T,
               typename Rep = detail::NormalizeRep<std::decay_t<T>>,
               typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(T &&value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(T &&value) const {
         return Quantity<Unit, Rep>{std::move(value)};
     }
 
