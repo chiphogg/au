@@ -28,6 +28,10 @@ theme:
   features:
     - navigation.footer
     - toc.integrate
+    # Flipping one "Before"/"After" tab flips every other tab with the same label on the page, so
+    # the A/B code examples blink together.  This works by matching label *text*, so the labels in
+    # `docs/examples/` must stay byte-for-byte identical.
+    - content.tabs.link
 
 extra_javascript:
   - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML
@@ -61,7 +65,9 @@ markdown_extensions:
   # Reusable text snippets, included via `--8<-- "file.md"`.  These live outside of `docs/` because
   # they are not pages in their own right: they get inlined into the pages that include them.
   - pymdownx.snippets:
-      base_path: [doc_snippets]
+      # `doc_snippets` holds reusable prose; `.` lets the code example pages pull real, compiled
+      # source straight out of `examples/`, so the docs can never drift from what CI builds.
+      base_path: [doc_snippets, "."]
       check_paths: true
   - pymdownx.superfences:
       custom_fences:

@@ -44,6 +44,40 @@ website](https://aurora-opensource.github.io/au).
 
 > _Try it out on [Compiler Explorer ("godbolt")](https://godbolt.org/z/o91nfh5Wc)!_
 
+## What it looks like
+
+Converting a wheel's road speed to RPM.  First, the way it usually gets written:
+
+<!-- BEGIN EXAMPLE: examples/angular_velocity/raw.cc:headline -->
+```cpp
+// Speed must be m/s.  Radius must be meters.  Returns RPM.
+float wheel_rpm(float v_mps, float r_m) {
+    return v_mps / (2.0f * PI * r_m) * 60.0f;
+}
+```
+<!-- END EXAMPLE -->
+
+The units live in the parameter names, where nothing checks them, and the `2π` and `60` are unit
+conversions disguised as magic numbers.  With Au:
+
+<!-- BEGIN EXAMPLE: examples/angular_velocity/au.cc:headline -->
+```cpp
+// The types state the units.  Nothing to remember; nothing to convert.
+QuantityF<Rpm> wheel_rpm(QuantityF<UnitQuotient<Meters, Seconds>> v, QuantityF<Meters> r) {
+    return v * (rad / r);
+}
+```
+<!-- END EXAMPLE -->
+
+The `2π` and the `60` are gone — not hidden, but genuinely unnecessary.  A radian is _defined_ as
+the angle whose arc length equals the radius, so `rad / r` is exactly the angle a wheel turns per
+unit distance travelled.  Au derives the rest from the return type, at compile time, at no runtime
+cost.  Callers pass whatever units they have; a radius in millimeters converts itself, and a mass
+doesn't compile.
+
+See our [**code examples**](https://aurora-opensource.github.io/au/main/examples/) for this one in
+full, and several more.
+
 ## Why Au?
 
 There are many other C++ units libraries, several quite well established.  Each of them offers

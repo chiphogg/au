@@ -1,0 +1,89 @@
+# Copyright 2026 Aurora Operations, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(":defs.bzl", "ab_example", "single_example")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "check_ab_example.sh",
+    "check_output.sh",
+    "check_readme_snippets.sh",
+])
+
+# The doc website inlines these sources directly (via `pymdownx.snippets`), so that every code
+# example on the site is real source that CI compiles and runs.
+filegroup(
+    name = "doc_sources",
+    srcs = glob([
+        "**/*.cc",
+        "**/*.hh",
+    ]),
+)
+
+ab_example(
+    name = "adc_millivolts",
+    au_deps = ["//au"],
+    expected_output = "1650 mV\n",
+)
+
+ab_example(
+    name = "angular_velocity",
+    au_deps = ["//au"],
+    expected_output = "409.3 RPM\n",
+)
+
+ab_example(
+    name = "photon_energy",
+    au_deps = ["//au"],
+    expected_output = "3.734e-19 J\n",
+)
+
+ab_example(
+    name = "rounding_duration",
+    au_deps = ["//au"],
+    expected_output = "2 min\n",
+)
+
+ab_example(
+    name = "temperature_points",
+    au_deps = ["//au"],
+    expected_output = "20.0 C, 10.0 C rise\n",
+)
+
+single_example(
+    name = "atomic_units",
+    srcs = [
+        "atomic_units/atomic_units.cc",
+        "atomic_units/main.cc",
+    ],
+    hdrs = ["atomic_units/atomic_units.hh"],
+    expected_output = "a_0 = 5.29177e-11 m\nE_h = 4.35974e-18 J\nt_a = 2.41888e-17 s\nhbar = 1 E_h t_a\n",
+    deps = ["//au"],
+)
+
+# The doc website inlines example source directly, so it cannot go stale.  The README has to keep a
+# copy instead, because GitHub Markdown has no include mechanism -- so check the copy against the
+# source it came from.
+sh_test(
+    name = "readme_snippets_test",
+    srcs = ["check_readme_snippets.sh"],
+    args = ["$(location //:README.md)"],
+    data = [
+        "angular_velocity/au.cc",
+        "angular_velocity/raw.cc",
+        "//:README.md",
+    ],
+)

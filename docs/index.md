@@ -7,6 +7,36 @@ developer experience.
 The library source is on GitHub, at
 [aurora-opensource/au](https://github.com/aurora-opensource/au).
 
+## What it looks like
+
+Here's a wheel's road speed, converted to RPM.  Click between the tabs to compare.
+
+=== "⚠️ Before: raw C++"
+
+    ⚠️ **Before** — the conversion factors are magic numbers, and the units live only in comments.
+    { .ab-banner .ab-before }
+
+    ```cpp
+    --8<-- "examples/angular_velocity/raw.cc:headline"
+    ```
+
+=== "✅ After: with Au"
+
+    ✅ **After** — the types carry the units, and `rad / r` states the definition directly.
+    { .ab-banner .ab-after }
+
+    ```cpp
+    --8<-- "examples/angular_velocity/au.cc:headline"
+    ```
+
+The `2π` and the `60` are gone — not hidden, but genuinely unnecessary.  A radian is *defined* as
+the angle whose arc length equals the radius, so `rad / r` is exactly the angle a wheel turns per
+unit distance travelled.  Au derives the rest from the return type, at compile time, at no runtime
+cost.
+
+See **[Code examples](./examples/index.md)** for this one
+[in full](./examples/angular-velocity.md), and several more.
+
 ## Getting started
 
 These pages will be most useful as you begin your Au journey:
@@ -25,6 +55,9 @@ These pages will be most useful as you begin your Au journey:
 - **[Tutorials](./tutorial/index.md).**  Start with [Au 101: Quantity
   Makers](./tutorial/101-quantity-makers.md), and go forward from there.  You'll learn the basic
   library concepts, and get some hands on experience with the included exercises.
+
+- **[Code examples](./examples/index.md).**  Short, complete programs showing what Au looks like on
+  real problems — each one paired with the plain C++ version, so you can see exactly what changes.
 
 ## Continuing your journey
 
