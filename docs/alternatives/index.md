@@ -40,10 +40,7 @@ indicate which version we considered, and say a few words about why we included 
 - [**Boost Units**](https://www.boost.org/doc/libs/1_82_0/doc/html/boost_units.html) (version:
   1.2, from Boost version 1.89.0)
     - One of the longest-standing C++ unit libraries, and the most prominent pre-C++14 option.
-<!-- TODO(version): the 3.x column is written against `main`, not the v3.5.1 tag --- it assumes
-     #374, #376, and #377.  Bump this version to whatever release actually ships them, and drop
-     the TODO(unreleased) comments below once it does. -->
-- [**nholthaus/units**](https://github.com/nholthaus/units) (versions: 2.3.5, and 3.5.1)
+- [**nholthaus/units**](https://github.com/nholthaus/units) (versions: 2.3.5, and 3.6.1)
     - Kicked off the revolution in modern (that is, post-C++11 watershed) units libraries.
     - Its laser-sharp focus on accessibility and low friction have made it probably the most widely
       used C++ units library to date.
@@ -261,12 +258,12 @@ These costs purchase significant benefits, but we still want them to be as small
             <ul>
                 <li class="x">
                     Default <code>&lt;units.h&gt;</code> is the most expensive include we measured
-                    (~3x the 2.x penalty), and dropping <code>&lt;iostream&gt;</code> no longer
+                    (~4x the 2.x penalty), and dropping <code>&lt;iostream&gt;</code> no longer
                     helps
                 </li>
                 <li class="check">
                     <a href="https://github.com/nholthaus/units/blob/main/docs/how-to/subset-headers-compile-time.md">Per-dimension
-                    headers</a> cut that ~8x
+                    headers</a> cut that ~4x, to roughly the 2.x penalty
                 </li>
             </ul>
         </td>
@@ -408,9 +405,9 @@ incremental as possible.
             <ul>
                 <li class="check">The project's default branch, with frequent releases</li>
                 <li class="check">
-                    Backlog cleared: 94 <a
-                    href="https://github.com/nholthaus/units/issues">issues</a> closed in a few days
-                    in August 2026, leaving 12 open
+                    Backlog cleared: over 100 <a
+                    href="https://github.com/nholthaus/units/issues">issues</a> closed in August
+                    2026, leaving exactly one open
                 </li>
             </ul>
         </td>
@@ -476,7 +473,10 @@ incremental as possible.
                 <li class="x">
                     2.x to 3.x is monolithic, with no syntax that works in both versions
                 </li>
-                <li class="x">Breaking changes ship in <i>patch</i> releases</li>
+                <li class="x">
+                    Breaking changes ship in <i>patch</i> releases (e.g., 3.4.4 changed the
+                    <code>cosh</code>/<code>sinh</code>/<code>tanh</code> signatures)
+                </li>
             </ul>
         </td>
         <td class="good">
@@ -581,6 +581,10 @@ with a non-empty cell can improve their rating by fixing the issues.
                     href="https://github.com/nholthaus/units/issues/378">#378</a>, acknowledged as
                     genuine UB, kept as-is for now)
                 </li>
+                <li class="x">
+                    Addition is not commutative (takes the left operand's unit instead of common
+                    unit; <a href="https://github.com/nholthaus/units/pull/381">#381</a>).
+                </li>
             </ul>
         </td>
         <td class="na"></td>
@@ -652,8 +656,15 @@ features.
                     Implicit only when lossless, matching <code>std::chrono</code> (<a
                     href="https://github.com/nholthaus/units/issues/225">#225</a>)
                 </li>
-                <li class="x">No adaptation to overflow risk; integer narrowing unchecked</li>
-                <li class="x">Lossy <code>*=</code> and <code>/=</code> are only a warning</li>
+                <li class="check">
+                    <code>consteval</code>-checked conversions for compile-time-known values
+                </li>
+                <li class="check">
+                    Overflow protection for <i>intermediate</i> results
+                </li>
+                <li class="x">
+                    Still no adaptation to overflow risk in the <i>result</i>
+                </li>
             </ul>
         </td>
         <td class="poor">
@@ -853,8 +864,6 @@ features.
                 <li class="x">No fmtlib or <code>std::format</code> support</li>
             </ul>
         </td>
-        <!-- TODO(unreleased): the `std::format` support assumes nholthaus #374, which is merged
-             to `main` but not in a tagged release. -->
         <td class="good nh3">
             <ul>
                 <li class="check">Toggleable <code>&lt;iostream&gt;</code> support</li>
@@ -922,12 +931,24 @@ features.
                 </li>
             </ul>
         </td>
-        <td class="fair" colspan="2">
+        <td class="fair">
             <ul>
-                <li class="check">Wide variety of functions (found by ADL in 3.x)</li>
+                <li class="check">Wide variety of functions</li>
                 <li class="x">
                     <code>round</code>, <code>ceil</code>, and so on operate in whatever unit the
                     quantity happens to hold, so they are not unit-safe
+                </li>
+            </ul>
+        </td>
+        <td class="good nh3">
+            <ul>
+                <li class="check">Wide variety of functions, found by ADL</li>
+                <li class="check">
+                    <code>round</code>, <code>ceil</code>, <code>floor</code>, and
+                    <code>trunc</code> have unit-safe versions
+                </li>
+                <li class="x">
+                    No unit-aware inverse
                 </li>
             </ul>
         </td>
@@ -986,8 +1007,9 @@ features.
                     href="https://github.com/nholthaus/units/blob/main/docs/reference/concepts.md">concept
                     vocabulary</a> (<code>UnitType</code>, <code>same_dimension</code>, ...)
                 </li>
-                <li class="x">
-                    No concept for a <i>specific</i> dimension; falls back to per-dimension traits
+                <li class="check">
+                    A concept per dimension (<code>units::Velocity auto v</code>), 50 of them, one
+                    beside each <code>is_&lt;dimension&gt;_unit</code> trait
                 </li>
             </ul>
         </td>
@@ -1115,19 +1137,19 @@ features.
                 </li>
             </ul>
         </td>
-        <!-- TODO(unreleased): assumes nholthaus #376 (affine arithmetic; merged to `main`) and
-             #377 (the `absolute`/`delta` wrappers; still an open PR).  Neither is in a tagged
-             release.  If #377 does NOT land, restore the "no point type" `x` bullet. -->
         <td class="fair nh3">
             <ul>
                 <li class="check">
-                    Point + point is ill-formed, and a difference is offset-free
-                </li>
-                <li class="check">
-                    Opt-in <code>absolute</code>/<code>delta</code> wrappers, for any unit
+                    Opt-in <code>absolute</code>/<code>delta</code> wrappers, for any unit: point +
+                    point is ill-formed, and a difference is offset-free
                 </li>
                 <li class="x">
-                    Point conversions still truncate silently; no origin-aware common unit
+                    Plain affine units keep the old hazards: <code>kelvin&lt;int&gt;(273)</code>
+                    still converts silently to <code>celsius&lt;int&gt;(0)</code>
+                </li>
+                <li class="x">
+                    No origin-aware common unit; any integer arithmetic with offset scale silently
+                    promotes to <code>double</code>
                 </li>
             </ul>
         </td>
@@ -1331,7 +1353,10 @@ features.
         </td>
         <td class="fair nh3">
             <ul>
-                <li class="check">All built-in numeric types, with integer Reps now safe</li>
+                <li class="check">
+                    All built-in numeric types, with integer Reps meeting <code>std::chrono</code>
+                    safety standards
+                </li>
                 <li class="x">
                     Constrained to <code>std::is_arithmetic</code>: no custom numeric types
                 </li>
@@ -1458,7 +1483,26 @@ features.
             </details>
         </td>
         <td class="poor"></td>
-        <td class="best" colspan="2">The clear leader</td>
+        <td class="good">
+            <ul>
+                <li class="check">Far more support than any library outside this family</li>
+                <li class="x">
+                    Not sound: <code>10 dBW + 10 dBW</code> compiles, and yields
+                    <code>20 m^4 kg^2 s^-6</code>
+                </li>
+            </ul>
+        </td>
+        <td class="best nh3">
+            <ul>
+                <li class="check">The clear leader</li>
+                <li class="check">
+                    Decibels now modelled as affine
+                </li>
+                <li class="x">
+                    Only power convention (<code>10*log10</code>); no root-power (amplitude) variant
+                </li>
+            </ul>
+        </td>
         <td class="poor"></td>
         <td class="poor"></td>
         <td class="poor">
@@ -1546,7 +1590,17 @@ features.
             </details>
         </td>
         <td class="na"></td>
-        <td class="poor" colspan="2"></td>
+        <td class="poor"></td>
+        <td class="good nh3">
+            <ul>
+                <li class="check">
+                    Opt-in string-tagged kinds
+                </li>
+                <li class="x">
+                    Built-in kinds not included (hertz vs. becquerel, torque vs. energy)
+                </li>
+            </ul>
+        </td>
         <td class="poor"></td>
         <td class="best"></td>
         <td class="poor">No plans at present to support.</td>
