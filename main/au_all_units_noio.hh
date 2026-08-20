@@ -26,7 +26,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 96e75f4
+// Version identifier: 71ff7d4
 // <iostream> support: EXCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -83,6 +83,66 @@
 //   steradians
 //   tesla
 //   unos
+//   us_gallons
+//   us_pints
+//   us_quarts
+//   volts
+//   watts
+//   webers
+//   yards
+// List of included unit literals:
+//   amperes
+//   arcminutes
+//   arcseconds
+//   astronomical_units
+//   bars
+//   becquerel
+//   bits
+//   bytes
+//   candelas
+//   celsius
+//   coulombs
+//   days
+//   degrees
+//   fahrenheit
+//   farads
+//   fathoms
+//   feet
+//   football_fields
+//   furlongs
+//   grams
+//   grays
+//   henries
+//   hertz
+//   hours
+//   inches
+//   joules
+//   katals
+//   kelvins
+//   knots
+//   liters
+//   lumens
+//   lux
+//   meters
+//   miles
+//   minutes
+//   moles
+//   nautical_miles
+//   newtons
+//   ohms
+//   pascals
+//   percent
+//   pounds_force
+//   pounds_mass
+//   radians
+//   rankine
+//   revolutions
+//   seconds
+//   siemens
+//   slugs
+//   standard_gravity
+//   steradians
+//   tesla
 //   us_gallons
 //   us_pints
 //   us_quarts
@@ -178,6 +238,14 @@ using QuantityI = Quantity<UnitT, int>;
 template <typename UnitT>
 using QuantityU = Quantity<UnitT, unsigned int>;
 template <typename UnitT>
+using QuantityI8 = Quantity<UnitT, int8_t>;
+template <typename UnitT>
+using QuantityU8 = Quantity<UnitT, uint8_t>;
+template <typename UnitT>
+using QuantityI16 = Quantity<UnitT, int16_t>;
+template <typename UnitT>
+using QuantityU16 = Quantity<UnitT, uint16_t>;
+template <typename UnitT>
 using QuantityI32 = Quantity<UnitT, int32_t>;
 template <typename UnitT>
 using QuantityU32 = Quantity<UnitT, uint32_t>;
@@ -205,6 +273,14 @@ template <typename UnitT>
 using QuantityPointI = QuantityPoint<UnitT, int>;
 template <typename UnitT>
 using QuantityPointU = QuantityPoint<UnitT, unsigned int>;
+template <typename UnitT>
+using QuantityPointI8 = QuantityPoint<UnitT, int8_t>;
+template <typename UnitT>
+using QuantityPointU8 = QuantityPoint<UnitT, uint8_t>;
+template <typename UnitT>
+using QuantityPointI16 = QuantityPoint<UnitT, int16_t>;
+template <typename UnitT>
+using QuantityPointU16 = QuantityPoint<UnitT, uint16_t>;
 template <typename UnitT>
 using QuantityPointI32 = QuantityPoint<UnitT, int32_t>;
 template <typename UnitT>
@@ -1474,13 +1550,13 @@ struct Feet;
 
 namespace au {
 
-struct Unos;
+struct Radians;
 
 }  // namespace au
 
 namespace au {
 
-struct Radians;
+struct Unos;
 
 }  // namespace au
 
@@ -9191,7 +9267,7 @@ struct QuantityMaker {
 
     // lvalue: copy. (See `make_quantity` above.)
     template <typename T, typename Rep = detail::NormalizeRep<std::decay_t<T>>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(const T &value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(const T &value) const {
         return Quantity<Unit, Rep>{value};
     }
 
@@ -9199,7 +9275,7 @@ struct QuantityMaker {
     template <typename T,
               typename Rep = detail::NormalizeRep<std::decay_t<T>>,
               typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(T &&value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(T &&value) const {
         return Quantity<Unit, Rep>{std::move(value)};
     }
 
@@ -9964,6 +10040,72 @@ struct SupportsRationalPowers {
 }  // namespace detail
 }  // namespace au
 
+
+namespace au {
+
+//
+// A representation of the symbol for a unit.
+//
+// To use, create an instance variable templated on a unit, and make the instance variable's name
+// the symbol to represent.  For example:
+//
+//     constexpr auto m = SymbolFor<Meters>{};
+//
+template <typename Unit>
+struct SymbolFor : detail::MakesQuantityFromNumber<SymbolFor, Unit>,
+                   detail::ScalesQuantity<SymbolFor, Unit>,
+                   detail::ComposesWith<SymbolFor, Unit, SymbolFor, SymbolFor>,
+                   detail::SupportsRationalPowers<SymbolFor, Unit>,
+                   detail::CanScaleByMagnitude<SymbolFor, Unit> {};
+
+//
+// Create a unit symbol using the more fluent APIs that unit slots make possible.  For example:
+//
+//     constexpr auto mps = symbol_for(meters / second);
+//
+// This is generally easier to work with and makes code that is easier to read, at the cost of being
+// (very slightly) slower to compile.
+//
+template <typename UnitSlot>
+constexpr auto symbol_for(UnitSlot) {
+    return SymbolFor<AssociatedUnit<UnitSlot>>{};
+}
+
+// Support using symbols in unit slot APIs (e.g., `v.in(m / s)`).
+template <typename U>
+struct AssociatedUnitImpl<SymbolFor<U>> : stdx::type_identity<U> {};
+
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct LumensLabel {
+    static constexpr const char label[] = "lm";
+};
+template <typename T>
+constexpr const char LumensLabel<T>::label[];
+struct Lumens
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>, base_dim::LuminousIntensity>>,
+      LumensLabel<void> {
+    using LumensLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto lumen = SingularNameFor<Lumens>{};
+AU_DEVICE_VAR constexpr auto lumens = QuantityMaker<Lumens>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto lm = SymbolFor<Lumens>{};
+}
+}  // namespace au
+
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 #endif
 
@@ -9988,6 +10130,7 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
                   detail::ComposesWith<Constant, Unit, Constant, Constant>,
                   detail::ComposesWith<Constant, Unit, QuantityMaker, QuantityMaker>,
                   detail::ComposesWith<Constant, Unit, SingularNameFor, SingularNameFor>,
+                  detail::ComposesWith<Constant, Unit, SymbolFor, Constant>,
                   detail::SupportsRationalPowers<Constant, Unit>,
                   detail::CanScaleByMagnitude<Constant, Unit> {
     // Convert this constant to a Quantity of the given rep.
@@ -10218,6 +10361,64 @@ AU_DEVICE_FUNC constexpr auto operator-(Zero, Constant<U>) {
     return -Constant<U>{};
 }
 
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct StandardGravityLabel {
+    static constexpr const char label[] = "g_0";
+};
+template <typename T>
+constexpr const char StandardGravityLabel<T>::label[];
+struct StandardGravity
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<base_dim::Length, Pow<base_dim::Time, -2>>,
+               Magnitude<Pow<Prime<2>, -5>, Pow<Prime<5>, -4>, Prime<7>, Prime<28019>>>,
+      StandardGravityLabel<void> {
+    using StandardGravityLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto g_0 = SymbolFor<StandardGravity>{};
+}
+}  // namespace au
+
+// Keep corresponding `_fwd.hh` file on top.
+
+namespace au {
+
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct CoulombsLabel {
+    static constexpr const char label[] = "C";
+};
+template <typename T>
+constexpr const char CoulombsLabel<T>::label[];
+struct Coulombs
+    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
+    // ordering of the arguments is very particular, and could change out from under you in future
+    // versions, making the program ill-formed.  Only units defined within the Au library itself can
+    // safely use this pattern.
+    : UnitImpl<Dimension<base_dim::Time, base_dim::Current>>,
+      CoulombsLabel<void> {
+    using CoulombsLabel<void>::label;
+};
+AU_DEVICE_VAR constexpr auto coulomb = SingularNameFor<Coulombs>{};
+AU_DEVICE_VAR constexpr auto coulombs = QuantityMaker<Coulombs>{};
+
+namespace symbols {
+AU_DEVICE_VAR constexpr auto C = SymbolFor<Coulombs>{};
+}
 }  // namespace au
 
 
@@ -10766,154 +10967,6 @@ struct QuantityPointFormatter : QuantityFormatter<U, R, Formatter> {
 
 }  // namespace au
 
-
-namespace au {
-
-//
-// A representation of the symbol for a unit.
-//
-// To use, create an instance variable templated on a unit, and make the instance variable's name
-// the symbol to represent.  For example:
-//
-//     constexpr auto m = SymbolFor<Meters>{};
-//
-template <typename Unit>
-struct SymbolFor : detail::MakesQuantityFromNumber<SymbolFor, Unit>,
-                   detail::ScalesQuantity<SymbolFor, Unit>,
-                   detail::ComposesWith<SymbolFor, Unit, SymbolFor, SymbolFor>,
-                   detail::SupportsRationalPowers<SymbolFor, Unit>,
-                   detail::CanScaleByMagnitude<SymbolFor, Unit> {};
-
-//
-// Create a unit symbol using the more fluent APIs that unit slots make possible.  For example:
-//
-//     constexpr auto mps = symbol_for(meters / second);
-//
-// This is generally easier to work with and makes code that is easier to read, at the cost of being
-// (very slightly) slower to compile.
-//
-template <typename UnitSlot>
-constexpr auto symbol_for(UnitSlot) {
-    return SymbolFor<AssociatedUnit<UnitSlot>>{};
-}
-
-// Support using symbols in unit slot APIs (e.g., `v.in(m / s)`).
-template <typename U>
-struct AssociatedUnitImpl<SymbolFor<U>> : stdx::type_identity<U> {};
-
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct LumensLabel {
-    static constexpr const char label[] = "lm";
-};
-template <typename T>
-constexpr const char LumensLabel<T>::label[];
-struct Lumens
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<Pow<base_dim::Angle, 2>, base_dim::LuminousIntensity>>,
-      LumensLabel<void> {
-    using LumensLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto lumen = SingularNameFor<Lumens>{};
-AU_DEVICE_VAR constexpr auto lumens = QuantityMaker<Lumens>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto lm = SymbolFor<Lumens>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct StandardGravityLabel {
-    static constexpr const char label[] = "g_0";
-};
-template <typename T>
-constexpr const char StandardGravityLabel<T>::label[];
-struct StandardGravity
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<base_dim::Length, Pow<base_dim::Time, -2>>,
-               Magnitude<Pow<Prime<2>, -5>, Pow<Prime<5>, -4>, Prime<7>, Prime<28019>>>,
-      StandardGravityLabel<void> {
-    using StandardGravityLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto standard_gravity = QuantityMaker<StandardGravity>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto g_0 = SymbolFor<StandardGravity>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct CoulombsLabel {
-    static constexpr const char label[] = "C";
-};
-template <typename T>
-constexpr const char CoulombsLabel<T>::label[];
-struct Coulombs
-    // In particular, do NOT manually specify `Dimension<...>` and `Magnitude<...>` types.  The
-    // ordering of the arguments is very particular, and could change out from under you in future
-    // versions, making the program ill-formed.  Only units defined within the Au library itself can
-    // safely use this pattern.
-    : UnitImpl<Dimension<base_dim::Time, base_dim::Current>>,
-      CoulombsLabel<void> {
-    using CoulombsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto coulomb = SingularNameFor<Coulombs>{};
-AU_DEVICE_VAR constexpr auto coulombs = QuantityMaker<Coulombs>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto C = SymbolFor<Coulombs>{};
-}
-}  // namespace au
-
-// Keep corresponding `_fwd.hh` file on top.
-
-namespace au {
-
-// DO NOT follow this pattern to define your own units.  This is for library-defined units.
-// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
-template <typename T>
-struct KelvinsLabel {
-    static constexpr const char label[] = "K";
-};
-template <typename T>
-constexpr const char KelvinsLabel<T>::label[];
-struct Kelvins : UnitImpl<Temperature>, KelvinsLabel<void> {
-    using KelvinsLabel<void>::label;
-};
-AU_DEVICE_VAR constexpr auto kelvin = SingularNameFor<Kelvins>{};
-AU_DEVICE_VAR constexpr auto kelvins = QuantityMaker<Kelvins>{};
-AU_DEVICE_VAR constexpr auto kelvins_pt = QuantityPointMaker<Kelvins>{};
-
-namespace symbols {
-AU_DEVICE_VAR constexpr auto K = SymbolFor<Kelvins>{};
-}
-}  // namespace au
-
 // Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
@@ -11212,10 +11265,18 @@ constexpr auto make_prefixed_unit_label(const StringConstant<N> &prefix, U) {
 
 template <template <class U> class Prefix>
 struct PrefixApplier {
-    // Applying a Prefix to a Unit instance, creates an instance of the Prefixed Unit.
-    template <typename U>
+    // Applying a Prefix to a Unit instance, creates an instance of the Prefixed Unit.  (We
+    // constrain this, so that unhandled types fail here rather than at their first use.)
+    template <typename U, typename = std::enable_if_t<IsUnit<U>::value>>
     AU_DEVICE_FUNC constexpr auto operator()(U) const {
         return Prefix<U>{};
+    }
+
+    // Applying a Prefix to a Constant instance, prefixes the unit under its scale factor.
+    template <typename U>
+    AU_DEVICE_FUNC constexpr auto operator()(Constant<U>) const {
+        return Constant<
+            ComputeScaledUnit<Prefix<detail::UnscaledUnit<U>>, detail::UnitCoefficient<U>>>{};
     }
 
     // Applying a Prefix to a QuantityMaker instance, creates a maker for the Prefixed Unit.
@@ -11792,6 +11853,22 @@ AU_DEVICE_VAR constexpr auto deg = SymbolFor<Degrees>{};
 }
 }  // namespace au
 
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_lm` is a `Constant` equivalent to `make_constant(1.28e-4_mag * lumens)`.
+template <char... Cs>
+constexpr auto operator""_lm() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(lumens * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
 // Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
@@ -12077,6 +12154,54 @@ AU_DEVICE_VAR constexpr auto ftm = SymbolFor<Fathoms>{};
 }
 }  // namespace au
 
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_g_0` is a `Constant` equivalent to `make_constant(1.28e-4_mag * standard_gravity)`.
+template <char... Cs>
+constexpr auto operator""_g_0() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(standard_gravity * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_s` is a `Constant` equivalent to `make_constant(1.28e-4_mag * seconds)`.
+template <char... Cs>
+constexpr auto operator""_s() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(seconds * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_mol` is a `Constant` equivalent to `make_constant(1.28e-4_mag * moles)`.
+template <char... Cs>
+constexpr auto operator""_mol() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(moles * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
 // Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
@@ -12105,6 +12230,22 @@ AU_DEVICE_VAR constexpr auto lux = QuantityMaker<Lux>{};
 namespace symbols {
 AU_DEVICE_VAR constexpr auto lx = SymbolFor<Lux>{};
 }
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_m` is a `Constant` equivalent to `make_constant(1.28e-4_mag * meters)`.
+template <char... Cs>
+constexpr auto operator""_m() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(meters * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -12369,6 +12510,38 @@ AU_DEVICE_VAR constexpr auto degF_qty = SymbolFor<Fahrenheit>{};
 }
 }  // namespace au
 
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_C` is a `Constant` equivalent to `make_constant(1.28e-4_mag * coulombs)`.
+template <char... Cs>
+constexpr auto operator""_C() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(coulombs * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_J` is a `Constant` equivalent to `make_constant(1.28e-4_mag * joules)`.
+template <char... Cs>
+constexpr auto operator""_J() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(joules * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
 // Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
@@ -12582,6 +12755,22 @@ AU_DEVICE_VAR constexpr auto hours = QuantityMaker<Hours>{};
 namespace symbols {
 AU_DEVICE_VAR constexpr auto h = SymbolFor<Hours>{};
 }
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_Hz` is a `Constant` equivalent to `make_constant(1.28e-4_mag * hertz)`.
+template <char... Cs>
+constexpr auto operator""_Hz() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(hertz * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
 }  // namespace au
 
 // Keep corresponding `_fwd.hh` file on top.
@@ -14218,27 +14407,28 @@ AU_DEVICE_VAR constexpr auto ELEMENTARY_CHARGE = make_constant(detail::Elementar
 
 }  // namespace au
 
+// Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
 
-namespace detail {
 // DO NOT follow this pattern to define your own units.  This is for library-defined units.
 // Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
 template <typename T>
-struct BoltzmannConstantLabel {
-    static constexpr const char label[] = "k_B";
+struct KelvinsLabel {
+    static constexpr const char label[] = "K";
 };
 template <typename T>
-constexpr const char BoltzmannConstantLabel<T>::label[];
-struct BoltzmannConstantUnit
-    : decltype((Joules{} / Kelvins{}) * mag<1'380'649>() * pow<-29>(mag<10>())),
-      BoltzmannConstantLabel<void> {
-    using BoltzmannConstantLabel<void>::label;
+constexpr const char KelvinsLabel<T>::label[];
+struct Kelvins : UnitImpl<Temperature>, KelvinsLabel<void> {
+    using KelvinsLabel<void>::label;
 };
-}  // namespace detail
+AU_DEVICE_VAR constexpr auto kelvin = SingularNameFor<Kelvins>{};
+AU_DEVICE_VAR constexpr auto kelvins = QuantityMaker<Kelvins>{};
+AU_DEVICE_VAR constexpr auto kelvins_pt = QuantityPointMaker<Kelvins>{};
 
-AU_DEVICE_VAR constexpr auto BOLTZMANN_CONSTANT = make_constant(detail::BoltzmannConstantUnit{});
-
+namespace symbols {
+AU_DEVICE_VAR constexpr auto K = SymbolFor<Kelvins>{};
+}
 }  // namespace au
 
 
@@ -14331,6 +14521,54 @@ AU_DEVICE_VAR constexpr auto SPEED_OF_LIGHT = make_constant(detail::SpeedOfLight
 
 }  // namespace au
 
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_d` is a `Constant` equivalent to `make_constant(1.28e-4_mag * days)`.
+template <char... Cs>
+constexpr auto operator""_d() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(days * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_fur` is a `Constant` equivalent to `make_constant(1.28e-4_mag * furlongs)`.
+template <char... Cs>
+constexpr auto operator""_fur() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(furlongs * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_ohm` is a `Constant` equivalent to `make_constant(1.28e-4_mag * ohms)`.
+template <char... Cs>
+constexpr auto operator""_ohm() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(ohms * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
 // Keep corresponding `_fwd.hh` file on top.
 
 namespace au {
@@ -14363,6 +14601,758 @@ AU_DEVICE_VAR constexpr auto degC_qty = SymbolFor<Celsius>{};
 }  // namespace au
 
 
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_B` is a `Constant` equivalent to `make_constant(1.28e-4_mag * bytes)`.
+template <char... Cs>
+constexpr auto operator""_B() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(bytes * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_min` is a `Constant` equivalent to `make_constant(1.28e-4_mag * minutes)`.
+template <char... Cs>
+constexpr auto operator""_min() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(minutes * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_Gy` is a `Constant` equivalent to `make_constant(1.28e-4_mag * grays)`.
+template <char... Cs>
+constexpr auto operator""_Gy() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(grays * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_US_gal` is a `Constant` equivalent to `make_constant(1.28e-4_mag * us_gallons)`.
+template <char... Cs>
+constexpr auto operator""_US_gal() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(us_gallons * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_slug` is a `Constant` equivalent to `make_constant(1.28e-4_mag * slugs)`.
+template <char... Cs>
+constexpr auto operator""_slug() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(slugs * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_rev` is a `Constant` equivalent to `make_constant(1.28e-4_mag * revolutions)`.
+template <char... Cs>
+constexpr auto operator""_rev() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(revolutions * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_deg` is a `Constant` equivalent to `make_constant(1.28e-4_mag * degrees)`.
+template <char... Cs>
+constexpr auto operator""_deg() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(degrees * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_V` is a `Constant` equivalent to `make_constant(1.28e-4_mag * volts)`.
+template <char... Cs>
+constexpr auto operator""_V() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(volts * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_US_qt` is a `Constant` equivalent to `make_constant(1.28e-4_mag * us_quarts)`.
+template <char... Cs>
+constexpr auto operator""_US_qt() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(us_quarts * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_degR` is a `Constant` equivalent to `make_constant(1.28e-4_mag * rankine)`.
+template <char... Cs>
+constexpr auto operator""_degR() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(rankine * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_S` is a `Constant` equivalent to `make_constant(1.28e-4_mag * siemens)`.
+template <char... Cs>
+constexpr auto operator""_S() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(siemens * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_US_pt` is a `Constant` equivalent to `make_constant(1.28e-4_mag * us_pints)`.
+template <char... Cs>
+constexpr auto operator""_US_pt() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(us_pints * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_as` is a `Constant` equivalent to `make_constant(1.28e-4_mag * arcseconds)`.
+template <char... Cs>
+constexpr auto operator""_as() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(arcseconds * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_T` is a `Constant` equivalent to `make_constant(1.28e-4_mag * tesla)`.
+template <char... Cs>
+constexpr auto operator""_T() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(tesla * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_L` is a `Constant` equivalent to `make_constant(1.28e-4_mag * liters)`.
+template <char... Cs>
+constexpr auto operator""_L() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(liters * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_ftm` is a `Constant` equivalent to `make_constant(1.28e-4_mag * fathoms)`.
+template <char... Cs>
+constexpr auto operator""_ftm() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(fathoms * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_lx` is a `Constant` equivalent to `make_constant(1.28e-4_mag * lux)`.
+template <char... Cs>
+constexpr auto operator""_lx() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(lux * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_A` is a `Constant` equivalent to `make_constant(1.28e-4_mag * amperes)`.
+template <char... Cs>
+constexpr auto operator""_A() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(amperes * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_kn` is a `Constant` equivalent to `make_constant(1.28e-4_mag * knots)`.
+template <char... Cs>
+constexpr auto operator""_kn() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(knots * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_lbf` is a `Constant` equivalent to `make_constant(1.28e-4_mag * pounds_force)`.
+template <char... Cs>
+constexpr auto operator""_lbf() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(pounds_force * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_kat` is a `Constant` equivalent to `make_constant(1.28e-4_mag * katals)`.
+template <char... Cs>
+constexpr auto operator""_kat() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(katals * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_b` is a `Constant` equivalent to `make_constant(1.28e-4_mag * bits)`.
+template <char... Cs>
+constexpr auto operator""_b() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(bits * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_am` is a `Constant` equivalent to `make_constant(1.28e-4_mag * arcminutes)`.
+template <char... Cs>
+constexpr auto operator""_am() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(arcminutes * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_cd` is a `Constant` equivalent to `make_constant(1.28e-4_mag * candelas)`.
+template <char... Cs>
+constexpr auto operator""_cd() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(candelas * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_in` is a `Constant` equivalent to `make_constant(1.28e-4_mag * inches)`.
+template <char... Cs>
+constexpr auto operator""_in() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(inches * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_degF_qty` is a `Constant` equivalent to `make_constant(1.28e-4_mag * fahrenheit_qty)`.
+template <char... Cs>
+constexpr auto operator""_degF_qty() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(fahrenheit_qty * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_yd` is a `Constant` equivalent to `make_constant(1.28e-4_mag * yards)`.
+template <char... Cs>
+constexpr auto operator""_yd() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(yards * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_W` is a `Constant` equivalent to `make_constant(1.28e-4_mag * watts)`.
+template <char... Cs>
+constexpr auto operator""_W() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(watts * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_H` is a `Constant` equivalent to `make_constant(1.28e-4_mag * henries)`.
+template <char... Cs>
+constexpr auto operator""_H() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(henries * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_F` is a `Constant` equivalent to `make_constant(1.28e-4_mag * farads)`.
+template <char... Cs>
+constexpr auto operator""_F() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(farads * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_mi` is a `Constant` equivalent to `make_constant(1.28e-4_mag * miles)`.
+template <char... Cs>
+constexpr auto operator""_mi() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(miles * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_K` is a `Constant` equivalent to `make_constant(1.28e-4_mag * kelvins)`.
+template <char... Cs>
+constexpr auto operator""_K() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(kelvins * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_sr` is a `Constant` equivalent to `make_constant(1.28e-4_mag * steradians)`.
+template <char... Cs>
+constexpr auto operator""_sr() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(steradians * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_N` is a `Constant` equivalent to `make_constant(1.28e-4_mag * newtons)`.
+template <char... Cs>
+constexpr auto operator""_N() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(newtons * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_h` is a `Constant` equivalent to `make_constant(1.28e-4_mag * hours)`.
+template <char... Cs>
+constexpr auto operator""_h() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(hours * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_lb` is a `Constant` equivalent to `make_constant(1.28e-4_mag * pounds_mass)`.
+template <char... Cs>
+constexpr auto operator""_lb() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(pounds_mass * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_Pa` is a `Constant` equivalent to `make_constant(1.28e-4_mag * pascals)`.
+template <char... Cs>
+constexpr auto operator""_Pa() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(pascals * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_g` is a `Constant` equivalent to `make_constant(1.28e-4_mag * grams)`.
+template <char... Cs>
+constexpr auto operator""_g() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(grams * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_bar` is a `Constant` equivalent to `make_constant(1.28e-4_mag * bars)`.
+template <char... Cs>
+constexpr auto operator""_bar() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(bars * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_ftbl_fld` is a `Constant` equivalent to `make_constant(1.28e-4_mag * football_fields)`.
+template <char... Cs>
+constexpr auto operator""_ftbl_fld() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(football_fields * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_Bq` is a `Constant` equivalent to `make_constant(1.28e-4_mag * becquerel)`.
+template <char... Cs>
+constexpr auto operator""_Bq() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(becquerel * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_Wb` is a `Constant` equivalent to `make_constant(1.28e-4_mag * webers)`.
+template <char... Cs>
+constexpr auto operator""_Wb() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(webers * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_pct` is a `Constant` equivalent to `make_constant(1.28e-4_mag * percent)`.
+template <char... Cs>
+constexpr auto operator""_pct() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(percent * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_AU` is a `Constant` equivalent to `make_constant(1.28e-4_mag * astronomical_units)`.
+template <char... Cs>
+constexpr auto operator""_AU() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(astronomical_units * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_nmi` is a `Constant` equivalent to `make_constant(1.28e-4_mag * nautical_miles)`.
+template <char... Cs>
+constexpr auto operator""_nmi() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(nautical_miles * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_ft` is a `Constant` equivalent to `make_constant(1.28e-4_mag * feet)`.
+template <char... Cs>
+constexpr auto operator""_ft() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(feet * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_rad` is a `Constant` equivalent to `make_constant(1.28e-4_mag * radians)`.
+template <char... Cs>
+constexpr auto operator""_rad() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(radians * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
+}  // namespace au
+
+
 
 namespace au {
 
@@ -14384,4 +15374,43 @@ struct LuminousEfficacy540TerahertzUnit : decltype((Lumens{} / Watts{}) * mag<68
 AU_DEVICE_VAR constexpr auto LUMINOUS_EFFICACY_540_TERAHERTZ =
     make_constant(detail::LuminousEfficacy540TerahertzUnit{});
 
+}  // namespace au
+
+
+namespace au {
+
+namespace detail {
+// DO NOT follow this pattern to define your own units.  This is for library-defined units.
+// Instead, follow instructions at (https://aurora-opensource.github.io/au/main/howto/new-units/).
+template <typename T>
+struct BoltzmannConstantLabel {
+    static constexpr const char label[] = "k_B";
+};
+template <typename T>
+constexpr const char BoltzmannConstantLabel<T>::label[];
+struct BoltzmannConstantUnit
+    : decltype((Joules{} / Kelvins{}) * mag<1'380'649>() * pow<-29>(mag<10>())),
+      BoltzmannConstantLabel<void> {
+    using BoltzmannConstantLabel<void>::label;
+};
+}  // namespace detail
+
+AU_DEVICE_VAR constexpr auto BOLTZMANN_CONSTANT = make_constant(detail::BoltzmannConstantUnit{});
+
+}  // namespace au
+
+
+namespace au {
+namespace au_literals {
+
+// `1.28e-4_degC_qty` is a `Constant` equivalent to `make_constant(1.28e-4_mag * celsius_qty)`.
+template <char... Cs>
+constexpr auto operator""_degC_qty() {
+    // clang-format mangles operator"" template-ids: llvm/llvm-project#210135
+    // clang-format off
+    return make_constant(celsius_qty * operator""_mag<Cs...>());
+    // clang-format on
+}
+
+}  // namespace au_literals
 }  // namespace au

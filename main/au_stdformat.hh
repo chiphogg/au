@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 96e75f4
+// Version identifier: 71ff7d4
 // <iostream> support: INCLUDED
 // <format> support: INCLUDED
 // List of included units:
@@ -42,6 +42,7 @@
 //   radians
 //   seconds
 //   unos
+// List of included unit literals:
 // List of included constants:
 
 
@@ -170,6 +171,14 @@ using QuantityI = Quantity<UnitT, int>;
 template <typename UnitT>
 using QuantityU = Quantity<UnitT, unsigned int>;
 template <typename UnitT>
+using QuantityI8 = Quantity<UnitT, int8_t>;
+template <typename UnitT>
+using QuantityU8 = Quantity<UnitT, uint8_t>;
+template <typename UnitT>
+using QuantityI16 = Quantity<UnitT, int16_t>;
+template <typename UnitT>
+using QuantityU16 = Quantity<UnitT, uint16_t>;
+template <typename UnitT>
 using QuantityI32 = Quantity<UnitT, int32_t>;
 template <typename UnitT>
 using QuantityU32 = Quantity<UnitT, uint32_t>;
@@ -197,6 +206,14 @@ template <typename UnitT>
 using QuantityPointI = QuantityPoint<UnitT, int>;
 template <typename UnitT>
 using QuantityPointU = QuantityPoint<UnitT, unsigned int>;
+template <typename UnitT>
+using QuantityPointI8 = QuantityPoint<UnitT, int8_t>;
+template <typename UnitT>
+using QuantityPointU8 = QuantityPoint<UnitT, uint8_t>;
+template <typename UnitT>
+using QuantityPointI16 = QuantityPoint<UnitT, int16_t>;
+template <typename UnitT>
+using QuantityPointU16 = QuantityPoint<UnitT, uint16_t>;
 template <typename UnitT>
 using QuantityPointI32 = QuantityPoint<UnitT, int32_t>;
 template <typename UnitT>
@@ -8846,7 +8863,7 @@ struct QuantityMaker {
 
     // lvalue: copy. (See `make_quantity` above.)
     template <typename T, typename Rep = detail::NormalizeRep<std::decay_t<T>>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(const T &value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(const T &value) const {
         return Quantity<Unit, Rep>{value};
     }
 
@@ -8854,7 +8871,7 @@ struct QuantityMaker {
     template <typename T,
               typename Rep = detail::NormalizeRep<std::decay_t<T>>,
               typename = std::enable_if_t<!std::is_lvalue_reference<T>::value>>
-    AU_DEVICE_FUNC constexpr Quantity<Unit, Rep> operator()(T &&value) const {
+    AU_DEVICE_FUNC constexpr Quantity<UnitT, Rep> operator()(T &&value) const {
         return Quantity<Unit, Rep>{std::move(value)};
     }
 
@@ -9900,6 +9917,7 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
                   detail::ComposesWith<Constant, Unit, Constant, Constant>,
                   detail::ComposesWith<Constant, Unit, QuantityMaker, QuantityMaker>,
                   detail::ComposesWith<Constant, Unit, SingularNameFor, SingularNameFor>,
+                  detail::ComposesWith<Constant, Unit, SymbolFor, Constant>,
                   detail::SupportsRationalPowers<Constant, Unit>,
                   detail::CanScaleByMagnitude<Constant, Unit> {
     // Convert this constant to a Quantity of the given rep.
@@ -10829,10 +10847,18 @@ constexpr auto make_prefixed_unit_label(const StringConstant<N> &prefix, U) {
 
 template <template <class U> class Prefix>
 struct PrefixApplier {
-    // Applying a Prefix to a Unit instance, creates an instance of the Prefixed Unit.
-    template <typename U>
+    // Applying a Prefix to a Unit instance, creates an instance of the Prefixed Unit.  (We
+    // constrain this, so that unhandled types fail here rather than at their first use.)
+    template <typename U, typename = std::enable_if_t<IsUnit<U>::value>>
     AU_DEVICE_FUNC constexpr auto operator()(U) const {
         return Prefix<U>{};
+    }
+
+    // Applying a Prefix to a Constant instance, prefixes the unit under its scale factor.
+    template <typename U>
+    AU_DEVICE_FUNC constexpr auto operator()(Constant<U>) const {
+        return Constant<
+            ComputeScaledUnit<Prefix<detail::UnscaledUnit<U>>, detail::UnitCoefficient<U>>>{};
     }
 
     // Applying a Prefix to a QuantityMaker instance, creates a maker for the Prefixed Unit.
