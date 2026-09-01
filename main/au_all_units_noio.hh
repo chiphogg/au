@@ -18,7 +18,6 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -26,7 +25,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 71ff7d4
+// Version identifier: 7e7e009
 // <iostream> support: EXCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -412,7 +411,7 @@ struct Kibi;
 //
 
 #define AU_VERSION_MAJOR 0
-#define AU_VERSION_MINOR 5
+#define AU_VERSION_MINOR 6
 #define AU_VERSION_PATCH 0
 
 // Combine major/minor/patch components into a single monotonically increasing integer.  Each
@@ -990,6 +989,15 @@ constexpr bool same_type_ignoring_cvref(T, U) {
 template <typename... Ts>
 struct AlwaysFalse : std::false_type {};
 
+//
+// `TypeIdentityIf<Condition, T>` is `T` when `Condition<T>` holds, and a substitution failure when
+// it doesn't: a way to constrain an overload through its return type.
+//
+template <bool Condition, typename T>
+struct TypeIdentityIfImpl;
+template <template <typename> class Condition, typename T>
+using TypeIdentityIf = typename TypeIdentityIfImpl<Condition<T>::value, T>::type;
+
 template <typename R1, typename R2>
 struct CommonTypeButPreserveIntSignednessImpl;
 template <typename R1, typename R2>
@@ -1008,6 +1016,15 @@ using PromotedType = typename PromotedTypeImpl<T>::type;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation details below.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// `TypeIdentityIf` implementation.
+
+struct NoTypeMember {};
+template <bool Condition, typename T>
+struct TypeIdentityIfImpl : NoTypeMember {};
+template <typename T>
+struct TypeIdentityIfImpl<true, T> : stdx::type_identity<T> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // `PrependImpl` implementation.
@@ -2827,6 +2844,7 @@ struct identity {
 }  // namespace au
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
@@ -3015,6 +3033,7 @@ constexpr auto minus = Minus{};
 
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
@@ -3256,6 +3275,7 @@ constexpr T int_pow(T base, std::uintmax_t exp) {
 
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
@@ -8436,6 +8456,7 @@ struct ConstructionPolicy {
 
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
@@ -9197,19 +9218,11 @@ AU_DEVICE_FUNC constexpr auto rep_cast(Zero z) {
 
 namespace detail {
 
-// A SFINAE helper that is the identity, but only if we think a type is a valid rep.
-//
-// For now, we are restricting this to arithmetic types.  This doesn't mean they're the only reps we
-// support; it just means they're the only reps we can _construct via this method_.  Later on, we
-// would like to have a well-defined concept that defines what is and is not an acceptable rep for
-// our `Quantity`.  Once we have that, we can simply constrain on that concept.  For more on this
-// idea, see: https://github.com/aurora-opensource/au/issues/52
-struct NoTypeMember {};
+// The identity on `T`, but only for a `T` we will accept as a `Rep`. `IsValidRep` excludes our own
+// units, quantities, and other monovalue types, which is what keeps these overloads from competing
+// with the ones meant for those.
 template <typename T>
-struct TypeIdentityIfLooksLikeValidRepImpl
-    : std::conditional_t<std::is_arithmetic<T>::value, stdx::type_identity<T>, NoTypeMember> {};
-template <typename T>
-using TypeIdentityIfLooksLikeValidRep = typename TypeIdentityIfLooksLikeValidRepImpl<T>::type;
+using TypeIdentityIfValidRep = TypeIdentityIf<::au::IsValidRep, T>;
 
 // The unit whose `Constant` corresponds to a bare `Magnitude`: a scaled version of the unitless
 // unit.
@@ -9229,16 +9242,14 @@ using UnitForMagnitude = ComputeScaledUnit<UnitProduct<>, M>;
 // (N * M), for number N and magnitude M.
 template <typename T, typename... BPs>
 AU_DEVICE_FUNC constexpr auto operator*(T x, Magnitude<BPs...>)
-    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>,
-                detail::TypeIdentityIfLooksLikeValidRep<T>> {
+    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>, detail::TypeIdentityIfValidRep<T>> {
     return make_quantity<detail::UnitForMagnitude<Magnitude<BPs...>>>(x);
 }
 
 // (M * N), for number N and magnitude M.
 template <typename T, typename... BPs>
 AU_DEVICE_FUNC constexpr auto operator*(Magnitude<BPs...>, T x)
-    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>,
-                detail::TypeIdentityIfLooksLikeValidRep<T>> {
+    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>, detail::TypeIdentityIfValidRep<T>> {
     return make_quantity<detail::UnitForMagnitude<Magnitude<BPs...>>>(x);
 }
 
@@ -9246,15 +9257,14 @@ AU_DEVICE_FUNC constexpr auto operator*(Magnitude<BPs...>, T x)
 template <typename T, typename... BPs>
 AU_DEVICE_FUNC constexpr auto operator/(T x, Magnitude<BPs...>)
     -> Quantity<detail::UnitForMagnitude<MagInverse<Magnitude<BPs...>>>,
-                detail::TypeIdentityIfLooksLikeValidRep<T>> {
+                detail::TypeIdentityIfValidRep<T>> {
     return make_quantity<detail::UnitForMagnitude<MagInverse<Magnitude<BPs...>>>>(x);
 }
 
 // (M / N), for number N and magnitude M.
 template <typename T, typename... BPs>
 AU_DEVICE_FUNC constexpr auto operator/(Magnitude<BPs...>, T x)
-    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>,
-                detail::TypeIdentityIfLooksLikeValidRep<T>> {
+    -> Quantity<detail::UnitForMagnitude<Magnitude<BPs...>>, detail::TypeIdentityIfValidRep<T>> {
     static_assert(!std::is_integral<T>::value,
                   "Dividing by an integer value disallowed: would almost always produce 0");
     return make_quantity<detail::UnitForMagnitude<Magnitude<BPs...>>>(T{1} / x);
@@ -9840,7 +9850,7 @@ AU_DEVICE_VAR constexpr auto unos = QuantityMaker<Unos>{};
 namespace au {
 namespace detail {
 
-// (Note: `TypeIdentityIfLooksLikeValidRep`, which these mixins use, lives in "au/quantity.hh".)
+// (Note: `TypeIdentityIfValidRep`, which these mixins use, lives in "au/quantity.hh".)
 
 //
 // A mixin that enables turning a raw number into a Quantity by multiplying or dividing.
@@ -9850,28 +9860,28 @@ struct MakesQuantityFromNumber {
     // (N * W), for number N and wrapper W.
     template <typename T>
     friend constexpr auto operator*(T x, UnitWrapper<Unit>)
-        -> Quantity<Unit, TypeIdentityIfLooksLikeValidRep<T>> {
+        -> Quantity<Unit, TypeIdentityIfValidRep<T>> {
         return make_quantity<Unit>(x);
     }
 
     // (W * N), for number N and wrapper W.
     template <typename T>
     friend constexpr auto operator*(UnitWrapper<Unit>, T x)
-        -> Quantity<Unit, TypeIdentityIfLooksLikeValidRep<T>> {
+        -> Quantity<Unit, TypeIdentityIfValidRep<T>> {
         return make_quantity<Unit>(x);
     }
 
     // (N / W), for number N and wrapper W.
     template <typename T>
     friend constexpr auto operator/(T x, UnitWrapper<Unit>)
-        -> Quantity<UnitInverse<Unit>, TypeIdentityIfLooksLikeValidRep<T>> {
+        -> Quantity<UnitInverse<Unit>, TypeIdentityIfValidRep<T>> {
         return make_quantity<UnitInverse<Unit>>(x);
     }
 
     // (W / N), for number N and wrapper W.
     template <typename T>
     friend constexpr auto operator/(UnitWrapper<Unit>, T x)
-        -> Quantity<Unit, TypeIdentityIfLooksLikeValidRep<T>> {
+        -> Quantity<Unit, TypeIdentityIfValidRep<T>> {
         static_assert(!std::is_integral<T>::value,
                       "Dividing by an integer value disallowed: would almost always produce 0");
         return make_quantity<Unit>(T{1} / x);
@@ -10107,6 +10117,7 @@ AU_DEVICE_VAR constexpr auto lm = SymbolFor<Lumens>{};
 }  // namespace au
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
@@ -10423,6 +10434,7 @@ AU_DEVICE_VAR constexpr auto C = SymbolFor<Coulombs>{};
 
 
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
+#include <compare>
 #endif
 
 
