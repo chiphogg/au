@@ -25,7 +25,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 76614a8
+// Version identifier: 001ae02
 // <iostream> support: EXCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -2665,6 +2665,9 @@ struct Zero {
 // us write `ZERO` instead of `Zero{}`.
 AU_DEVICE_VAR constexpr auto ZERO = Zero{};
 
+// Negation of Zero is Zero.
+inline AU_DEVICE_FUNC constexpr Zero operator-(Zero) { return ZERO; }
+
 // Addition, subtraction, and comparison of Zero are well defined.
 inline AU_DEVICE_FUNC constexpr Zero operator+(Zero, Zero) { return ZERO; }
 inline AU_DEVICE_FUNC constexpr Zero operator-(Zero, Zero) { return ZERO; }
@@ -3628,14 +3631,32 @@ constexpr std::int64_t parse_scientific_exponent() {
     }
     return sign * static_cast<std::int64_t>(exponent);
 }
+
+// Compute the value of a `_mag` literal whose mantissa is `Mantissa`.  We specialize for a mantissa
+// of `0`, which is `Zero` rather than a `Magnitude`: `0` has no prime factorization.
+template <std::uintmax_t Mantissa>
+struct MagLiteralImpl {
+    template <char... Cs>
+    static AU_DEVICE_FUNC constexpr auto value() {
+        return mag<Mantissa>() *
+               pow<parse_scientific_exponent<Cs...>() - count_decimal_places<Cs...>()>(mag<10>());
+    }
+};
+template <>
+struct MagLiteralImpl<0u> {
+    template <char... Cs>
+    static AU_DEVICE_FUNC constexpr Zero value() {
+        return {};
+    }
+};
 }  // namespace detail
 
 namespace au_literals {
 template <char... Cs>
 AU_DEVICE_FUNC constexpr auto operator""_mag() {
-    return mag<detail::parse_magnitude_integer<Cs...>()>() *
-           pow<detail::parse_scientific_exponent<Cs...>() - detail::count_decimal_places<Cs...>()>(
-               mag<10>());
+    // Note that computing the mantissa also validates the characters in the literal.
+    return detail::MagLiteralImpl<detail::parse_magnitude_integer<Cs...>()>::template value<
+        Cs...>();
 }
 }  // namespace au_literals
 
@@ -8610,7 +8631,7 @@ class Quantity {
     // Moving the implementation here lets us effortlessly support callsites where any number of
     // arguments are "shapeshifter" types that are compatible with this Quantity (such as `ZERO`, or
     // various physical constant).
-    //
+
     // Note that the min/max implementations return by _value_, for consistency with other Quantity
     // implementations (because in the general case, the return type can differ from the inputs).
     // Note, too, that we use the Walter Brown implementation for min/max, where min prefers `a`,
@@ -8620,6 +8641,30 @@ class Quantity {
     friend AU_DEVICE_FUNC constexpr Quantity max(Quantity a, Quantity b) { return b < a ? a : b; }
     friend AU_DEVICE_FUNC constexpr Quantity clamp(Quantity v, Quantity lo, Quantity hi) {
         return (v < lo) ? lo : ((hi < v) ? hi : v);
+    }
+
+    // The `fmod`, `remainder`, and `copysign` implementations use a defaulted parameter `T`, which
+    // is always `Rep`, so that reps that have no `std::fmod` will still be able to compile.
+    template <typename T = Rep>
+    friend AU_DEVICE_FUNC auto fmod(Quantity a, Quantity b)
+        -> Quantity<UnitT, decltype(std::fmod(T{}, T{}))> {
+        using R = decltype(std::fmod(T{}, T{}));
+        return make_quantity<UnitT>(
+            std::fmod(a.template in<R>(UnitT{}), b.template in<R>(UnitT{})));
+    }
+
+    template <typename T = Rep>
+    friend AU_DEVICE_FUNC auto remainder(Quantity a, Quantity b)
+        -> Quantity<UnitT, decltype(std::remainder(T{}, T{}))> {
+        using R = decltype(std::remainder(T{}, T{}));
+        return make_quantity<UnitT>(
+            std::remainder(a.template in<R>(UnitT{}), b.template in<R>(UnitT{})));
+    }
+
+    template <typename T = Rep>
+    friend AU_DEVICE_FUNC constexpr auto copysign(Quantity mag, Quantity sgn)
+        -> Quantity<UnitT, decltype(std::copysign(T{}, T{}))> {
+        return make_quantity<UnitT>(std::copysign(mag.in(UnitT{}), sgn.in(UnitT{})));
     }
 
 #if defined(__cpp_lib_interpolate) && __cpp_lib_interpolate >= 201902L
@@ -10235,10 +10280,18 @@ class QuantityPoint {
     //      BAD: QuantityPoint<Celsius, int> -> QuantityPoint<Kelvins, int>
     //      OK : QuantityPoint<Celsius, int> -> QuantityPoint<Kelvins, double>
     //      OK : QuantityPoint<Celsius, int> -> QuantityPoint<Milli<Kelvins>, int>
-    template <typename OtherUnit, typename OtherRep>
+    template <typename OtherUnit,
+              typename OtherRep,
+              std::enable_if_t<HasSameDimension<UnitT, OtherUnit>::value, int> = 0>
     static constexpr bool should_enable_implicit_construction_from() {
-        using Com = CommonUnit<OtherUnit, detail::ComputeOriginDisplacementUnit<Unit, OtherUnit>>;
+        using Com = CommonUnit<OtherUnit, detail::ComputeOriginDisplacementUnit<UnitT, OtherUnit>>;
         return std::is_convertible<Quantity<Com, OtherRep>, QuantityPoint::Diff>::value;
+    }
+    template <typename OtherUnit,
+              typename OtherRep,
+              std::enable_if_t<!HasSameDimension<UnitT, OtherUnit>::value, int> = 0>
+    static constexpr bool should_enable_implicit_construction_from() {
+        return false;
     }
 
     // This machinery exists to give us a conditionally explicit constructor, using SFINAE to select
@@ -10798,6 +10851,10 @@ struct PrefixApplier {
             ComputeScaledUnit<Prefix<detail::UnscaledUnit<U>>, detail::UnitCoefficient<U>>>{};
     }
 
+    // Applying a Prefix to `Zero` (as we would get from, say, `0_g`) leaves it unchanged: any
+    // prefixed version of zero is still zero.
+    AU_DEVICE_FUNC constexpr Zero operator()(Zero) const { return {}; }
+
     // Applying a Prefix to a QuantityMaker instance, creates a maker for the Prefixed Unit.
     template <typename U>
     AU_DEVICE_FUNC constexpr auto operator()(QuantityMaker<U>) const {
@@ -11178,7 +11235,7 @@ namespace detail {
 // This utility handles converting Quantity to Radians in a uniform way, while also giving a more
 // direct error message via the static_assert if users make a coding error and pass the wrong type.
 template <typename U, typename R>
-auto in_radians(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto in_radians(Quantity<U, R> q) {
     static_assert(HasSameDimension<U, Radians>{},
                   "Can only use trig functions with Angle-dimensioned Quantity instances");
 
@@ -11249,44 +11306,44 @@ struct RoundingRepImpl<QuantityPoint<U, R>, RoundingUnits>
 
 // The absolute value of a Quantity.
 template <typename U, typename R>
-auto abs(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto abs(Quantity<U, R> q) {
     return make_quantity<U>(std::abs(q.in(U{})));
 }
 
 // Wrapper for std::acos() which returns strongly typed angle quantity.
 template <typename T>
-auto arccos(T x) {
+AU_DEVICE_FUNC auto arccos(T x) {
     return radians(std::acos(x));
 }
 
 // Wrapper for std::asin() which returns strongly typed angle quantity.
 template <typename T>
-auto arcsin(T x) {
+AU_DEVICE_FUNC auto arcsin(T x) {
     return radians(std::asin(x));
 }
 
 // Wrapper for std::atan() which returns strongly typed angle quantity.
 template <typename T>
-auto arctan(T x) {
+AU_DEVICE_FUNC auto arctan(T x) {
     return radians(std::atan(x));
 }
 
 // Wrapper for std::atan2() which returns strongly typed angle quantity.
 template <typename T, typename U>
-auto arctan2(T y, U x) {
+AU_DEVICE_FUNC auto arctan2(T y, U x) {
     return radians(std::atan2(y, x));
 }
 
 // arctan2() overload which supports same-dimensioned Quantity types.
 template <typename U1, typename R1, typename U2, typename R2>
-auto arctan2(Quantity<U1, R1> y, Quantity<U2, R2> x) {
+AU_DEVICE_FUNC auto arctan2(Quantity<U1, R1> y, Quantity<U2, R2> x) {
     constexpr auto common_unit = CommonUnit<U1, U2>{};
     return arctan2(y.in(common_unit), x.in(common_unit));
 }
 
 // Wrapper for std::cbrt() which handles Quantity types.
 template <typename U, typename R>
-auto cbrt(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto cbrt(Quantity<U, R> q) {
     return make_quantity<UnitPower<U, 1, 3>>(std::cbrt(q.in(U{})));
 }
 
@@ -11313,19 +11370,23 @@ AU_DEVICE_FUNC constexpr auto clamp(QuantityPoint<UV, RV> v,
 }
 
 template <typename U1, typename R1, typename U2, typename R2>
-auto hypot(Quantity<U1, R1> x, Quantity<U2, R2> y) {
+AU_DEVICE_FUNC auto hypot(Quantity<U1, R1> x, Quantity<U2, R2> y) {
     using U = CommonUnit<U1, U2>;
     return make_quantity<U>(std::hypot(x.in(U{}), y.in(U{})));
 }
 
-// Copysign where the magnitude has units.
-template <typename U, typename R, typename T>
+// Copysign where the magnitude has units, and the sign is a raw number.
+//
+// We constrain `T` to be a valid rep, so that these overloads don't hijack calls where the other
+// argument is something implicitly convertible to `Quantity<U, R>` (such as a `Constant`).  Those
+// are handled by the hidden friend in "au/quantity.hh".
+template <typename U, typename R, typename T, typename = std::enable_if_t<IsValidRep<T>::value>>
 AU_DEVICE_FUNC constexpr auto copysign(Quantity<U, R> mag, T sgn) {
     return make_quantity<U>(std::copysign(mag.in(U{}), sgn));
 }
 
-// Copysign where the sign has units.
-template <typename T, typename U, typename R>
+// Copysign where the sign has units, and the magnitude is a raw number.
+template <typename T, typename U, typename R, typename = std::enable_if_t<IsValidRep<T>::value>>
 AU_DEVICE_FUNC constexpr auto copysign(T mag, Quantity<U, R> sgn) {
     return std::copysign(mag, sgn.in(U{}));
 }
@@ -11338,13 +11399,13 @@ AU_DEVICE_FUNC constexpr auto copysign(Quantity<U1, R1> mag, Quantity<U2, R2> sg
 
 // Wrapper for std::cos() which accepts a strongly typed angle quantity.
 template <typename U, typename R>
-auto cos(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto cos(Quantity<U, R> q) {
     return std::cos(detail::in_radians(q));
 }
 
 // The floating point remainder of two values of the same dimension.
 template <typename U1, typename R1, typename U2, typename R2>
-auto fmod(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+AU_DEVICE_FUNC auto fmod(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
     using U = CommonUnit<U1, U2>;
     using R = decltype(std::fmod(R1{}, R2{}));
     return make_quantity<U>(std::fmod(q1.template in<R>(U{}), q2.template in<R>(U{})));
@@ -11589,7 +11650,7 @@ AU_DEVICE_FUNC constexpr auto mean(QuantityPoint<U0, R0> p0, QuantityPoint<Us, R
 
 // The (zero-centered) floating point remainder of two values of the same dimension.
 template <typename U1, typename R1, typename U2, typename R2>
-auto remainder(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
+AU_DEVICE_FUNC auto remainder(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
     using U = CommonUnit<U1, U2>;
     using R = decltype(std::remainder(R1{}, R2{}));
     return make_quantity<U>(std::remainder(q1.template in<R>(U{}), q2.template in<R>(U{})));
@@ -11602,13 +11663,13 @@ auto remainder(Quantity<U1, R1> q1, Quantity<U2, R2> q2) {
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRep<Quantity<U, R>, RoundingUnits>;
     return std::round(q.template in<OurRoundingRep>(rounding_units));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     using OurRoundingRep = detail::RoundingRep<QuantityPoint<U, R>, RoundingUnits>;
     return std::round(p.template in<OurRoundingRep>(rounding_units));
 }
@@ -11621,12 +11682,12 @@ auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto round_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(round_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto round_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(round_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11642,12 +11703,12 @@ AU_DEVICE_FUNC constexpr auto round_in(RoundingUnits rounding_units, Constant<U>
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(round_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(round_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11664,14 +11725,19 @@ AU_DEVICE_FUNC constexpr auto round_as(RoundingUnits rounding_units, Constant<U>
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto round_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(round_in<OutputRep>(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(
         round_in<OutputRep>(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto round_as(RoundingUnits rounding_units, Constant<U> c) {
+    return make_quantity<AssociatedUnit<RoundingUnits>>(round_in<OutputRep>(rounding_units, c));
 }
 
 //
@@ -11681,13 +11747,13 @@ auto round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRep<Quantity<U, R>, RoundingUnits>;
     return std::floor(q.template in<OurRoundingRep>(rounding_units));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     using OurRoundingRep = detail::RoundingRep<QuantityPoint<U, R>, RoundingUnits>;
     return std::floor(p.template in<OurRoundingRep>(rounding_units));
 }
@@ -11699,12 +11765,12 @@ auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto floor_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(floor_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto floor_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(floor_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11720,12 +11786,12 @@ AU_DEVICE_FUNC constexpr auto floor_in(RoundingUnits rounding_units, Constant<U>
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(floor_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(floor_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11742,14 +11808,19 @@ AU_DEVICE_FUNC constexpr auto floor_as(RoundingUnits rounding_units, Constant<U>
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto floor_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(floor_in<OutputRep>(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(
         floor_in<OutputRep>(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto floor_as(RoundingUnits rounding_units, Constant<U> c) {
+    return make_quantity<AssociatedUnit<RoundingUnits>>(floor_in<OutputRep>(rounding_units, c));
 }
 
 //
@@ -11759,13 +11830,13 @@ auto floor_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     using OurRoundingRep = detail::RoundingRep<Quantity<U, R>, RoundingUnits>;
     return std::ceil(q.template in<OurRoundingRep>(rounding_units));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     using OurRoundingRep = detail::RoundingRep<QuantityPoint<U, R>, RoundingUnits>;
     return std::ceil(p.template in<OurRoundingRep>(rounding_units));
 }
@@ -11777,12 +11848,12 @@ auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto ceil_in(RoundingUnits rounding_units, Quantity<U, R> q) {
     return static_cast<OutputRep>(ceil_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto ceil_in(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return static_cast<OutputRep>(ceil_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11798,12 +11869,12 @@ AU_DEVICE_FUNC constexpr auto ceil_in(RoundingUnits rounding_units, Constant<U> 
 //
 // a) Version for Quantity.
 template <typename RoundingUnits, typename U, typename R>
-auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(ceil_in(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename RoundingUnits, typename U, typename R>
-auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(ceil_in(rounding_units, p));
 }
 // c) Version for Constant.
@@ -11820,14 +11891,19 @@ AU_DEVICE_FUNC constexpr auto ceil_as(RoundingUnits rounding_units, Constant<U> 
 //
 // a) Version for Quantity.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
+AU_DEVICE_FUNC auto ceil_as(RoundingUnits rounding_units, Quantity<U, R> q) {
     return make_quantity<AssociatedUnit<RoundingUnits>>(ceil_in<OutputRep>(rounding_units, q));
 }
 // b) Version for QuantityPoint.
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
-auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
+AU_DEVICE_FUNC auto ceil_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return make_quantity_point<AssociatedUnitForPoints<RoundingUnits>>(
         ceil_in<OutputRep>(rounding_units, p));
+}
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto ceil_as(RoundingUnits rounding_units, Constant<U> c) {
+    return make_quantity<AssociatedUnit<RoundingUnits>>(ceil_in<OutputRep>(rounding_units, c));
 }
 
 //
@@ -11898,6 +11974,13 @@ AU_DEVICE_FUNC constexpr auto int_round_as(RoundingUnits rounding_units, Quantit
 template <typename OutputRep, typename RoundingUnits, typename U, typename R>
 AU_DEVICE_FUNC constexpr auto int_round_as(RoundingUnits rounding_units, QuantityPoint<U, R> p) {
     return int_round_as_explicit_rep_impl<OutputRep>(rounding_units, p);
+}
+
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto int_round_as(RoundingUnits rounding_units, Constant<U> c) {
+    // For `Constant`, identical to `round_as`.
+    return round_as<OutputRep>(rounding_units, c);
 }
 
 //
@@ -11999,6 +12082,13 @@ AU_DEVICE_FUNC constexpr auto int_floor_as(RoundingUnits rounding_units, Quantit
     return int_floor_as_explicit_rep_impl<OutputRep>(rounding_units, p);
 }
 
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto int_floor_as(RoundingUnits rounding_units, Constant<U> c) {
+    // For `Constant`, identical to `floor_as`.
+    return floor_as<OutputRep>(rounding_units, c);
+}
+
 //
 // Version of `int_floor_as` with raw number outputs.
 //
@@ -12098,6 +12188,13 @@ AU_DEVICE_FUNC constexpr auto int_ceil_as(RoundingUnits rounding_units, Quantity
     return int_ceil_as_explicit_rep_impl<OutputRep>(rounding_units, p);
 }
 
+// c) Version for Constant.
+template <typename OutputRep, typename RoundingUnits, typename U>
+AU_DEVICE_FUNC constexpr auto int_ceil_as(RoundingUnits rounding_units, Constant<U> c) {
+    // For `Constant`, identical to `ceil_as`.
+    return ceil_as<OutputRep>(rounding_units, c);
+}
+
 //
 // Version of `int_ceil_as` with raw number outputs.
 //
@@ -12137,19 +12234,19 @@ AU_DEVICE_FUNC constexpr auto int_ceil_in(RoundingUnits rounding_units, Constant
 
 // Wrapper for std::sin() which accepts a strongly typed angle quantity.
 template <typename U, typename R>
-auto sin(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto sin(Quantity<U, R> q) {
     return std::sin(detail::in_radians(q));
 }
 
 // Wrapper for std::sqrt() which handles Quantity types.
 template <typename U, typename R>
-auto sqrt(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto sqrt(Quantity<U, R> q) {
     return make_quantity<UnitPower<U, 1, 2>>(std::sqrt(q.in(U{})));
 }
 
 // Wrapper for std::tan() which accepts a strongly typed angle quantity.
 template <typename U, typename R>
-auto tan(Quantity<U, R> q) {
+AU_DEVICE_FUNC auto tan(Quantity<U, R> q) {
     return std::tan(detail::in_radians(q));
 }
 
