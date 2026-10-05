@@ -26,7 +26,7 @@
 #include <type_traits>
 #include <utility>
 
-// Version identifier: 001ae02
+// Version identifier: a12743d
 // <iostream> support: INCLUDED
 // <format> support: EXCLUDED
 // List of included units:
@@ -295,7 +295,7 @@ struct Kibi;
 
 #define AU_VERSION_MAJOR 0
 #define AU_VERSION_MINOR 6
-#define AU_VERSION_PATCH 0
+#define AU_VERSION_PATCH 1
 
 // Combine major/minor/patch components into a single monotonically increasing integer.  Each
 // component gets three decimal digits, so components must be strictly less than 1000.
@@ -1189,6 +1189,15 @@ struct Hours;
 // __device__ during the device compilation pass, the same variable is visible to both host and
 // device code.
 //
+// Defining `AU_INLINE_VARIABLES` (requires C++17) makes AU_DEVICE_VAR declare the library's
+// namespace-scoped `constexpr` variables as `inline`, giving them external linkage.  The C++
+// module interface (`au.cppm`) defines this before including the library, because an exported
+// using-declaration may not name an entity with internal linkage.
+//
+
+#if defined(AU_INLINE_VARIABLES) && !defined(__cpp_inline_variables)
+#error "AU_INLINE_VARIABLES requires C++17 or later (inline variables)"
+#endif
 
 #if defined(__CUDACC__) || defined(__HIPCC__)
 #define AU_DEVICE_FUNC __host__ __device__
@@ -1198,6 +1207,8 @@ struct Hours;
 
 #if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #define AU_DEVICE_VAR __device__
+#elif defined(AU_INLINE_VARIABLES)
+#define AU_DEVICE_VAR inline
 #else
 #define AU_DEVICE_VAR
 #endif
@@ -3148,7 +3159,7 @@ using MagSum = typename MagSumImpl<Ms...>::type;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Value based interface for Magnitude (and Zero).
 
-static constexpr auto ONE = Magnitude<>{};
+AU_DEVICE_VAR constexpr auto ONE = Magnitude<>{};
 
 template <typename... BP1s, typename... BP2s>
 AU_DEVICE_FUNC constexpr auto operator*(Magnitude<BP1s...>, Magnitude<BP2s...>) {
@@ -3532,95 +3543,105 @@ struct PrimeFactorizationImpl {
                             PrimeFactorization<remainder>>;
 };
 
+// `mag<0>()` is `Zero` rather than a `Magnitude`: `0` has no prime factorization.
+template <std::uintmax_t N>
+struct MagOrZeroImpl : PrimeFactorizationImpl<N> {};
+template <>
+struct MagOrZeroImpl<0u> : stdx::type_identity<Zero> {};
+template <std::uintmax_t N>
+using MagOrZero = typename MagOrZeroImpl<N>::type;
+
 }  // namespace detail
 
 template <std::uintmax_t N>
 AU_DEVICE_FUNC constexpr auto mag() {
-    return detail::PrimeFactorization<N>{};
+    return detail::MagOrZero<N>{};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // User-defined literal for magnitude.
 
 namespace detail {
-constexpr bool is_valid_magnitude_digit(char c) { return (c >= '0' && c <= '9') || c == '\''; }
+
+// The value of `c` as a digit in any base up to 16, or -1 if `c` is not a hexadecimal digit.
+constexpr int digit_value(char c) {
+    return c >= '0' && c <= '9'   ? c - '0'
+           : c >= 'a' && c <= 'f' ? c - 'a' + 10
+           : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                  : -1;
+}
+
+constexpr bool is_decimal_digit(char c) { return c >= '0' && c <= '9'; }
+
+constexpr bool is_hex_digit(char c) { return digit_value(c) >= 0; }
 
 constexpr bool is_exponent_marker(char c) { return c == 'e' || c == 'E'; }
 
+constexpr bool is_binary_exponent_marker(char c) { return c == 'p' || c == 'P'; }
+
+constexpr bool never_matches(char) { return false; }
+
+// Whether a `_mag` literal is a floating point literal, i.e., has a decimal point or an exponent.
+// Only meaningful for literals without a `0x`/`0X` prefix, where `e`/`E` are digits.
 template <char... Cs>
-constexpr bool all_valid_magnitude_chars() {
+constexpr bool is_decimal_floating_point() {
     constexpr char chars[] = {Cs...};
-    std::size_t num_decimal_points = 0u;
-    std::size_t num_exponent_markers = 0u;
     for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
-        const char c = chars[i];
-        if (c == '.') {
-            ++num_decimal_points;
-        } else if (is_exponent_marker(c)) {
-            ++num_exponent_markers;
-        } else if (c == '+' || c == '-') {
-            // A sign is only meaningful as part of an exponent; the compiler guarantees it appears
-            // there, so we accept it here without further checking.
-        } else if (!is_valid_magnitude_digit(c)) {
-            return false;
+        if (chars[i] == '.' || is_exponent_marker(chars[i])) {
+            return true;
         }
     }
-    return num_decimal_points <= 1u && num_exponent_markers <= 1u;
+    return false;
 }
 
-// Parse the significant digits (the mantissa) of a `_mag` literal, ignoring any decimal point and
-// stopping at the exponent.  For example, `1234_mag`, `12.34_mag`, and `1.234e3_mag` all produce
-// `1234`.
+// The base of a `_mag` literal, following the C++ rules: 16 for a `0x`/`0X` prefix, 2 for
+// `0b`/`0B`, 8 for an integer with a leading `0` (e.g., `017`), and 10 otherwise.  A floating point
+// literal with a leading `0` (e.g., `0.5`, `012.5`, or `01e3`) is decimal.
 template <char... Cs>
-constexpr std::uintmax_t parse_magnitude_integer() {
-    static_assert(all_valid_magnitude_chars<Cs...>(),
-                  "_mag literals must contain only decimal digits, an optional decimal point, an "
-                  "optional exponent, and optional ' separators");
-    constexpr char digits[] = {Cs...};
-    std::uintmax_t result = 0u;
-    for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
-        if (is_exponent_marker(digits[i])) {
-            break;
-        }
-        if (digits[i] >= '0' && digits[i] <= '9') {
-            result = result * 10u + static_cast<std::uintmax_t>(digits[i] - '0');
-        }
-    }
-    return result;
+constexpr int literal_base() {
+    constexpr char chars[] = {Cs..., '\0'};
+    return chars[0] != '0'                      ? 10
+           : chars[1] == 'x' || chars[1] == 'X' ? 16
+           : chars[1] == 'b' || chars[1] == 'B' ? 2
+           : is_decimal_floating_point<Cs...>() ? 10
+                                                : 8;
 }
 
-// Count the number of mantissa digits after the decimal point in a `_mag` literal.  For example,
-// `12.34_mag` has two decimal places, while `1234_mag` has 0, and `1.234e3_mag` has three.
+// Count the mantissa digits (as identified by `is_digit`) after the `.` in a `_mag` literal,
+// stopping at the first character for which `is_marker` returns true.  For example, `12.34_mag` and
+// `1.23e4_mag` have two decimal places, `0x1.8p0_mag` has one hex place, and `1234_mag` has none.
 template <char... Cs>
-constexpr int count_decimal_places() {
+constexpr int count_places(bool (*is_marker)(char), bool (*is_digit)(char)) {
     constexpr char chars[] = {Cs...};
-    int num_decimal_places = 0;
-    bool after_decimal_point = false;
+    int num_places = 0;
+    bool after_point = false;
     for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
-        if (is_exponent_marker(chars[i])) {
+        if (is_marker(chars[i])) {
             break;
         }
         if (chars[i] == '.') {
-            after_decimal_point = true;
-        } else if (after_decimal_point && chars[i] >= '0' && chars[i] <= '9') {
-            ++num_decimal_places;
+            after_point = true;
+        } else if (after_point && is_digit(chars[i])) {
+            ++num_places;
         }
     }
-    return num_decimal_places;
+    return num_places;
 }
 
-// Parse the (signed) exponent of a `_mag` literal: the integer following the `e`/`E` marker.  For
-// example, `6.022e23_mag` produces `23`, and `1e-3_mag` produces `-3`.  A literal with no exponent
+// Parse the (signed) exponent of a `_mag` literal: the decimal integer following the first
+// character for which `is_marker` returns true.  This serves both the `e`/`E` exponent of decimal
+// literals and the `p`/`P` exponent of hex literals, since C++ writes both in decimal.  For
+// example, `6.022e23_mag` produces `23`, and `0x1p-3_mag` produces `-3`.  A literal with no marker
 // produces `0`.
 template <char... Cs>
-constexpr std::int64_t parse_scientific_exponent() {
+constexpr std::int64_t parse_exponent(bool (*is_marker)(char)) {
     constexpr char chars[] = {Cs...};
     std::uint64_t exponent = 0u;
     std::int64_t sign = 1;
     bool in_exponent = false;
     for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
         const char c = chars[i];
-        if (is_exponent_marker(c)) {
+        if (is_marker(c)) {
             in_exponent = true;
         } else if (in_exponent) {
             if (c == '-') {
@@ -3633,31 +3654,124 @@ constexpr std::int64_t parse_scientific_exponent() {
     return sign * static_cast<std::int64_t>(exponent);
 }
 
-// Compute the value of a `_mag` literal whose mantissa is `Mantissa`.  We specialize for a mantissa
-// of `0`, which is `Zero` rather than a `Magnitude`: `0` has no prime factorization.
-template <std::uintmax_t Mantissa>
-struct MagLiteralImpl {
-    template <char... Cs>
-    static AU_DEVICE_FUNC constexpr auto value() {
-        return mag<Mantissa>() *
-               pow<parse_scientific_exponent<Cs...>() - count_decimal_places<Cs...>()>(mag<10>());
+// Parse the significant digits (the mantissa) of a `_mag` literal as an integer in `base`, ignoring
+// any `.` and `'`, and stopping at the first character for which `is_marker` returns true.  For
+// example, `12.34_mag` and `1.234e3_mag` produce `1234` in base 10, and `0x1.Ep4_mag` produces `30`
+// in base 16.  A `0x` prefix needs no special handling: its `0` is a leading zero, and `x` is not a
+// digit.
+template <char... Cs>
+constexpr std::uintmax_t parse_mantissa(bool (*is_marker)(char), int base) {
+    constexpr char chars[] = {Cs...};
+    std::uintmax_t result = 0u;
+    for (std::size_t i = 0u; i < sizeof...(Cs); ++i) {
+        if (is_marker(chars[i])) {
+            break;
+        }
+        const int value = digit_value(chars[i]);
+        if (value >= 0 && value < base) {
+            result =
+                result * static_cast<std::uintmax_t>(base) + static_cast<std::uintmax_t>(value);
+        }
+    }
+    return result;
+}
+
+template <int Base, char... Cs>
+struct MagLiteralParser;
+
+template <char... Cs>
+struct MagLiteralParser<10, Cs...> {
+    AU_DEVICE_FUNC static constexpr auto value() {
+        return mag<parse_mantissa<Cs...>(is_exponent_marker, 10)>() *
+               pow<parse_exponent<Cs...>(is_exponent_marker) -
+                   count_places<Cs...>(is_exponent_marker, is_decimal_digit)>(mag<10>());
     }
 };
-template <>
-struct MagLiteralImpl<0u> {
-    template <char... Cs>
-    static AU_DEVICE_FUNC constexpr Zero value() {
-        return {};
+
+template <char... Cs>
+struct MagLiteralParser<16, Cs...> {
+    AU_DEVICE_FUNC static constexpr auto value() {
+        // Each hex place divides by 16, i.e., by 2^4.
+        return mag<parse_mantissa<Cs...>(is_binary_exponent_marker, 16)>() *
+               pow<parse_exponent<Cs...>(is_binary_exponent_marker) -
+                   4 * count_places<Cs...>(is_binary_exponent_marker, is_hex_digit)>(mag<2>());
     }
 };
+
+template <char... Cs>
+struct MagLiteralParser<2, Cs...> {
+    AU_DEVICE_FUNC static constexpr auto value() {
+        return mag<parse_mantissa<Cs...>(never_matches, 2)>();
+    }
+};
+
+template <char... Cs>
+struct MagLiteralParser<8, Cs...> {
+    AU_DEVICE_FUNC static constexpr auto value() {
+        return mag<parse_mantissa<Cs...>(never_matches, 8)>();
+    }
+};
+
+// Whether `Cs...` has the form of a `_mag` literal in `Base`, which is `literal_base<Cs...>()`.
+// After the prefix (`0x`/`0X` for base 16, `0b`/`0B` for base 2), there must be at least one digit
+// below `Base`, and optional `'` separators.  Bases 10 and 16 also allow at most one `.`, and an
+// exponent (`e`/`E` for base 10, `p`/`P` for base 16) with an optional sign and at least one
+// decimal digit.  A base 16 literal with a `.` must have an exponent.
+//
+// The compiler only calls `operator""_mag` with valid literals, so this can only fail when someone
+// calls the operator directly.  We do not check where `'` separators appear, since they never
+// affect the value.
+template <int Base, char... Cs>
+constexpr bool all_valid_literal_chars() {
+    constexpr char chars[] = {Cs..., '\0'};
+    bool (*const is_marker)(char) = Base == 10   ? is_exponent_marker
+                                    : Base == 16 ? is_binary_exponent_marker
+                                                 : never_matches;
+    std::size_t i = Base == 16 || Base == 2 ? 2u : 0u;
+    std::size_t num_digits = 0u;
+    std::size_t num_points = 0u;
+    for (; i < sizeof...(Cs) && !is_marker(chars[i]); ++i) {
+        const int value = digit_value(chars[i]);
+        if (value >= 0 && value < Base) {
+            ++num_digits;
+        } else if (chars[i] == '.' && (Base == 10 || Base == 16)) {
+            ++num_points;
+        } else if (chars[i] != '\'') {
+            return false;
+        }
+    }
+    if (num_digits == 0u || num_points > 1u) {
+        return false;
+    }
+    if (i == sizeof...(Cs)) {
+        return !(Base == 16 && num_points > 0u);
+    }
+
+    // Skip the exponent marker, and its sign if it has one.
+    ++i;
+    if (i < sizeof...(Cs) && (chars[i] == '+' || chars[i] == '-')) {
+        ++i;
+    }
+    std::size_t num_exponent_digits = 0u;
+    for (; i < sizeof...(Cs); ++i) {
+        if (is_decimal_digit(chars[i])) {
+            ++num_exponent_digits;
+        } else if (chars[i] != '\'') {
+            return false;
+        }
+    }
+    return num_exponent_digits > 0u;
+}
+
 }  // namespace detail
 
 namespace au_literals {
 template <char... Cs>
 AU_DEVICE_FUNC constexpr auto operator""_mag() {
-    // Note that computing the mantissa also validates the characters in the literal.
-    return detail::MagLiteralImpl<detail::parse_magnitude_integer<Cs...>()>::template value<
-        Cs...>();
+    static_assert(detail::all_valid_literal_chars<detail::literal_base<Cs...>(), Cs...>(),
+                  "operator\"\"_mag must be called with the characters of a valid integer or "
+                  "floating point literal");
+    return detail::MagLiteralParser<detail::literal_base<Cs...>(), Cs...>::value();
 }
 }  // namespace au_literals
 
@@ -4139,6 +4253,48 @@ AU_DEVICE_FUNC constexpr MagRepresentationOrError<T> get_value_result(
     }
     return {MagRepresentationOutcome::OK, static_cast<T>(-result.value)};
 }
+
+// Instantiating `ErrorForMagRepOutcome<M>` produces exactly one `static_assert` failure when `M` is
+// not `OK`, whose error message describes `M`.
+template <MagRepresentationOutcome Actual, MagRepresentationOutcome Expected>
+struct ErrorForMagRepOutcomeImpl {
+    // Default in case we forget to cover an enum value.
+    static_assert(Actual == Expected, "Unknown error occurred");
+};
+template <MagRepresentationOutcome Actual>
+using ErrorForMagRepOutcome = ErrorForMagRepOutcomeImpl<Actual, MagRepresentationOutcome::OK>;
+
+// Specializations for each error type below.
+template <MagRepresentationOutcome Expected>
+struct ErrorForMagRepOutcomeImpl<MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE,
+                                 Expected> {
+    static_assert(Expected == MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE,
+                  "Cannot represent non-integer in integral destination type");
+};
+template <MagRepresentationOutcome Expected>
+struct ErrorForMagRepOutcomeImpl<MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE,
+                                 Expected> {
+    static_assert(Expected == MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE,
+                  "Cannot represent negative number in unsigned destination type");
+};
+template <MagRepresentationOutcome Expected>
+struct ErrorForMagRepOutcomeImpl<MagRepresentationOutcome::ERR_INVALID_ROOT, Expected> {
+    static_assert(Expected == MagRepresentationOutcome::ERR_INVALID_ROOT,
+                  "Could not compute root for rational power of base");
+};
+template <MagRepresentationOutcome Expected>
+struct ErrorForMagRepOutcomeImpl<MagRepresentationOutcome::ERR_CANNOT_FIT, Expected> {
+    static_assert(Expected == MagRepresentationOutcome::ERR_CANNOT_FIT,
+                  "Value outside range of destination type");
+};
+
+// Return `x`, but force `ErrorType` to be instantiated first, so that any `static_assert` it
+// carries fires.
+template <typename ErrorType, typename T>
+AU_DEVICE_FUNC constexpr T checked_value(ErrorType, T x) {
+    return x;
+}
+
 }  // namespace detail
 
 template <typename T, typename... BPs>
@@ -4153,16 +4309,7 @@ AU_DEVICE_FUNC constexpr T get_value(Magnitude<BPs...> m) {
     using namespace detail;
 
     constexpr auto result = get_value_result<T>(m);
-
-    static_assert(result.outcome != MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE,
-                  "Cannot represent non-integer in integral destination type");
-    static_assert(result.outcome != MagRepresentationOutcome::ERR_INVALID_ROOT,
-                  "Could not compute root for rational power of base");
-    static_assert(result.outcome != MagRepresentationOutcome::ERR_CANNOT_FIT,
-                  "Value outside range of destination type");
-
-    static_assert(result.outcome == MagRepresentationOutcome::OK, "Unknown error occurred");
-    return result.value;
+    return checked_value(ErrorForMagRepOutcome<result.outcome>{}, result.value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -4923,85 +5070,26 @@ struct IsUnitRatioRepresentableIn;
 // Origin displacement implementation.
 
 namespace detail {
-// Callable type trait for the default origin of a unit: choose ZERO.
-struct ZeroValue {
-    static constexpr Zero value() { return Zero{}; }
-};
+
+// `MakeShapeshifterFromOriginMemberImpl<OriginT, U>` converts the origin of unit `U` into a
+// "shapeshifter" type (that is, `Zero` or a `Constant`), so that origins can be compared and
+// subtracted exactly, at compile time.  `OriginT` must be `OriginType<U>`.  Each Au type which is
+// valid for an origin member should specialize this template, and provide a member alias `type`
+// for the resulting shapeshifter type.  (We can't do that here, because `:unit_of_measure` is lower
+// in the dependency hierarchy than `:constant`.)
+template <typename OriginT, typename U>
+struct MakeShapeshifterFromOriginMemberImpl;
 
 template <typename U>
 using OriginMemberType = decltype(U::origin());
 
-// If any unit U has an explicit origin member, then treat that as its origin.
 template <typename U>
-struct OriginMember {
-    static constexpr const OriginMemberType<U> value() { return U::origin(); }
-};
+using OriginType = stdx::experimental::detected_or_t<Zero, OriginMemberType, U>;
 
 template <typename U>
-struct OriginOf : std::conditional_t<stdx::experimental::is_detected<OriginMemberType, U>::value,
-                                     OriginMember<U>,
-                                     ZeroValue> {};
-
-template <typename T, typename U>
-struct ValueDifference {
-    static constexpr auto value() { return T::value() - U::value(); }
-};
-}  // namespace detail
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// `ValueDisplacementMagnitude` utility.
-namespace detail {
-
-// `ValueDisplacementMagnitude<T1, T2>` is a type that can be instantiated, and is either a
-// `Magnitude` type or else `Zero`.  It represents the magnitude of the unit that takes us from
-// `T1::value()` to `T2::value()` (and is `Zero` if and only if these values are equal).
-//
-// This is fully encapsulated inside of the `detail` namespace because we don't want end users
-// reasoning in terms of "the magnitude" of a unit.  This concept makes no sense generally.
-// However, it's useful to us internally, because it helps us compute the largest possible magnitude
-// of a common point unit.  Being fully encapsulated, we ourselves can be careful not to misuse it.
-enum class AreValuesEqual { YES, NO };
-template <typename U1, typename U2, AreValuesEqual>
-struct ValueDisplacementMagnitudeImpl;
-template <typename U1, typename U2>
-using ValueDisplacementMagnitude = typename ValueDisplacementMagnitudeImpl<
-    U1,
-    U2,
-    (U1::value() == U2::value() ? AreValuesEqual::YES : AreValuesEqual::NO)>::type;
-
-// Equal values case.
-template <typename U1, typename U2>
-struct ValueDisplacementMagnitudeImpl<U1, U2, AreValuesEqual::YES> : stdx::type_identity<Zero> {
-    static_assert(U1::value() == U2::value(), "Mismatched instantiation (internal library error)");
-};
-
-// Prep for handling unequal values: it's useful to be able to turn a signed integer into a
-// Magnitude.
-//
-// The `bool` template parameter in the `MagSign` interface has poor callsite readability, but it
-// doesn't matter because we're only using it right here.
-template <bool IsNeg>
-struct MagSign : stdx::type_identity<Magnitude<>> {};
-template <>
-struct MagSign<true> : stdx::type_identity<Magnitude<Negative>> {};
-template <std::intmax_t N>
-constexpr auto signed_mag() {
-    constexpr auto sign = typename MagSign<(N < 0)>::type{};
-    return sign * mag<static_cast<std::size_t>(N < 0 ? (-N) : N)>();
-}
-
-// Unequal values case implementation: scale up the magnitude of the diff's _unit_ by the diff's
-// _value in_ that unit.
-template <typename U1, typename U2>
-struct ValueDisplacementMagnitudeImpl<U1, U2, AreValuesEqual::NO> {
-    static_assert(U1::value() != U2::value(), "Mismatched instantiation (internal library error)");
-    static constexpr auto mag() {
-        constexpr auto diff = U2::value() - U1::value();
-        using D = typename decltype(diff)::Unit;
-        return MagT<D>{} * signed_mag<diff.in(D{})>();
-    }
-    using type = decltype(mag());
-};
+struct OriginOfImpl : MakeShapeshifterFromOriginMemberImpl<OriginType<U>, U> {};
+template <typename U>
+using OriginOf = typename OriginOfImpl<U>::type;
 
 }  // namespace detail
 
@@ -5035,7 +5123,7 @@ struct AreUnitsQuantityEquivalent
 
 namespace detail {
 template <typename U1, typename U2>
-struct HasSameOrigin : stdx::bool_constant<(OriginOf<U1>::value() == OriginOf<U2>::value())> {};
+struct HasSameOrigin : stdx::bool_constant<(OriginOf<U1>{} == OriginOf<U2>{})> {};
 }  // namespace detail
 
 template <typename U1, typename U2>
@@ -5313,49 +5401,35 @@ struct ComputeCommonUnit
 
 namespace detail {
 
-// For equal origins expressed in different units, we can compare the values in their native units
-// as a way to decide which unit has the biggest Magnitude.  Bigger Magnitude, smaller value.  (We
-// could have tried to assess the Magnitude directly, but this method works better with Zero, and we
-// will often encounter Zero when dealing with origins.)
-//
-// This will be used as a tiebreaker for different origin types.  (For example, the origin of
-// Celsius may be represented as Centikelvins or Millikelvins, and we want Centikelvins to "win"
-// because it will result in smaller multiplications.)
-template <typename T>
-constexpr auto get_value_in_native_unit(const T &t) {
-    return t.in(T::unit);
-}
-
-// If the input is "0", then its value _in any unit_ is 0.
-constexpr auto get_value_in_native_unit(const Zero &) { return 0; }
-
 // The common origin of a collection of units is the smallest origin.
 //
 // We try to keep the result symmetric under reordering of the inputs.
 template <typename... Us>
-struct CommonOrigin;
+struct CommonOriginImpl;
+template <typename... Us>
+using CommonOrigin = typename CommonOriginImpl<Us...>::type;
 
 template <typename U>
-struct CommonOrigin<U> : OriginOf<U> {};
+struct CommonOriginImpl<U> : stdx::type_identity<OriginOf<U>> {};
 
 template <typename Head, typename... Tail>
-struct CommonOrigin<Head, Tail...> :
+struct CommonOriginImpl<Head, Tail...> :
     // If the new value is strictly less than the common-so-far, then it wins, so choose it.
-    std::conditional_t<
-        (OriginOf<Head>::value() < CommonOrigin<Tail...>::value()),
+    std::conditional<
+        (OriginOf<Head>{} < CommonOrigin<Tail...>{}),
         OriginOf<Head>,
 
         // If the new value is strictly greater than the common-so-far, it's worse, so skip it.
         std::conditional_t<
-            (OriginOf<Head>::value() > CommonOrigin<Tail...>::value()),
+            (OriginOf<Head>{} > CommonOrigin<Tail...>{}),
             CommonOrigin<Tail...>,
 
-            // If we're here, the origins represent the same _quantity_, but may be expressed in
-            // different _units_.  We'd like the biggest unit, since it leads to the smallest
-            // multiplications.  For equal quantities, "biggest unit" is equivalent to "smallest
-            // value", so we compare the values.
-            std::conditional_t<(get_value_in_native_unit(OriginOf<Head>::value()) <
-                                get_value_in_native_unit(CommonOrigin<Tail...>::value())),
+            // If we're here, the origins are _quantity equivalent_.  We want to pick a standardized
+            // choice, but it doesn't matter much _which_ one we pick, since they are shapeshifter
+            // types, and will thus behave identically.  So we pick an arbitrary tiebreaker.
+            std::conditional_t<(InOrderFor<UnitProductPack,
+                                           AssociatedUnit<OriginOf<Head>>,
+                                           AssociatedUnit<CommonOrigin<Tail...>>>::value),
                                OriginOf<Head>,
                                CommonOrigin<Tail...>>>> {};
 
@@ -5368,17 +5442,14 @@ template <typename U>
 struct UnitOfLowestOriginImpl<U> : stdx::type_identity<U> {};
 template <typename U, typename U1, typename... Us>
 struct UnitOfLowestOriginImpl<U, U1, Us...>
-    : std::conditional<(OriginOf<U>::value() == CommonOrigin<U, U1, Us...>::value()),
+    : std::conditional<(OriginOf<U>{} == CommonOrigin<U, U1, Us...>{}),
                        U,
                        UnitOfLowestOrigin<U1, Us...>> {};
 
 template <typename U1, typename U2>
-struct OriginDisplacementUnit {
-    static_assert(OriginOf<U1>::value() != OriginOf<U2>::value(),
+struct OriginDisplacementUnit : decltype(associated_unit(OriginOf<U2>{} - OriginOf<U1>{})) {
+    static_assert(OriginOf<U1>{} != OriginOf<U2>{},
                   "OriginDisplacementUnit must be an actual unit, so it must be nonzero.");
-
-    using Dim = CommonDimension<DimT<U1>, DimT<U2>>;
-    using Mag = ValueDisplacementMagnitude<OriginOf<U1>, OriginOf<U2>>;
 };
 
 // `ComputeOriginDisplacementUnit<U1, U2>` produces an ad hoc unit equal to the displacement from
@@ -5386,9 +5457,7 @@ struct OriginDisplacementUnit {
 // `Zero`.  Otherwise, it will be `OriginDisplacementUnit<U1, U2>`.
 template <typename U1, typename U2>
 using ComputeOriginDisplacementUnit =
-    std::conditional_t<(OriginOf<U1>::value() == OriginOf<U2>::value()),
-                       Zero,
-                       OriginDisplacementUnit<U1, U2>>;
+    std::conditional_t<(OriginOf<U1>{} == OriginOf<U2>{}), Zero, OriginDisplacementUnit<U1, U2>>;
 
 template <typename U1, typename U2>
 constexpr auto origin_displacement_unit(U1, U2) {
@@ -5424,7 +5493,7 @@ struct CommonPointUnitPack : CommonAmongUnitsAndOriginDisplacements<Us...> {
     static_assert(HasSameDimension<Us...>::value,
                   "Common unit only meaningful if units have same dimension");
 
-    static constexpr auto origin() { return detail::CommonOrigin<Us...>::value(); }
+    static constexpr auto origin() { return detail::CommonOrigin<Us...>{}; }
 };
 
 namespace detail {
@@ -5762,8 +5831,7 @@ struct OrderAsOriginDisplacementUnit<OriginDisplacementUnit<A1, A2>, OriginDispl
                                  OrderBySecondInOriginDisplacementUnit> {};
 
 template <typename A, typename B>
-struct OrderByOrigin
-    : stdx::bool_constant<(detail::OriginOf<A>::value() < detail::OriginOf<B>::value())> {};
+struct OrderByOrigin : stdx::bool_constant<(detail::OriginOf<A>{} < detail::OriginOf<B>{})> {};
 
 // "Unit avoidance" is a tiebreaker for quantity-equivalent units.  Anonymous units, such as
 // `UnitImpl<...>`, `ScaledUnit<...>`, and `UnitProductPack<...>`, are more "avoidable" than units
@@ -5803,34 +5871,10 @@ template <typename A, typename B>
 struct OrderByUnitOrderTiebreaker
     : stdx::bool_constant<(UnitOrderTiebreaker<A>::value < UnitOrderTiebreaker<B>::value)> {};
 
-// DEPRECATED: specialize `au::UnitOrderTiebreaker<U>` instead.
-//
-// We used to instruct users to specialize this template, but it lives in our `detail` namespace, so
-// we shouldn't have.  Specializing it is now a hard error, directing users to the new name.
-template <typename U>
-struct UnitAvoidance : std::integral_constant<int, 0> {};
-
-// The default value for `UnitOrderTiebreaker<U>` is `0`.
-//
-// We dispatch on whether `UnitAvoidance<U>` was specialized so that the error below fires only for
-// users who actually specialized it, rather than for every unit in the library.
-template <typename U, bool IsSpecialized = (UnitAvoidance<U>::value != 0)>
-struct UnitAvoidanceOrZero : std::integral_constant<int, 0> {};
-
-// NOTE: we still inherit the user's value, even though this specialization always fails to compile.
-// If we fell back to `0`, their units would no longer be ordered, and the `static_assert` below
-// would be buried under cascading "Broken strict total ordering" errors.
-template <typename U>
-struct UnitAvoidanceOrZero<U, true> : std::integral_constant<int, UnitAvoidance<U>::value> {
-    static_assert(AlwaysFalse<U>::value,
-                  "Instead of specializing `au::detail::UnitAvoidance<T>`, specialize "
-                  "`au::UnitOrderTiebreaker<T>`");
-};
-
 }  // namespace detail
 
 template <typename U>
-struct UnitOrderTiebreaker : detail::UnitAvoidanceOrZero<U> {};
+struct UnitOrderTiebreaker : std::integral_constant<int, 0> {};
 
 template <typename A, typename B>
 struct InOrderFor<UnitProductPack, A, B>
@@ -8646,7 +8690,14 @@ class Quantity {
 
     // The `fmod`, `remainder`, and `copysign` implementations use a defaulted parameter `T`, which
     // is always `Rep`, so that reps that have no `std::fmod` will still be able to compile.
-    template <typename T = Rep>
+    //
+    // We omit `fmod` and `remainder` for unitless quantities.  These implicitly convert to `Rep`,
+    // so mixing them with a raw number would make these hidden friends ambiguous with the C library
+    // overloads (such as `::fmod(double, double)`).  The templates in "au/math.hh" still handle the
+    // case where both arguments are `Quantity`.
+    template <typename T = Rep,
+              typename U = UnitT,
+              std::enable_if_t<!IsUnitlessUnit<U>::value, int> = 0>
     friend AU_DEVICE_FUNC auto fmod(Quantity a, Quantity b)
         -> Quantity<UnitT, decltype(std::fmod(T{}, T{}))> {
         using R = decltype(std::fmod(T{}, T{}));
@@ -8654,7 +8705,9 @@ class Quantity {
             std::fmod(a.template in<R>(UnitT{}), b.template in<R>(UnitT{})));
     }
 
-    template <typename T = Rep>
+    template <typename T = Rep,
+              typename U = UnitT,
+              std::enable_if_t<!IsUnitlessUnit<U>::value, int> = 0>
     friend AU_DEVICE_FUNC auto remainder(Quantity a, Quantity b)
         -> Quantity<UnitT, decltype(std::remainder(T{}, T{}))> {
         using R = decltype(std::remainder(T{}, T{}));
@@ -9231,6 +9284,56 @@ AU_DEVICE_FUNC constexpr auto operator-(const Quantity<U1, R1> &q1, const Quanti
     using U = CommonUnit<U1, U2>;
     return make_quantity<U>(detail::ref_or_scaled_copy<R2>(U{}, q1) -
                             detail::ref_or_scaled_copy<R1>(U{}, q2));
+}
+
+// Comparison of `Zero` with Quantity-equivalent types.
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator==(Zero z, QLike q) -> decltype(z == as_quantity(q)) {
+    return z == as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator==(QLike q, Zero z) -> decltype(as_quantity(q) == z) {
+    return as_quantity(q) == z;
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator!=(Zero z, QLike q) -> decltype(z != as_quantity(q)) {
+    return z != as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator!=(QLike q, Zero z) -> decltype(as_quantity(q) != z) {
+    return as_quantity(q) != z;
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<(Zero z, QLike q) -> decltype(z < as_quantity(q)) {
+    return z < as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<(QLike q, Zero z) -> decltype(as_quantity(q) < z) {
+    return as_quantity(q) < z;
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<=(Zero z, QLike q) -> decltype(z <= as_quantity(q)) {
+    return z <= as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<=(QLike q, Zero z) -> decltype(as_quantity(q) <= z) {
+    return as_quantity(q) <= z;
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>(Zero z, QLike q) -> decltype(z > as_quantity(q)) {
+    return z > as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>(QLike q, Zero z) -> decltype(as_quantity(q) > z) {
+    return as_quantity(q) > z;
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>=(Zero z, QLike q) -> decltype(z >= as_quantity(q)) {
+    return z >= as_quantity(q);
+}
+template <typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>=(QLike q, Zero z) -> decltype(as_quantity(q) >= z) {
+    return as_quantity(q) >= z;
 }
 
 // Mixed-type operations with a left-Quantity, and right-Quantity-equivalent.
@@ -9912,6 +10015,56 @@ AU_DEVICE_FUNC constexpr bool operator>=(Constant<U1> lhs, Constant<U2> rhs) {
     return !(lhs < rhs);
 }
 
+// Comparison with types that have a `CorrespondingQuantity` (e.g., `std::chrono::duration`).
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator==(Constant<U> c, QLike q) -> decltype(c == as_quantity(q)) {
+    return c == as_quantity(q);
+}
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator!=(Constant<U> c, QLike q) -> decltype(c != as_quantity(q)) {
+    return c != as_quantity(q);
+}
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<(Constant<U> c, QLike q) -> decltype(c < as_quantity(q)) {
+    return c < as_quantity(q);
+}
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator<=(Constant<U> c, QLike q) -> decltype(c <= as_quantity(q)) {
+    return c <= as_quantity(q);
+}
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>(Constant<U> c, QLike q) -> decltype(c > as_quantity(q)) {
+    return c > as_quantity(q);
+}
+template <typename U, typename QLike>
+AU_DEVICE_FUNC constexpr auto operator>=(Constant<U> c, QLike q) -> decltype(c >= as_quantity(q)) {
+    return c >= as_quantity(q);
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator==(QLike q, Constant<U> c) -> decltype(as_quantity(q) == c) {
+    return as_quantity(q) == c;
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator!=(QLike q, Constant<U> c) -> decltype(as_quantity(q) != c) {
+    return as_quantity(q) != c;
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator<(QLike q, Constant<U> c) -> decltype(as_quantity(q) < c) {
+    return as_quantity(q) < c;
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator<=(QLike q, Constant<U> c) -> decltype(as_quantity(q) <= c) {
+    return as_quantity(q) <= c;
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator>(QLike q, Constant<U> c) -> decltype(as_quantity(q) > c) {
+    return as_quantity(q) > c;
+}
+template <typename QLike, typename U>
+AU_DEVICE_FUNC constexpr auto operator>=(QLike q, Constant<U> c) -> decltype(as_quantity(q) >= c) {
+    return as_quantity(q) >= c;
+}
+
 #if defined(__cpp_impl_three_way_comparison) && __cpp_impl_three_way_comparison >= 201907L
 template <typename U1, typename U2>
 AU_DEVICE_FUNC constexpr std::strong_ordering operator<=>(Constant<U1>, Constant<U2>) {
@@ -9982,6 +10135,42 @@ template <typename U>
 AU_DEVICE_FUNC constexpr auto operator-(Zero, Constant<U>) {
     return -Constant<U>{};
 }
+
+namespace detail {
+
+// If the origin is already `Zero`, just return it.
+template <typename U>
+struct MakeShapeshifterFromOriginMemberImpl<Zero, U> : stdx::type_identity<Zero> {
+    static_assert(std::is_same<OriginType<U>, Zero>::value, "Internal library error");
+};
+
+// If the origin is already a `Constant`, just return it.
+template <typename OriginUnit, typename U>
+struct MakeShapeshifterFromOriginMemberImpl<Constant<OriginUnit>, U>
+    : stdx::type_identity<Constant<OriginUnit>> {
+    static_assert(std::is_same<OriginType<U>, Constant<OriginUnit>>::value,
+                  "Internal library error");
+};
+
+// If the origin is a `Quantity`, we need to turn it into a `Constant` in a constexpr way.
+template <typename OriginUnit, typename U, typename T>
+struct MakeShapeshifterFromOriginMemberImpl<Quantity<OriginUnit, T>, U> {
+    static_assert(std::is_integral<T>::value, "Origin member must be an integral quantity");
+    static_assert(std::is_same<OriginType<U>, Quantity<OriginUnit, T>>::value,
+                  "Internal library error");
+
+    static constexpr auto value() {
+        constexpr auto N = U::origin().template in<T>(OriginUnit{});
+        constexpr auto sign = std::conditional_t<(N < 0), Magnitude<Negative>, Magnitude<>>{};
+        constexpr auto abs_mag = mag<static_cast<std::size_t>(N < 0 ? (-N) : N)>();
+
+        return make_constant(OriginUnit{}) * sign * abs_mag;
+    }
+
+    using type = decltype(value());
+};
+
+}  // namespace detail
 
 }  // namespace au
 
