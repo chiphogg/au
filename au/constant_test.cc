@@ -389,6 +389,56 @@ TEST(Constant, OverflowCheckUsesExplicitRep) {
     }
 }
 
+TEST(Constant, CheckingAllRisksGivesSameResultAsIgnoringThemWhenValueIsRepresentable) {
+    // Integral reps.
+    EXPECT_THAT(c.in<int32_t>(meters / second),
+                SameTypeAndValue(c.in<int32_t>(meters / second, ignore(ALL_RISKS))));
+    EXPECT_THAT((-c).as<int64_t>(milli(meters) / second),
+                SameTypeAndValue((-c).as<int64_t>(milli(meters) / second, ignore(ALL_RISKS))));
+    EXPECT_THAT(make_constant(feet).as<uint8_t>(inches),
+                SameTypeAndValue(make_constant(feet).as<uint8_t>(inches, ignore(ALL_RISKS))));
+
+    // Floating point reps, with rational ratios.
+    EXPECT_THAT(make_constant(inches).in<double>(feet),
+                SameTypeAndValue(make_constant(inches).in<double>(feet, ignore(ALL_RISKS))));
+    EXPECT_THAT(
+        make_constant(miles * mag<3>() / mag<7>()).as<float>(meters),
+        SameTypeAndValue(
+            make_constant(miles * mag<3>() / mag<7>()).as<float>(meters, ignore(ALL_RISKS))));
+
+    // Floating point reps, with irrational ratios.
+    EXPECT_THAT(make_constant(degrees).in<double>(radians),
+                SameTypeAndValue(make_constant(degrees).in<double>(radians, ignore(ALL_RISKS))));
+    EXPECT_THAT(
+        (-make_constant(revolutions)).as<float>(radians),
+        SameTypeAndValue((-make_constant(revolutions)).as<float>(radians, ignore(ALL_RISKS))));
+    EXPECT_THAT(make_constant(meters * root<2>(mag<3>())).in<double>(feet),
+                SameTypeAndValue(
+                    make_constant(meters * root<2>(mag<3>())).in<double>(feet, ignore(ALL_RISKS))));
+}
+
+TEST(Constant, ExplicitlyCheckingAllRisksIsSameAsDefaultPolicy) {
+    EXPECT_THAT(c.in<int32_t>(meters / second, check_for(ALL_RISKS)),
+                SameTypeAndValue(c.in<int32_t>(meters / second)));
+    EXPECT_THAT(make_constant(degrees).as<float>(radians, check_for(ALL_RISKS)),
+                SameTypeAndValue(make_constant(degrees).as<float>(radians)));
+}
+
+TEST(Constant, ChecksForAllRisksByDefault) {
+    // The following must not compile.  Uncomment inside the scope to check.
+    {
+        // Truncation ("Constant conversion known to truncate"):
+        // make_constant(inches).as<int>(feet);
+        // make_constant(inches).in<int>(feet);
+        // make_constant(degrees).in<int>(radians);
+
+        // Overflow ("Constant conversion known to overflow"):
+        // c.in<int16_t>(meters / second);
+        // (-c).as<uint32_t>(meters / second);
+        // make_constant(meters * pow<40>(mag<10>())).in<float>(meters);
+    }
+}
+
 TEST(Constant, ImplicitlyConvertsToNonAuTypesWithAppropriateCorrespondingQuantity) {
     constexpr auto dt_as_constant = make_constant(seconds * mag<1'000'000'000>());
     constexpr auto dt_as_quantity_u32 = dt_as_constant.as<uint32_t>();

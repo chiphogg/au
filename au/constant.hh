@@ -28,6 +28,17 @@
 
 namespace au {
 
+namespace detail {
+// Whether `Constant::as<T>()` and `Constant::in<T>()` can compute the result directly from the unit
+// ratio.  This requires an arithmetic rep, and a policy that checks for every risk (so that the
+// exact value must be representable).
+template <typename T, typename RiskPolicyT>
+struct CanComputeConstantValueDirectly
+    : stdx::bool_constant<std::is_arithmetic<T>::value &&
+                          RiskPolicyT{}.should_check(ConversionRisk::Overflow) &&
+                          RiskPolicyT{}.should_check(ConversionRisk::Truncation)> {};
+}  // namespace detail
+
 //
 // A monovalue type to represent a constant value, including its units, if any.
 //
@@ -74,20 +85,8 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
 
     // Convert this constant to a Quantity of the given unit and rep, following this risk policy.
     template <typename T, typename OtherUnit, typename RiskPolicyT>
-    AU_DEVICE_FUNC constexpr auto as(OtherUnit, RiskPolicyT) const {
-        constexpr auto this_value = make_quantity<Unit>(static_cast<T>(1));
-
-        constexpr bool has_unacceptable_overflow =
-            RiskPolicyT{}.should_check(detail::ConversionRisk::Overflow) &&
-            will_conversion_overflow<T>(this_value, OtherUnit{});
-        static_assert(!has_unacceptable_overflow, "Constant conversion known to overflow");
-
-        constexpr bool has_unacceptable_truncation =
-            RiskPolicyT{}.should_check(detail::ConversionRisk::Truncation) &&
-            will_conversion_truncate<T>(this_value, OtherUnit{});
-        static_assert(!has_unacceptable_truncation, "Constant conversion known to truncate");
-
-        return this_value.template as<T>(OtherUnit{}, ignore(ALL_RISKS));
+    AU_DEVICE_FUNC constexpr auto as(OtherUnit u, RiskPolicyT policy) const {
+        return as_impl<T>(u, policy, detail::CanComputeConstantValueDirectly<T, RiskPolicyT>{});
     }
 
     // Get the value of this constant in the given unit and rep, ignoring safety checks.
@@ -110,7 +109,7 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
     // Get the value of this constant in the given unit and rep, following this risk policy.
     template <typename T, typename OtherUnit, typename RiskPolicyT>
     AU_DEVICE_FUNC constexpr auto in(OtherUnit u, RiskPolicyT policy) const {
-        return as<T>(u, policy).in(u);
+        return in_impl<T>(u, policy, detail::CanComputeConstantValueDirectly<T, RiskPolicyT>{});
     }
 
     // Implicitly convert to any quantity type which passes safety checks.
@@ -134,6 +133,72 @@ struct Constant : detail::MakesQuantityFromNumber<Constant, Unit>,
     AU_DEVICE_FUNC constexpr operator T() const {
         return as<typename CorrespondingQuantity<T>::Rep>(
             typename CorrespondingQuantity<T>::Unit{});
+    }
+
+ private:
+    // The value of this constant in the given rep and unit, computed directly from the unit ratio.
+    //
+    // This produces the same result as the general path below, but is much cheaper to compile,
+    // because it does not instantiate a `Quantity` for this constant's unit, nor any of the
+    // conversion machinery.  This matters when a translation unit has many distinct constants
+    // (e.g., unit literals).  It only applies when we check for every risk, which lets us require
+    // the exact value to be representable.
+    template <typename T, typename OtherUnitSlot>
+    AU_DEVICE_FUNC static constexpr T value_in(OtherUnitSlot) {
+        using OtherUnit = AssociatedUnit<OtherUnitSlot>;
+        static_assert(IsUnit<OtherUnit>::value, "Invalid type passed to unit slot");
+
+        constexpr auto result = detail::get_value_result<T>(UnitRatio<Unit, OtherUnit>{});
+        constexpr auto outcome = result.outcome;
+
+        constexpr bool has_unacceptable_overflow =
+            (outcome == detail::MagRepresentationOutcome::ERR_CANNOT_FIT) ||
+            (outcome == detail::MagRepresentationOutcome::ERR_NEGATIVE_NUMBER_IN_UNSIGNED_TYPE);
+        static_assert(!has_unacceptable_overflow, "Constant conversion known to overflow");
+
+        constexpr bool has_unacceptable_truncation =
+            (outcome == detail::MagRepresentationOutcome::ERR_NON_INTEGER_IN_INTEGER_TYPE);
+        static_assert(!has_unacceptable_truncation, "Constant conversion known to truncate");
+
+        static_assert(has_unacceptable_overflow || has_unacceptable_truncation ||
+                          (outcome == detail::MagRepresentationOutcome::OK),
+                      "Constant conversion failed");
+
+        return result.value;
+    }
+
+    template <typename T, typename OtherUnitSlot, typename RiskPolicyT>
+    AU_DEVICE_FUNC static constexpr auto as_impl(OtherUnitSlot u, RiskPolicyT, std::true_type) {
+        return make_quantity<AssociatedUnit<OtherUnitSlot>>(value_in<T>(u));
+    }
+
+    template <typename T, typename OtherUnit, typename RiskPolicyT>
+    AU_DEVICE_FUNC static constexpr auto as_impl(OtherUnit, RiskPolicyT, std::false_type) {
+        constexpr auto this_value = make_quantity<Unit>(static_cast<T>(1));
+
+        constexpr bool has_unacceptable_overflow =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Overflow) &&
+            will_conversion_overflow<T>(this_value, OtherUnit{});
+        static_assert(!has_unacceptable_overflow, "Constant conversion known to overflow");
+
+        constexpr bool has_unacceptable_truncation =
+            RiskPolicyT{}.should_check(detail::ConversionRisk::Truncation) &&
+            will_conversion_truncate<T>(this_value, OtherUnit{});
+        static_assert(!has_unacceptable_truncation, "Constant conversion known to truncate");
+
+        return this_value.template as<T>(OtherUnit{}, ignore(ALL_RISKS));
+    }
+
+    template <typename T, typename OtherUnitSlot, typename RiskPolicyT>
+    AU_DEVICE_FUNC static constexpr auto in_impl(OtherUnitSlot u, RiskPolicyT, std::true_type) {
+        return value_in<T>(u);
+    }
+
+    template <typename T, typename OtherUnitSlot, typename RiskPolicyT>
+    AU_DEVICE_FUNC static constexpr auto in_impl(OtherUnitSlot u,
+                                                 RiskPolicyT policy,
+                                                 std::false_type) {
+        return as_impl<T>(u, policy, std::false_type{}).in(u);
     }
 };
 
